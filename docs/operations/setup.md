@@ -1,5 +1,7 @@
 # Development setup
 
+Phase 06 adds a private persistent API artifact volume and the explicit `0004_agent_runtime` migration. Follow [Phase 06 setup, demonstrations and storage limits](phase-06.md) before running workflows. Preserve both database and artifact volumes; workers gain no filesystem/shell permission from this storage backend. BYOK remains a separately authorized future implementation.
+
 For Phase 05 worker-owned provider configuration, installed-model discovery and inference clients, follow [Phase 05](phase-05.md). No Ollama installation, model download, remote provider or system change is performed automatically. The local shell remains disconnected.
 
 ## Supported baseline

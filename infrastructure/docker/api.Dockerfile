@@ -10,6 +10,8 @@ COPY packages ./packages
 COPY infrastructure/migrations ./infrastructure/migrations
 RUN uv sync --locked --all-packages --no-dev
 RUN groupadd --gid 10001 godfather && useradd --uid 10001 --gid 10001 --no-create-home godfather
+RUN mkdir -p /var/lib/godfather/artifacts && chown -R 10001:10001 /var/lib/godfather
+ENV GODFATHER_ARTIFACT_DIRECTORY=/var/lib/godfather/artifacts
 
 FROM base AS development
 RUN uv sync --locked --all-packages

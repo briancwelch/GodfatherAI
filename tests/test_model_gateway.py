@@ -9,7 +9,7 @@ import httpx2 as httpx
 import pytest
 from godfather_contracts import ModelDeployment, ModelSelection
 from godfather_contracts.inference import InferenceInput
-from godfather_model_gateway import GatewayError, ProviderConfig, generate
+from godfather_model_gateway import GatewayError, ProviderConfig, StructuredRequest, generate
 from godfather_model_gateway.providers import OllamaProvider, OpenAICompatibleProvider
 from pydantic import ValidationError
 
@@ -317,5 +317,49 @@ def test_provider_cannot_silently_substitute_model(kind: str) -> None:
                 )
         finally:
             await provider.close()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("kind", ["ollama", "openai_compatible"])
+def test_structured_request_uses_native_json_hint_without_changing_job_contract(kind: str) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        if kind == "ollama":
+            assert payload["format"] == "json"
+            return httpx.Response(
+                200, json={"message": {"content": '{"title":"p","items":["a"]}'}, "done": True}
+            )
+        assert payload["response_format"] == {"type": "json_object"}
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": '{"title":"p","items":["a"]}'}, "finish_reason": "stop"}
+                ]
+            },
+        )
+
+    async def run() -> None:
+        config = ProviderConfig.model_validate({"id": "local", "provider": kind})
+        adapter = (OllamaProvider if kind == "ollama" else OpenAICompatibleProvider)(
+            config, httpx.MockTransport(handle)
+        )
+
+        async def ignore(text: str) -> None:
+            pass
+
+        try:
+            result = await generate(
+                adapter,
+                deployment(),
+                StructuredRequest(prompt="Return JSON", stream=False),
+                2,
+                ignore,
+            )
+            assert json.loads(result.text)["items"] == ["a"]
+            assert "json_output" not in InferenceInput(prompt="old job").model_dump()
+        finally:
+            await adapter.close()
 
     asyncio.run(run())

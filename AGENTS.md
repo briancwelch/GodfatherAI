@@ -51,6 +51,10 @@ Browser clients: Vegas admin / LA admin / future contributors
 ```
 The VPS is the initial production target, not a prerequisite for local development. The Command Center may be accessible through HTTPS, but internal databases, inference endpoints, and worker administration are never public. Worker connections initiate outbound from contributor devices. Tailscale provides private connectivity; application authentication and authorization remain mandatory. Node roles are preferences, not permanent bindings. Coordinator high availability is a later enhancement.
 
+The Godfather must support hybrid local and frontier AI inference using Bring Your Own API Key (BYOK). Each node owner may configure provider-specific credentials for OpenAI, Anthropic, Google Gemini, or other supported APIs. Credentials must remain under the owner's control, preferably stored securely on the worker node, and must never be exposed to other users, logs, or the central scheduler. The node advertises permitted model capabilities, not secrets. Implement provider-neutral routing with native adapters where necessary, credential-sharing policies (private, approval-required, budget-limited), per-owner and per-job cost tracking, explicit authorization for cross-user paid inference, and configurable spending limits. Never silently switch from free local inference to billable cloud inference. Preserve cross-platform support, portable agent execution, existing lease/fencing protections, and failover safety. Treat application spending limits as safeguards rather than guaranteed billing caps. Design this as an extension of the existing model gateway, not a separate orchestration system.
+
+BYOK is currently **planning only**, as explicitly directed by the user. Do not implement this extension until separately authorized. See `docs/architecture/byok-plan.md`; it does not expand the authorized Phase 06 or Phase 07 scope.
+
 ## Stack
 - **Editor / source:** VS Code, Codex, Git, GitHub.
 - **Frontend:** Next.js, React, strict TypeScript, Tailwind CSS, shadcn/ui.

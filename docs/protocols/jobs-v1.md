@@ -1,5 +1,7 @@
 # Job API and synthetic worker protocol v1
 
+Phase 06 reuses this state machine, locks, leases and fencing for [sequential agent workflows](agents-v1.md). Its dedicated submission/step/checkpoint routes add no second scheduler. Automatic cross-node workflow failover remains Phase 07; old synthetic assignment shapes are preserved.
+
 This records the Phase 04 baseline. Phase 05 adds opt-in model-aware text inference through the [inference extension v1](inference-v1.md), while preserving synthetic job semantics and strict older assignment shapes. Only opted-in inference workers receive its additional payloads.
 
 The typed source is `packages/shared-schemas/src/godfather_contracts/jobs.py`. All routes use `/api/v1`, exactly one bearer authorization header, commit-before-success transactions, and existing correlation IDs. Job/user inputs are never logged or echoed by validation errors. Use synthetic inputs only; results and inputs are visible to authorized workspace users and the assigned node.

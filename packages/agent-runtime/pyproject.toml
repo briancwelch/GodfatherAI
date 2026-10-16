@@ -1,0 +1,17 @@
+[project]
+name = "godfather-agent-runtime"
+version = "0.1.0"
+description = "Portable sequential read-only workflows and validated tools"
+requires-python = ">=3.12"
+dependencies = ["godfather-contracts", "godfather-model-gateway"]
+
+[tool.uv.sources]
+godfather-contracts = { workspace = true }
+godfather-model-gateway = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/godfather_agent_runtime"]

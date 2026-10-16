@@ -46,6 +46,11 @@ class ModelInventory(Contract):
     identifier: Label
 
 
+class ToolReference(Contract):
+    name: Label
+    version: int = Field(default=1, ge=1, le=100000)
+
+
 class ModelDeployment(Contract):
     """Worker-local provider alias, never an endpoint URL or credential."""
 
@@ -91,6 +96,9 @@ class Advertisement(Contract):
     concurrency_limit: int = Field(default=1, ge=1, le=128)
     job_protocol_version: Literal[1] | None = None
     inference_protocol_version: Literal[1] | None = None
+    workflow_protocol_version: Literal[1] | None = None
+    worker_tools: list[ToolReference] = Field(default_factory=list, max_length=16)
+    tool_permissions: list[Label] = Field(default_factory=list, max_length=16)
     model_deployments: list[ModelDeployment] = Field(default_factory=list, max_length=128)
     allowed_job_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)

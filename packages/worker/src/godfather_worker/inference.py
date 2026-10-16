@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from time import monotonic
@@ -38,6 +39,37 @@ async def discover_models(configs: list[ProviderConfig]) -> list[ModelDeployment
     if len(deployments) > 128:
         raise ValueError("Combined inventory exceeds the protocol limit of 128 deployments")
     return deployments
+
+
+async def maintain_execution(
+    client: WorkerClient,
+    node_id: UUID,
+    registration: Registration,
+    assignment: Assignment,
+    stop: threading.Event,
+    heartbeat_seconds: int,
+    report: Callable[[str], Awaitable[ReportResponse]],
+) -> None:
+    interval = max(0.1, (assignment.lease_expires_at - datetime.now(UTC)).total_seconds() / 3)
+    renew_at, heartbeat_at = 0.0, 0.0
+    while not stop.is_set():
+        now = monotonic()
+        if now >= renew_at:
+            if (await report("renew")).cancel_requested:
+                await report("cancelled")
+                return
+            renew_at = now + interval
+        if now >= heartbeat_at:
+            resources = registration.resources
+            if resources.source == "physical":
+                resources = (await asyncio.to_thread(discover_resources))[0]
+            await asyncio.to_thread(
+                client.post,
+                f"/api/v1/workers/{node_id}/heartbeat",
+                Heartbeat(session_id=registration.session_id, resources=resources),
+            )
+            heartbeat_at = now + heartbeat_seconds
+        await asyncio.sleep(0.1)
 
 
 async def execute_inference(
@@ -86,29 +118,6 @@ async def execute_inference(
         await report("fail", error_code="model_unavailable")
         return
     provider = provider_override or create_provider(config)
-    interval = max(0.1, (assignment.lease_expires_at - datetime.now(UTC)).total_seconds() / 3)
-
-    async def monitor() -> None:
-        renew_at, heartbeat_at = 0.0, 0.0
-        while not stop.is_set():
-            now = monotonic()
-            if now >= renew_at:
-                if (await report("renew")).cancel_requested:
-                    await report("cancelled")
-                    return
-                renew_at = now + interval
-            if now >= heartbeat_at:
-                resources = registration.resources
-                if resources.source == "physical":
-                    resources = (await asyncio.to_thread(discover_resources))[0]
-                await asyncio.to_thread(
-                    client.post,
-                    f"/api/v1/workers/{node_id}/heartbeat",
-                    Heartbeat(session_id=registration.session_id, resources=resources),
-                )
-                heartbeat_at = now + heartbeat_seconds
-            await asyncio.sleep(0.1)
-
     pending = ""
     sequence = 0
     last_flush = 0.0
@@ -141,7 +150,11 @@ async def execute_inference(
         await report("complete", result=result)
 
     work = asyncio.create_task(run())
-    watch = asyncio.create_task(monitor())
+    watch = asyncio.create_task(
+        maintain_execution(
+            client, node_id, registration, assignment, stop, heartbeat_seconds, report
+        )
+    )
     try:
         done, _ = await asyncio.wait((work, watch), return_when=asyncio.FIRST_COMPLETED)
         if watch in done:

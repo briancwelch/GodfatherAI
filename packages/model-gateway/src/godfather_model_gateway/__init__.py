@@ -67,6 +67,15 @@ class GatewayError(Exception):
         super().__init__(code)  # Never include provider bodies, URLs, prompts or keys.
 
 
+class StructuredRequest(InferenceInput):
+    """Internal JSON-mode hint; workflow validation still checks the exact schema.
+
+    This never changes the Phase 05 job/worker wire payload.
+    """
+
+    json_output: Literal[True] = True
+
+
 class Chunk(Contract):
     text: str = Field(default="", max_length=MAX_TEXT)
     done: bool = False

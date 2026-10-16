@@ -170,11 +170,16 @@ class Agent(Entity, Owned, Base):
             "workspace_id", "name", "version", name="uq_agents_workspace_name_version"
         ),
         CheckConstraint("version > 0", name="version"),
+        UniqueConstraint("workspace_id", "agent_key", "version", name="uq_agents_key_version"),
     )
     workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
     name: Mapped[str] = mapped_column(String(200))
     version: Mapped[int] = mapped_column(Integer, server_default="1")
     definition: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    agent_key: Mapped[UUID] = mapped_column(
+        default=uuid4, server_default=sa_text("gen_random_uuid()")
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
 
 class Job(Entity, Owned, Base):
@@ -261,6 +266,12 @@ class Checkpoint(Entity, Base):
         ),
         UniqueConstraint("job_id", "version", name="uq_checkpoints_job_version"),
         CheckConstraint("version > 0 AND format_version > 0", name="versions"),
+        ForeignKeyConstraint(
+            ["artifact_id", "job_id"],
+            ["artifacts.id", "artifacts.job_id"],
+            name="fk_checkpoints_artifact_job",
+            ondelete="RESTRICT",
+        ),
     )
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="RESTRICT"), index=True)
     attempt_id: Mapped[UUID]
@@ -268,6 +279,98 @@ class Checkpoint(Entity, Base):
     format_version: Mapped[int] = mapped_column(Integer, server_default="1")
     artifact_ref: Mapped[str] = mapped_column(Text)
     checksum: Mapped[str] = mapped_column(String(64))
+    artifact_id: Mapped[UUID | None]
+
+
+class Artifact(Entity, Owned, Base):
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        UniqueConstraint("id", "job_id", name="uq_artifacts_id_job"),
+        ForeignKeyConstraint(
+            ["attempt_id", "job_id"],
+            ["attempts.id", "attempts.job_id"],
+            name="fk_artifacts_attempt_job",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "workspace_id"],
+            ["jobs.id", "jobs.workspace_id"],
+            name="fk_artifacts_job_workspace",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("size_bytes > 0 AND size_bytes <= 262144", name="size"),
+        CheckConstraint("kind IN ('step_output','workflow_state')", name="kind"),
+    )
+    job_id: Mapped[UUID] = mapped_column(index=True)
+    workspace_id: Mapped[UUID]
+    attempt_id: Mapped[UUID]
+    kind: Mapped[str] = mapped_column(String(32))
+    checksum: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "cursor >= 0 AND cursor <= 32 AND checkpoint_version = cursor", name="cursor"
+        ),
+        CheckConstraint(
+            "status IN ('READY','RUNNING','INTERRUPTED','COMPLETED','FAILED','CANCELLED')",
+            name="status",
+        ),
+    )
+    job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="RESTRICT"), primary_key=True
+    )
+    agent_id: Mapped[UUID] = mapped_column(ForeignKey("agents.id", ondelete="RESTRICT"))
+    workflow_id: Mapped[UUID]
+    workflow_version: Mapped[int] = mapped_column(Integer)
+    cursor: Mapped[int] = mapped_column(Integer, server_default="0")
+    checkpoint_version: Mapped[int] = mapped_column(Integer, server_default="0")
+    status: Mapped[str] = mapped_column(String(16), server_default="READY")
+    # Phase 06 recovery is same-node; this never binds a portable agent definition.
+    recovery_node_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("nodes.id", ondelete="RESTRICT")
+    )
+
+
+class WorkflowStepRecord(Entity, Base):
+    __tablename__ = "workflow_steps"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["attempt_id", "job_id"],
+            ["attempts.id", "attempts.job_id"],
+            name="fk_workflow_steps_attempt_job",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["output_artifact_id", "job_id"],
+            ["artifacts.id", "artifacts.job_id"],
+            name="fk_workflow_steps_output_job",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("job_id", "step_id", "attempt_id", name="uq_workflow_steps_attempt"),
+        Index(
+            "uq_workflow_steps_completed",
+            "job_id",
+            "step_id",
+            unique=True,
+            postgresql_where=sa_text("status = 'COMPLETED'"),
+        ),
+        CheckConstraint(
+            "status IN ('RUNNING','COMPLETED','INTERRUPTED','FAILED','CANCELLED')", name="status"
+        ),
+    )
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="RESTRICT"), index=True)
+    attempt_id: Mapped[UUID]
+    step_id: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(16), server_default="RUNNING")
+    input_refs: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    output_artifact_id: Mapped[UUID | None]
+    metadata_refs: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Event(Entity, Base):

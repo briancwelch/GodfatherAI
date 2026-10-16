@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "godfather-agent-runtime",
     "godfather-api",
     "godfather-contracts",
     "godfather-model-gateway",
@@ -96,12 +97,28 @@ wheels = [
 ]
 
 [[package]]
+name = "godfather-agent-runtime"
+version = "0.1.0"
+source = { editable = "packages/agent-runtime" }
+dependencies = [
+    { name = "godfather-contracts" },
+    { name = "godfather-model-gateway" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "godfather-contracts", editable = "packages/shared-schemas" },
+    { name = "godfather-model-gateway", editable = "packages/model-gateway" },
+]
+
+[[package]]
 name = "godfather-api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "godfather-agent-runtime" },
     { name = "godfather-contracts" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
@@ -114,6 +131,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2" },
     { name = "fastapi", specifier = ">=0.121,<1" },
+    { name = "godfather-agent-runtime", editable = "packages/agent-runtime" },
     { name = "godfather-contracts", editable = "packages/shared-schemas" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.11,<3" },
@@ -153,6 +171,7 @@ name = "godfather-worker"
 version = "0.1.0"
 source = { editable = "packages/worker" }
 dependencies = [
+    { name = "godfather-agent-runtime" },
     { name = "godfather-contracts" },
     { name = "godfather-model-gateway" },
     { name = "psutil" },
@@ -160,6 +179,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "godfather-agent-runtime", editable = "packages/agent-runtime" },
     { name = "godfather-contracts", editable = "packages/shared-schemas" },
     { name = "godfather-model-gateway", editable = "packages/model-gateway" },
     { name = "psutil", specifier = ">=7.2,<8" },

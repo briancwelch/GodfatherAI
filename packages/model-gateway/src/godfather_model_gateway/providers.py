@@ -10,7 +10,7 @@ from godfather_contracts import ModelDeployment
 from godfather_contracts.inference import InferenceInput
 from pydantic import ValidationError
 
-from godfather_model_gateway import Chunk, GatewayError, Provider, ProviderConfig
+from godfather_model_gateway import Chunk, GatewayError, Provider, ProviderConfig, StructuredRequest
 
 
 def document(raw: str | bytes) -> dict[str, Any]:
@@ -168,6 +168,8 @@ class OllamaProvider(HTTPProvider):
             "stream": request.stream,
             "options": options,
         }
+        if isinstance(request, StructuredRequest):
+            payload["format"] = "json"
         try:
             async for data in self.documents(
                 "POST", "api/chat", payload, "ndjson" if request.stream else "json"
@@ -228,6 +230,8 @@ class OpenAICompatibleProvider(HTTPProvider):
         }
         if request.stream:
             payload["stream_options"] = {"include_usage": True}
+        if isinstance(request, StructuredRequest):
+            payload["response_format"] = {"type": "json_object"}
         finished = False
         saw_done = False
         finish_reason = "other"

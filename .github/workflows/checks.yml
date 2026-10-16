@@ -103,6 +103,8 @@ jobs:
         run: uv run --locked --all-packages python -m scripts.check_job_scheduler
       - name: Inference gateway with native worker and loopback mock provider
         run: uv run --locked --all-packages python -m scripts.check_model_inference
+      - name: Agent workflow, durable checkpoint, process interruption and same-node recovery
+        run: uv run --locked --all-packages python -m scripts.check_agent_runtime
       - name: Container diagnostics
         if: failure()
         run: docker compose ps --all

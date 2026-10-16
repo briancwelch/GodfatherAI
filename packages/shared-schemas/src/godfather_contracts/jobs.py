@@ -6,7 +6,12 @@ from uuid import UUID
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
-from godfather_contracts import Contract, Label, ModelDeployment, ModelInventory, ModelSelection
+from godfather_contracts import Contract, ModelDeployment
+from godfather_contracts.agents import WorkflowAssignment, WorkflowInput, WorkflowResult
+from godfather_contracts.execution import AttemptIdentity
+from godfather_contracts.execution import JobPoll as JobPoll
+from godfather_contracts.execution import Requirements as Requirements
+from godfather_contracts.execution import RetryPolicy as RetryPolicy
 from godfather_contracts.inference import (
     InferenceInput,
     InferenceResult,
@@ -22,39 +27,11 @@ ErrorCode = Literal[
 ]
 
 
-class Requirements(Contract):
-    capabilities: list[Label] = Field(default_factory=list, max_length=32)
-    os: Literal["any", "windows", "macos", "linux"] = "any"
-    architecture: Literal["any", "x86_64", "arm64", "x86"] = "any"
-    cpu_count: int = Field(default=1, ge=1, le=65536)
-    ram_bytes: int = Field(default=0, ge=0, le=2**60)
-    gpu_memory_bytes: int = Field(default=0, ge=0, le=2**60)
-    backend: Literal["any", "cpu", "cuda", "metal", "rocm"] = "any"
-    runtimes: list[Label] = Field(default_factory=list, max_length=32)
-    dependencies: list[Label] = Field(default_factory=list, max_length=32)
-    toolchains: list[Label] = Field(default_factory=list, max_length=32)
-    sandbox_modes: list[Label] = Field(default_factory=list, max_length=16)
-    models: list[ModelInventory] = Field(default_factory=list, max_length=32)
-    model_selection: ModelSelection | None = None
-
-    @model_serializer(mode="wrap")
-    def compatible_requirements(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        data: dict[str, Any] = handler(self)
-        if self.model_selection is None:
-            data.pop("model_selection", None)
-        return data
-
-
 class SyntheticInput(Contract):
     value: str = Field(default="synthetic", max_length=1000)
     steps: int = Field(default=3, ge=1, le=100)
     fail_until_attempt: int = Field(default=0, ge=0, le=11)
     permanent: bool = False
-
-
-class RetryPolicy(Contract):
-    limit: int = Field(default=0, ge=0, le=10)
-    backoff_seconds: int = Field(default=1, ge=0, le=3600)
 
 
 class JobSubmission(Contract):
@@ -99,7 +76,7 @@ class JobView(Contract):
     status: JobState
     priority: int
     requirements: Requirements
-    input: SyntheticInput | InferenceInput
+    input: SyntheticInput | InferenceInput | WorkflowInput
     timeout_seconds: int
     retry: RetryPolicy
     assigned_node_id: UUID | None
@@ -110,12 +87,7 @@ class JobView(Contract):
     cancel_requested_at: datetime | None
     next_run_at: datetime | None
     created_at: datetime
-    result: SyntheticResult | InferenceResult | None
-
-
-class JobPoll(Contract):
-    job_protocol_version: int = Field(default=1, ge=1)
-    session_id: UUID
+    result: SyntheticResult | InferenceResult | WorkflowResult | None
 
 
 class Assignment(Contract):
@@ -125,12 +97,15 @@ class Assignment(Contract):
     lease_expires_at: datetime
     deadline_at: datetime
     deployment: ModelDeployment | None = None
+    workflow: WorkflowAssignment | None = None
 
     @model_serializer(mode="wrap")
     def compatible_assignment(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.deployment is None:
             data.pop("deployment", None)
+        if self.workflow is None:
+            data.pop("workflow", None)
         return data
 
 
@@ -138,14 +113,23 @@ class PollResponse(Contract):
     assignment: Assignment | None = None
 
 
-class JobReport(JobPoll):
-    attempt_id: UUID
-    fencing_token: int = Field(ge=1)
+class JobReport(AttemptIdentity):
     action: Literal["ack", "start", "progress", "renew", "complete", "fail", "cancelled", "output"]
     progress: int | None = Field(default=None, ge=0, le=100)
-    result: SyntheticResult | InferenceResult | None = None
+    result: SyntheticResult | InferenceResult | WorkflowResult | None = None
     output: StreamUpdate | None = None
-    error_code: Literal["transient_error", "permanent_error"] | ProviderErrorCode | None = None
+    error_code: (
+        Literal[
+            "transient_error",
+            "permanent_error",
+            "workflow_validation",
+            "tool_permission",
+            "artifact_unavailable",
+            "step_timeout",
+        ]
+        | ProviderErrorCode
+        | None
+    ) = None
 
 
 class ReportResponse(Contract):

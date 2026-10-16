@@ -20,6 +20,7 @@ from godfather_api.models import (
     Job,
     Node,
     User,
+    WorkflowRun,
     Workspace,
     WorkspaceMember,
 )
@@ -86,6 +87,10 @@ def matches(requirements: Requirements, node: NodeView, reserved: list[Requireme
     ):
         if not set(required) <= set(available):
             return False
+    if not all(tool in node.worker_tools for tool in requirements.tools) or not set(
+        requirements.tool_permissions
+    ) <= set(node.tool_permissions):
+        return False
     if not all(model in node.installed_models for model in requirements.models):
         return False
     if requirements.model_selection is not None:
@@ -193,6 +198,9 @@ def job_event(
 def finish_failure(
     session: Session, job: Job, attempt: Attempt, now: datetime, code: str, retryable: bool
 ) -> None:
+    from godfather_api.workflow_service import end_attempt
+
+    end_attempt(session, job, attempt, code, retryable and job.attempt_count <= job.retry_limit)
     attempt.status, attempt.finished_at = "FAILED", now
     attempt.error = {"code": code, "retryable": retryable}
     job.assigned_node_id = None
@@ -237,6 +245,9 @@ def maintain(session: Session, settings: Settings, now: datetime) -> None:
                 attempt.status, attempt.finished_at = "CANCELLED", now
                 job.status, job.assigned_node_id = "CANCELLED", None
                 job_event(session, job, "cancelled", now, attempt)
+                from godfather_api.workflow_service import end_attempt
+
+                end_attempt(session, job, attempt, "cancelled")
             else:
                 code = "timeout" if timed_out else "lease_expired"
                 job_event(session, job, code, now, attempt)
@@ -252,6 +263,8 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
     """
     if not session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": SCHEDULER_LOCK}):
         return 0
+    from godfather_api.workflow_service import eligible
+
     maintain(session, settings, now)
     # Credential revocation/disabled owner is checked again on delivery and reports.
     nodes = session.scalars(
@@ -290,7 +303,9 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             select(Job)
             .where(
                 Job.status == "PENDING",
-                Job.type.in_(("synthetic.echo", "synthetic.fail", "inference.text")),
+                Job.type.in_(
+                    ("synthetic.echo", "synthetic.fail", "inference.text", "agent.workflow")
+                ),
             )
             .order_by(Job.priority.desc(), Job.created_at, Job.id)
             .with_for_update(skip_locked=True)
@@ -320,6 +335,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 for n in nodes
                 if len(reservations[n.id]) < n.concurrency_limit
                 and permitted(session, job, n)
+                and eligible(session, job, n, views[n.id])
                 and matches(requirements, views[n.id], reservations[n.id])
             ]
             # A preferred owner gets first refusal while it has compatible queued work.
@@ -331,6 +347,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 or not any(
                     queued.owner_id == n.owner_id
                     and permitted(session, queued, n)
+                    and eligible(session, queued, n, views[n.id])
                     and matches(
                         Requirements.model_validate(queued.requirements),
                         views[n.id],
@@ -352,6 +369,11 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             )
             node = candidates[0]
             deployment = deployment_for(requirements, views[node.id], reservations[node.id])
+            if job.type == "agent.workflow":
+                run = session.get(WorkflowRun, job.id)
+                assert run is not None
+                if run.recovery_node_id is None:
+                    run.recovery_node_id = node.id
             job.attempt_count += 1
             job.fencing_token += 1
             job.status, job.assigned_node_id = "ASSIGNED", node.id

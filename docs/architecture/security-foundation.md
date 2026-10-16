@@ -1,5 +1,13 @@
 # Early security boundaries
 
+## Phase 06 workflow boundary
+
+Immutable agent versions and workflow state are private to authorized workspaces. Definition changes require workspace administration; platform role alone cannot bypass private workspace scope. Every tool needs a supported trusted implementation, agent permission and an independent worker-owner tool/permission grant. Models provide validated data to predefined steps and cannot select arbitrary tools. No shell, arbitrary Python/SQL, contributor-host paths, Git writes, WordPress or account access is available.
+
+Checkpoint commits use the existing credential/node/job locks and identity/session/attempt/fence/lease/deadline/permission checks, plus expected-version/step validation and a lease check after storage I/O. Artifacts are immutable UUID-addressed bounded JSON with hashes/sizes; PostgreSQL owns their visibility and atomic references. Reads require workspace access or the current fenced worker assignment. No client supplies filesystem paths. Missing/corrupt data fails closed. The API's private persistent artifact volume and database must be backed up together; no public file service or automatic deletion is introduced.
+
+Workflow provider configuration is checked for loopback before any discovery. The user-requested [hybrid/BYOK extension](byok-plan.md) remains planning only; cloud adapters, secret stores, sharing grants, cost accounting and paid inference require separate authorization. Full browser sessions, contributor RBAC, production security controls and public exposure remain later gates. See [ADR 0006](../decisions/0006-sequential-workflows-and-artifacts.md).
+
 ## Phase 05 inference boundary
 
 An independent worker inference opt-in permits bounded text chat only. Jobs select models and typed parameters; they cannot supply endpoints, credentials, arbitrary tools, shell commands or provider-specific request bodies. Provider URLs and credential environment-variable names stay in worker-owned configuration; key values never enter registration, PostgreSQL, API logs or errors. Ollama must use worker loopback; remote compatible endpoints require approved HTTPS with certificate verification. Redirects and environment proxies are disabled.

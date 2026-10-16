@@ -9,13 +9,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from uuid import uuid4
 
-from godfather_contracts import Heartbeat, Registration
+from godfather_agent_runtime.tools import ToolError
+from godfather_agent_runtime.tools import definition as tool_definition
+from godfather_contracts import Heartbeat, Registration, ToolReference
 from godfather_contracts.jobs import JobPoll, PollResponse
 from godfather_model_gateway import ProviderConfig
 from pydantic import ValidationError
 
+from godfather_worker.agents import execute_agent
 from godfather_worker.client import WorkerClient, retryable
 from godfather_worker.discovery import discover, discover_resources
 from godfather_worker.inference import discover_models, execute_inference
@@ -42,6 +46,14 @@ def main() -> int:
     parser.add_argument("--policy", choices=("dedicated", "preferred", "shared"))
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--execute-synthetic", action="store_true")
+    parser.add_argument("--execute-workflows", action="store_true")
+    parser.add_argument(
+        "--allow-tool", action="append", default=[], help="Owner grant: TOOL_NAME@VERSION"
+    )
+    parser.add_argument("--allow-tool-permission", action="append", default=[])
+    parser.add_argument(
+        "--pause-after-checkpoint", type=int, help="Simulator-only fault-injection barrier"
+    )
     parser.add_argument(
         "--inference-config",
         type=Path,
@@ -56,6 +68,14 @@ def main() -> int:
             raise ValueError("Synthetic execution requires a simulated profile")
         if args.inference_config and args.execute_synthetic:
             raise ValueError("Choose synthetic execution or inference per worker process")
+        if args.execute_workflows and not args.inference_config:
+            raise ValueError("Workflow execution requires an inference configuration")
+        if args.pause_after_checkpoint is not None and (
+            not args.simulate
+            or not args.execute_workflows
+            or not 1 <= args.pause_after_checkpoint <= 32
+        ):
+            raise ValueError("Checkpoint pauses require an explicitly simulated workflow worker")
         configs: list[ProviderConfig] = []
         if args.inference_config:
             raw_configs = json.loads(args.inference_config.read_text(encoding="utf-8"))
@@ -64,6 +84,10 @@ def main() -> int:
             configs = [ProviderConfig.model_validate(c) for c in raw_configs]
             if len({c.id for c in configs}) != len(configs):
                 raise ValueError("Provider aliases must be unique")
+            if args.execute_workflows and any(
+                urlsplit(c.url).hostname not in ("localhost", "127.0.0.1", "::1") for c in configs
+            ):
+                raise ValueError("Phase 06 workflow providers must remain local")
         if not 0 <= args.step_seconds <= 30:
             raise ValueError("Synthetic step duration must be between 0 and 30 seconds")
         credentials = json.loads(args.credential_file.read_text(encoding="utf-8"))
@@ -91,10 +115,20 @@ def main() -> int:
             values["concurrency_limit"] = 1
             values["inference_protocol_version"] = 1
             values["model_deployments"] = asyncio.run(discover_models(configs))
+        if args.execute_workflows:
+            tools = []
+            for grant in args.allow_tool:
+                name, version = grant.rsplit("@", 1)
+                reference = ToolReference(name=name, version=int(version))
+                tool_definition(reference)
+                tools.append(reference)
+            values["workflow_protocol_version"] = 1
+            values["worker_tools"] = tools
+            values["tool_permissions"] = args.allow_tool_permission
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
-    except (OSError, KeyError, ValueError, TypeError):
+    except (OSError, KeyError, ValueError, TypeError, ToolError):
         emit("worker.configuration_invalid")
         return 1
     stop = threading.Event()
@@ -139,7 +173,23 @@ def main() -> int:
                         )
                     )
                     if polled.assignment is not None:
-                        if polled.assignment.job.type == "inference.text" and configs:
+                        if (
+                            polled.assignment.job.type == "agent.workflow"
+                            and args.execute_workflows
+                        ):
+                            asyncio.run(
+                                execute_agent(
+                                    client,
+                                    node_id,
+                                    registration,
+                                    polled.assignment,
+                                    stop,
+                                    result.heartbeat_interval_seconds,
+                                    configs,
+                                    args.pause_after_checkpoint,
+                                )
+                            )
+                        elif polled.assignment.job.type == "inference.text" and configs:
                             asyncio.run(
                                 execute_inference(
                                     client,

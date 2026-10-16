@@ -211,6 +211,9 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
         include={
             "job_protocol_version",
             "inference_protocol_version",
+            "workflow_protocol_version",
+            "worker_tools",
+            "tool_permissions",
             "model_deployments",
             "runtimes",
             "installed_models",

@@ -1,5 +1,7 @@
 # Worker protocol v1: registration and health
 
+Phase 06 additionally defines optional workflow protocol/tool-grant fields and a gated workflow assignment in [agents/workflows v1](agents-v1.md). Existing registration, heartbeat, synthetic and inference messages remain valid; absent workflow fields are omitted from old assignment shapes. No new host permission is implied by registration or platform administration.
+
 Phase 05 adds optional `inference_protocol_version` and bounded `model_deployments` registration fields, documented in [inference v1](inference-v1.md). Existing workers can omit both. Synthetic execution and inference have independent opt-ins; physical discovery is permitted for inference without granting host tools or shell access.
 
 This document records the Phase 03 baseline. Phase 04 adds backward-compatible, opt-in [synthetic execution](jobs-v1.md), dependency inventory and owner/workspace contribution allowlists. Registration-only workers continue to operate and receive no jobs.

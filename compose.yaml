@@ -19,6 +19,8 @@ services:
       dockerfile: infrastructure/docker/api.Dockerfile
       target: runtime
     environment: *api-environment
+    volumes:
+      - artifacts-data:/var/lib/godfather/artifacts
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -87,6 +89,7 @@ services:
       GODFATHER_ENVIRONMENT: test
       GODFATHER_DATABASE_NAME: godfather_test
       GODFATHER_RUN_INTEGRATION: "1"
+      GODFATHER_ARTIFACT_DIRECTORY: /tmp/godfather-test-artifacts
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,3 +170,4 @@ networks:
 
 volumes:
   postgres-data:
+  artifacts-data:

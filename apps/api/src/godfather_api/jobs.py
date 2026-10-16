@@ -7,6 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer
 from godfather_contracts import ModelDeployment
+from godfather_contracts.agents import WorkflowResult
+from godfather_contracts.execution import AttemptIdentity
 from godfather_contracts.inference import MAX_TEXT, InferenceInput, InferenceResult
 from godfather_contracts.jobs import (
     Assignment,
@@ -23,6 +25,7 @@ from godfather_contracts.jobs import (
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from godfather_api import workflow_service
 from godfather_api.models import Attempt, Event, Job, Node, Workspace, WorkspaceMember
 from godfather_api.nodes import SessionDep, authenticate
 from godfather_api.scheduler import (
@@ -158,6 +161,7 @@ def cancel_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
         if attempt is not None and attempt.status in ACTIVE:
             attempt.status, attempt.finished_at = "CANCELLED", now
         job_event(session, job, "cancelled", now, attempt, actor_id=actor.owner_id)
+        workflow_service.end_attempt(session, job, attempt, "cancelled")
     session.flush()
     return view(session, job)
 
@@ -211,7 +215,11 @@ def worker_node(node_id: UUID, payload: JobPoll, request: Request, session: Sess
         node.runtimes.get("job_protocol_version") == 1
         and node.resources.get("source") == "simulated"
     )
-    if not synthetic and node.runtimes.get("inference_protocol_version") != 1:
+    if (
+        not synthetic
+        and node.runtimes.get("inference_protocol_version") != 1
+        and node.runtimes.get("workflow_protocol_version") != 1
+    ):
         raise HTTPException(403, "Execution requires explicit worker opt-in")
     return node
 
@@ -246,16 +254,20 @@ def poll(node_id: UUID, payload: JobPoll, request: Request, session: SessionDep)
             lease_expires_at=attempt.lease_expires_at,
             deadline_at=attempt.deadline_at,
             deployment=ModelDeployment.model_validate(attempt.result["deployment"])
-            if job.type == "inference.text"
+            if job.type in ("inference.text", "agent.workflow")
+            else None,
+            workflow=workflow_service.workflow_assignment(
+                session, request.app.state.artifacts, job, attempt
+            )
+            if job.type == "agent.workflow"
             else None,
         )
     )
 
 
-@router.post("/workers/{node_id}/jobs/{job_id}/report", response_model=ReportResponse)
-def report(
-    node_id: UUID, job_id: UUID, payload: JobReport, request: Request, session: SessionDep
-) -> ReportResponse:
+def lock_execution(
+    node_id: UUID, job_id: UUID, payload: AttemptIdentity, request: Request, session: Session
+) -> tuple[Node, Job, Attempt]:
     node = worker_node(node_id, payload, request, session)
     job = session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     attempt = current_attempt(session, job) if job is not None else None
@@ -278,10 +290,23 @@ def report(
         raise HTTPException(409, "Attempt is stale, expired or no longer owns this job")
     if not permitted(session, job, node):
         raise HTTPException(409, "Workspace or node-owner execution permission was withdrawn")
+    return node, job, attempt
+
+
+@router.post("/workers/{node_id}/jobs/{job_id}/report", response_model=ReportResponse)
+def report(
+    node_id: UUID, job_id: UUID, payload: JobReport, request: Request, session: SessionDep
+) -> ReportResponse:
+    node, job, attempt = lock_execution(node_id, job_id, payload, request, session)
+    assert attempt.deadline_at is not None
+    now = datetime.now(UTC)
     inference = job.type == "inference.text"
     if inference:
         if node.runtimes.get("inference_protocol_version") != 1:
             raise HTTPException(403, "Inference requires explicit worker opt-in")
+    elif job.type == "agent.workflow":
+        if node.runtimes.get("workflow_protocol_version") != 1:
+            raise HTTPException(403, "Workflow execution requires explicit worker opt-in")
     elif (
         node.runtimes.get("job_protocol_version") != 1
         or node.resources.get("source") != "simulated"
@@ -292,6 +317,7 @@ def report(
         job.status, job.assigned_node_id = "CANCELLED", None
         attempt.status, attempt.finished_at = "CANCELLED", now
         job_event(session, job, "cancelled", now, attempt)
+        workflow_service.end_attempt(session, job, attempt, "cancelled")
     elif payload.action == "ack":
         if job.status != "ASSIGNED":
             raise HTTPException(409, "Assignment was already started")
@@ -303,6 +329,8 @@ def report(
             raise HTTPException(409, "Acknowledge assignment before starting")
         job.status, attempt.status, attempt.started_at = "RUNNING", "RUNNING", now
         job_event(session, job, "started", now, attempt)
+        if job.type == "agent.workflow":
+            workflow_service.started(session, request.app.state.artifacts, job, attempt)
     elif payload.action == "output":
         if not inference or job.status != "RUNNING" or payload.output is None:
             raise HTTPException(422, "Running inference and a bounded output update are required")
@@ -353,8 +381,18 @@ def report(
                 raise HTTPException(409, "Result must use the assigned model deployment")
             if not payload.result.text.startswith(str(attempt.result.get("text", ""))):
                 raise HTTPException(409, "Final text must extend the streamed prefix")
+        elif job.type == "agent.workflow":
+            if not isinstance(payload.result, WorkflowResult):
+                raise HTTPException(422, "A structured workflow result is required")
+            workflow_service.completed(
+                session, request.app.state.artifacts, job, attempt, payload.result
+            )
         elif not isinstance(payload.result, SyntheticResult):
             raise HTTPException(422, "A synthetic result is required")
+        if attempt.lease_expires_at <= datetime.now(UTC) or attempt.deadline_at <= datetime.now(
+            UTC
+        ):
+            raise HTTPException(409, "Attempt expired before the result could commit")
         attempt.result = payload.result.model_dump(mode="json")
         job.result_refs = attempt.result
         job.status, job.assigned_node_id = "COMPLETED", None
@@ -363,7 +401,11 @@ def report(
     elif payload.action == "fail":
         if job.status != "RUNNING" or payload.error_code is None:
             raise HTTPException(422, "Running execution and a classified error are required")
-        if not inference and payload.error_code not in ("transient_error", "permanent_error"):
+        if (
+            not inference
+            and job.type != "agent.workflow"
+            and payload.error_code not in ("transient_error", "permanent_error")
+        ):
             raise HTTPException(422, "Synthetic failures require synthetic error codes")
         finish_failure(
             session,
@@ -372,7 +414,13 @@ def report(
             now,
             payload.error_code,
             payload.error_code
-            in ("transient_error", "provider_unavailable", "provider_timeout", "rate_limited"),
+            in (
+                "transient_error",
+                "provider_unavailable",
+                "provider_timeout",
+                "rate_limited",
+                "step_timeout",
+            ),
         )
     else:
         raise HTTPException(409, "There is no cancellation request to acknowledge")

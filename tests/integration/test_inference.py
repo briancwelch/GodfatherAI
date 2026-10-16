@@ -38,7 +38,10 @@ def test_legacy_synthetic_assignment_remains_compatible(h: Harness) -> None:
     a = h.poll()
     assert a is not None
     assert "deployment" not in a
+    assert "workflow" not in a
     assert "model_selection" not in a["job"]["requirements"]
+    assert "tools" not in a["job"]["requirements"]
+    assert "tool_permissions" not in a["job"]["requirements"]
 
 
 def test_nonstreaming_job_refuses_partial_updates(h: Harness) -> None:

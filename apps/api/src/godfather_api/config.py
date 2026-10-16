@@ -1,5 +1,6 @@
 """Explicit environment configuration; secrets never appear in settings reprs."""
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     health_monitor_enabled: bool = True
     scheduler_enabled: bool = True
     execution_lease_seconds: int = Field(default=30, ge=3, le=3600)
+    artifact_directory: Path = Path(".cache/artifacts")
 
     @model_validator(mode="after")
     def health_thresholds(self) -> "Settings":
