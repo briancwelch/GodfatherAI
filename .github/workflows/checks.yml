@@ -1,4 +1,4 @@
-name: Phase 01 checks
+name: Repository checks
 
 on:
   push:
@@ -71,7 +71,10 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - run: docker compose config --quiet
-      - run: docker compose up --build --wait --wait-timeout 180
+      - run: docker compose --profile tools build dashboard api api-test migrate
+      - run: docker compose up --wait --wait-timeout 90 postgres redis
+      - run: docker compose --profile tools run --rm migrate
+      - run: docker compose up --wait --wait-timeout 180
       - name: Check shell, Redis, and PostgreSQL persistence
         shell: bash
         run: |
@@ -81,6 +84,15 @@ jobs:
           docker compose up --force-recreate --wait --wait-timeout 60 postgres
           test "$(docker compose exec -T postgres psql -U godfather -d godfather -Atc 'SELECT value FROM phase01_environment_probe')" = "durable"
           docker compose exec -T postgres psql -U godfather -d godfather -v ON_ERROR_STOP=1 -c 'DROP TABLE phase01_environment_probe'
+      - name: Real PostgreSQL migration and API integration tests
+        run: |
+          docker compose exec -T postgres createdb -U godfather godfather_test
+          docker compose --profile tools run --rm api-test
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.14"
+      - name: API and PostgreSQL restart, outage and recovery
+        run: python -m scripts.check_api_restart
       - name: Container diagnostics
         if: failure()
         run: docker compose ps --all

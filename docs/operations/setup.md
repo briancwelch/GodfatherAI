@@ -41,10 +41,13 @@ Install tools from official sources after the machine owner approves installatio
    ```powershell
    uv run --locked --all-packages python scripts/dev.py doctor
    docker compose config --quiet
-   docker compose up --build --wait
+   docker compose --profile tools build dashboard api migrate
+   docker compose up --wait postgres redis
+   docker compose --profile tools run --rm migrate
+   docker compose up --wait
    ```
 
-7. Open **http://localhost:3000** in your browser. Run checks:
+7. Open **http://localhost:3000** for the shell and **http://localhost:8000/api/v1** for the API. Run checks:
 
    ```powershell
    uv run --locked --all-packages python scripts/dev.py check
@@ -85,14 +88,14 @@ This is a development guide, not authorization to install on a VPS or expose ser
 
 Restore with `uv sync --locked --all-packages` and `npm ci` after pulling dependency changes. Use one application mode at a time:
 
-| Mode                 | Commands                                                      | Use                                                               |
-| -------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Container smoke test | `docker compose up --build --wait`                            | Same dashboard container model intended for the Linux coordinator |
-| Native hot reload    | `docker compose up --wait postgres redis`, then `npm run dev` | Frontend editing on Windows/macOS/Linux                           |
+| Mode                 | Commands                                                      | Use                                                                 |
+| -------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Container smoke test | Follow the explicit build/migrate/start sequence above        | Same application container model intended for the Linux coordinator |
+| Native hot reload    | `docker compose up --wait postgres redis`, then `npm run dev` | Frontend editing on Windows/macOS/Linux                             |
 
 To switch to native mode, run `docker compose stop dashboard` before `npm run dev`. To stop the local stack, use `docker compose down`; the PostgreSQL named volume remains. Do not use volume deletion flags or reset a database without explicit authorization.
 
-The containerized dashboard does not require PostgreSQL or Redis yet. They are separate local dependencies with no dashboard credentials or connection. There is no API service in this phase.
+The dashboard remains a disconnected shell. The Phase 02 API uses PostgreSQL on the internal backend network; the dashboard receives no database credentials. Redis remains transient and unused by the API. See [Phase 02](phase-02.md) for guarded PostgreSQL tests and restart verification. Always apply reviewed migrations explicitly before starting a changed API schema.
 
 Before review, run:
 

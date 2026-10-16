@@ -7,6 +7,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.13,<3",
     "mypy>=1.19,<2",
     "pytest>=9,<10",
     "ruff>=0.14,<1",
@@ -28,10 +29,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 python_version = "3.12"
+plugins = ["pydantic.mypy"]
 strict = true
-files = ["apps/api/src", "scripts", "tests"]
+files = ["apps/api/src", "infrastructure/migrations", "scripts", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --import-mode=importlib"
 pythonpath = ["."]
+markers = ["integration: requires an explicitly configured disposable PostgreSQL test database"]

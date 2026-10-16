@@ -1,6 +1,99 @@
 name: godfather-local
 
+x-api-environment: &api-environment
+  GODFATHER_DATABASE_HOST: postgres
+  GODFATHER_DATABASE_NAME: godfather
+  GODFATHER_DATABASE_USER: godfather
+  GODFATHER_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your local .env}
+
 services:
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+      target: runtime
+    environment: *api-environment
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 7s
+      retries: 5
+      start_period: 10s
+    networks:
+      - frontend
+      - backend
+
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+      target: runtime
+    environment: *api-environment
+    command:
+      [
+        "python",
+        "-m",
+        "alembic",
+        "-c",
+        "infrastructure/migrations/alembic.ini",
+        "upgrade",
+        "head",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
+  api-test:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: infrastructure/docker/api.Dockerfile
+      target: development
+    environment:
+      <<: *api-environment
+      GODFATHER_ENVIRONMENT: test
+      GODFATHER_DATABASE_NAME: godfather_test
+      GODFATHER_RUN_INTEGRATION: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+
   dashboard:
     build:
       context: .

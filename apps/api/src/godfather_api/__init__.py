@@ -1,1 +1,1 @@
-"""Control-plane package scaffold. No API, authentication, or domain behavior yet."""
+"""The Godfather control-plane foundation. No worker or scheduling behavior."""

@@ -73,13 +73,15 @@ CI definitions cover Python and frontend checks on Windows/macOS/Linux and conta
 
 Local containers are intentionally left running for review. Stop them with `docker compose down`; preserve the named PostgreSQL volume. No host service installation, public deployment or external integration was performed by this verification.
 
-## Remaining acceptance work
+## Gate completion before Phase 02
 
-- Push the reviewed Phase 01 files to the authorized private remote when publication is authorized, then inspect actual GitHub Actions results.
-- Verify a clean clone and locked restore after publication. There is no second-developer acceptance requirement.
-- Keep native macOS/Linux and Intel/Apple Silicon execution evidence separate from this Windows/WSL2 Linux amd64 validation; CI coverage remains pending execution.
+- Published as `9176cb00184e91b3e3df737c62285a862ef3feb7` to the authorized private repository.
+- [All eight GitHub CI jobs passed](https://github.com/briancwelch/GodfatherAI/actions/runs/38831542451), including Windows/macOS/Linux checks and Linux container health/persistence.
+- A clean private-repository clone restored locked Python/npm dependencies and passed its complete check runner.
+- Repeated local Docker startup and PostgreSQL container-recreation persistence passed. Redis temporary state was correctly discarded on recreation, followed by a successful PING.
+- One developer/two administrators remains the team model. GPU and physical worker validation belong to later phases; CI does not prove every physical hardware/backend combination.
 
-The implementation is ready for review, but the Phase 01 acceptance gate is not complete. No Phase 02 implementation has begun.
+The Phase 01 gate passed before beginning the explicitly authorized Phase 02. See `phase-02.md` for current API configuration and commands.
 
 ## Stop condition
 

@@ -1,16 +1,16 @@
 # The Godfather
 
-Private, cross-platform AI orchestration platform for two founding administrators in Las Vegas and Los Angeles.
+Private, cross-platform AI orchestration platform for two founding administrators in Las Vegas and Chino Hills.
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 01 — repository and local environment.** This repository contains development tooling, a nonfunctional Command Center shell, and local dependency configuration. It has no API routes, users, jobs, workers, scheduling, inference, or external integrations.
+**Current milestone: Phase 02 — control-plane API.** Phase 01 passed local checks, clean-clone restoration, and all eight GitHub CI jobs. The API foundation adds health probes, PostgreSQL access, migrations, validated configuration, and structured logs. The dashboard remains a nonfunctional shell; there are no domain write endpoints, workers, scheduling, inference, or external integrations.
 
 ## Start here
 
 1. Read [AGENTS.md](AGENTS.md) and the [UI/UX specification](docs/design/UI-UX.md).
 2. Follow the [Windows, macOS, and Linux setup guide](docs/operations/setup.md).
-3. Review [Phase 01 scope and validation](docs/operations/phase-01.md).
+3. Review [Phase 01 validation](docs/operations/phase-01.md) and [Phase 02 setup and results](docs/operations/phase-02.md).
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
@@ -23,10 +23,13 @@ After preparing `.env` as described in the setup guide:
 ```text
 uv sync --locked --all-packages
 npm ci
-docker compose up --build --wait
+docker compose --profile tools build dashboard api migrate
+docker compose up --wait postgres redis
+docker compose --profile tools run --rm migrate
+docker compose up --wait
 ```
 
-Open **http://localhost:3000**. Only the dashboard is published, bound to `127.0.0.1`. PostgreSQL and Redis have no host ports. No API URL exists in Phase 01.
+Open **http://localhost:3000** for the shell and **http://localhost:8000/api/v1** for the API. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
 
 For frontend hot reload, start only the dependencies and run Next.js natively:
 
@@ -49,18 +52,18 @@ The doctor inspects tools and Docker availability without installing anything. T
 
 ## Layout
 
-| Path                    | Purpose                                                                |
-| ----------------------- | ---------------------------------------------------------------------- |
-| `apps/dashboard`        | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell          |
-| `apps/api`              | Installable Python package scaffold; implementation begins in Phase 02 |
-| `infrastructure/docker` | Dashboard build/runtime container                                      |
-| `scripts`               | Portable development checks                                            |
-| `tests`                 | Development tooling tests                                              |
-| `docs/design`           | Authoritative frontend design guidance                                 |
-| `docs/architecture`     | Architecture and cross-platform compatibility                          |
-| `docs/decisions`        | Architecture decision records                                          |
-| `docs/operations`       | Setup, phase gates, troubleshooting                                    |
-| `.github/workflows`     | Cross-platform checks and Linux container smoke checks                 |
+| Path                    | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `apps/dashboard`        | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell        |
+| `apps/api`              | FastAPI foundation, configuration, logging and SQLAlchemy models     |
+| `infrastructure/docker` | Dashboard build/runtime container                                    |
+| `scripts`               | Portable development checks                                          |
+| `tests`                 | Tooling/API unit tests and guarded real-PostgreSQL integration tests |
+| `docs/design`           | Authoritative frontend design guidance                               |
+| `docs/architecture`     | Architecture and cross-platform compatibility                        |
+| `docs/decisions`        | Architecture decision records                                        |
+| `docs/operations`       | Setup, phase gates, troubleshooting                                  |
+| `.github/workflows`     | Cross-platform checks and Linux container smoke checks               |
 
 Future packages and infrastructure are created only when their milestones require them.
 
@@ -72,4 +75,4 @@ PostgreSQL will be authoritative for durable execution state. Redis is transient
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01 ends with documented results and a reproducible development setup. There is no second-developer acceptance requirement. Phase 02 requires explicit authorization.
+Phase 01 is verified complete. Phase 02 was explicitly authorized; see its report for validation and limitations. There is no second-developer acceptance requirement. Phase 03 requires explicit authorization.
