@@ -96,9 +96,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ollama", action="store_true", help="Use already-running loopback Ollama")
     parser.add_argument("--model", help="Exact installed model identifier, required with --ollama")
+    parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=32,
+        help="Output budget for the installed model, including reasoning tokens",
+    )
+    parser.add_argument(
+        "--verify-restart",
+        action="store_true",
+        help="Restart the local API and verify the completed results remain durable",
+    )
     args = parser.parse_args()
     if args.ollama and not args.model:
         parser.error("--ollama requires an exact already-installed --model")
+    if not 1 <= args.max_tokens <= 8192:
+        parser.error("--max-tokens must be between 1 and 8192")
     require_status("/health/ready", 200)
     folder = ROOT / ".cache" / "phase05-runs" / uuid4().hex
     folder.mkdir(parents=True, mode=0o700)
@@ -207,7 +220,7 @@ def main() -> int:
                         "input": {
                             "prompt": "Reply with one short greeting.",
                             "stream": streaming,
-                            "parameters": {"max_tokens": 32},
+                            "parameters": {"max_tokens": args.max_tokens},
                         },
                         "timeout_seconds": 120,
                     }
@@ -252,6 +265,19 @@ def main() -> int:
                 )
                 assert value["metadata"]["deployment"]["identifier"] == identifier
                 results.append(value)
+            if args.verify_restart:
+                compose("restart", "api")
+
+                def ready_again() -> bool:
+                    try:
+                        require_status("/health/ready", 200)
+                        return True
+                    except Exception:
+                        return False
+
+                wait_for("API ready after actual restart", ready_again)
+                assert [get(f"inference/jobs/{job_id}/result") for job_id in job_ids] == results
+                print("PASS: completed inference results survived actual API restart", flush=True)
             stop(process)
             log_text = log_path.read_text(encoding="utf-8")
             assert "Reply with one short greeting." not in log_text
@@ -263,6 +289,7 @@ def main() -> int:
                         "model": identifier,
                         "streaming_and_nonstreaming": True,
                         "native_worker_process": True,
+                        "durable_after_api_restart": args.verify_restart,
                         "results": results,
                     },
                     indent=2,

@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 05 — local inference and provider gateway.** Phase 04 scheduling, authentication, leases/fencing, retries, cancellation and native acceptance were reverified first. Opted-in workers discover and execute text inference through replaceable Ollama/OpenAI-compatible adapters. Model-aware scheduling, bounded attempt-tagged streaming, durable results and authenticated metrics retain PostgreSQL authority and node-owner restrictions. The dashboard remains a nonfunctional shell. The real-local-model acceptance gate remains unverified while Ollama is unavailable; see the Phase 05 report.
+**Phase 05 complete — local inference and provider gateway.** The real Ollama gate passed through the API, native worker and gateway, including streaming/non-streaming jobs and durable results after an actual API restart. All 200 PostgreSQL-backed tests and repository checks passed again before Phase 06. Model-aware scheduling, bounded attempt-tagged streaming and authenticated metrics retain PostgreSQL authority and node-owner restrictions. The dashboard remains a nonfunctional shell. Phase 06 has been explicitly authorized; see the phase reports for evidence.
 
 ## Start here
 
@@ -81,4 +81,4 @@ PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, lea
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01–04 passed their gates. Phase 05 was explicitly authorized; see its report for executed checks, native mock-provider evidence, and the unresolved real-Ollama gate. Stop after Phase 05. Phase 06 requires explicit authorization.
+Phase 01–05 passed their gates, including real Ollama acceptance. Phase 06 is explicitly authorized; Phase 07 remains unapproved. [Hybrid inference/BYOK](docs/architecture/byok-plan.md) is a planning-only proposal and is not authorized for implementation.

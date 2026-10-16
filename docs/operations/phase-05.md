@@ -1,5 +1,19 @@
 # Phase 05: Local inference and provider gateway
 
+## Real-model gate confirmed before Phase 06
+
+After the user made Ollama available, Phase 05 was reverified before Phase 06 changes: all **200 PostgreSQL-backed tests** passed, Windows checks passed (122 tests; 78 database cases separately executed), and formatting/lint/strict typing plus frontend formatting/lint/types/build passed. Cancellation, stale-attempt rejection and durable inference were covered by the executed suite.
+
+The existing native-worker acceptance then ran against the already installed `qwen3:8b`, with an explicit 512-token output budget to allow its reasoning before the visible answer. Both streaming and non-streaming jobs completed through the authenticated API, scheduler, native worker and model gateway. The streaming result included `Hello!`. Completed results were unchanged after an actual API restart. Evidence: `.cache/phase05-runs/567de24eb58348a5943bec7cf20e3758/result.json`, with SSE captures and worker log beside it. The run's worker was stopped and both credentials revoked. No model installation/download or system configuration change occurred. This establishes the real-local-model gate; it does not establish physical macOS/Linux or GPU-backend parity.
+
+Repeat with an already installed model:
+
+```text
+uv run --locked --all-packages python -m scripts.check_model_inference --ollama --model YOUR_EXACT_INSTALLED_MODEL --max-tokens 512 --verify-restart
+```
+
+The earlier unavailable-Ollama notes below record the initial Phase 05 delivery, superseded by this successful real-model acceptance. Phase 06 was subsequently explicitly authorized by the user.
+
 ## Scope and prerequisite
 
 Phase 05 was explicitly authorized. Before edits, Phase 04 passed Python formatting/lint/strict typing, 84 Windows unit tests, all 143 PostgreSQL-backed tests without skips, frontend formatting/lint/type/build, and the native scheduler acceptance. That acceptance completed 100 jobs across two workers with 110 nonoverlapping attempts, preserved queued jobs through actual API/PostgreSQL restarts, left an incompatible job queued, and recovered a stopped worker's job on a surviving worker with a new fence. Evidence: `.cache/phase04-runs/bd98ed06f5d44e89a4ccfd4826bbfa92/result.json`.
