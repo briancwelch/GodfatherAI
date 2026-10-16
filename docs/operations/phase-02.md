@@ -99,7 +99,9 @@ The first host-side restart probe found that an API attached only to the interna
 
 The complete repository check runner passed on Windows: Python formatting/lint/typing, 27 database-free tests (17 database cases deliberately skipped there and separately passed in the container), frontend formatting/lint/typing and production build. `uv pip check`, `npm audit --audit-level=high`, Compose validation and patch whitespace checks passed. The application database contains 13 domain tables plus the Alembic version table at `0001_initial`, with no leftover restart probe tables. The API runtime image contains no local `.env` file.
 
-Phase 02 GitHub CI is pending the implementation-branch push. Physical worker/GPU behavior, remote/public deployment and full authentication remain untested and outside Phase 02.
+The implementation was committed as `cbcfb38ecec7e5046a6e4a746f81d8cb92673d4f` on `phase-02-control-plane`. [All eight Phase 02 CI jobs passed](https://github.com/briancwelch/GodfatherAI/actions/runs/38833558905): Python checks on Windows/macOS/Linux and Linux Python 3.12, frontend checks on all three OS runners, and the Linux container job. That container job independently reported **44 passed** and a passing actual API/PostgreSQL restart, outage and recovery probe.
+
+The Phase 02 gate is satisfied. Local services remain running for review. No Phase 03 work has begun. Physical worker/GPU behavior, remote/public deployment and full authentication remain untested and outside Phase 02.
 
 ## Stop boundary
 
