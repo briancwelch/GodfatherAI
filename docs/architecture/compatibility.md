@@ -1,5 +1,11 @@
 # Cross-platform compatibility policy
 
+## Phase 05 text inference
+
+The provider-neutral gateway uses portable asynchronous HTTP on Windows/macOS/Linux. An explicitly opted-in worker executes one inference at a time against owner-configured loopback Ollama or an approved OpenAI-compatible endpoint. Providers manage CPU/CUDA/Metal/AMD execution internally. The coordinator matches advertised OS/architecture/resources/backend requirements without vendor-specific inference code. Provider-reported capabilities, configured declarations, simulated telemetry and physically executed inference are distinct evidence.
+
+No model, GPU vendor, node, user or geographic location is hardcoded into model selection. Model availability is dynamically registered. Older registration-only workers remain valid; older synthetic assignments omit the new optional inference fields. No physical Mac/Linux or GPU inference result is established by mocked tests. See [gateway architecture](model-gateway.md) and [Phase 05 evidence](../operations/phase-05.md). Earlier phase sections below record their historical scope.
+
 The coordinator is a modular monolith, intended for an independent Ubuntu Linux VPS. Development must also run locally on Windows with Docker Desktop/WSL2, macOS, and Linux. No contributor desktop is a production coordinator requirement.
 
 ## Development baseline

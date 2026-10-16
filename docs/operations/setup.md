@@ -1,5 +1,7 @@
 # Development setup
 
+For Phase 05 worker-owned provider configuration, installed-model discovery and inference clients, follow [Phase 05](phase-05.md). No Ollama installation, model download, remote provider or system change is performed automatically. The local shell remains disconnected.
+
 ## Supported baseline
 
 | Component | Baseline                                                                              |

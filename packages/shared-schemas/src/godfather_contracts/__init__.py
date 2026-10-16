@@ -46,6 +46,40 @@ class ModelInventory(Contract):
     identifier: Label
 
 
+class ModelDeployment(Contract):
+    """Worker-local provider alias, never an endpoint URL or credential."""
+
+    provider_id: Label
+    provider: Literal["ollama", "openai_compatible"]
+    identifier: Label
+    available: bool = True
+    verified_capabilities: list[Label] = Field(default_factory=list, max_length=32)
+    declared_capabilities: list[Label] = Field(default_factory=list, max_length=32)
+    operations: list[Literal["chat", "stream"]] = Field(default_factory=list, max_length=2)
+    context_window: int | None = Field(default=None, ge=1, le=2**40)
+    digest: str | None = Field(default=None, max_length=200)
+    disk_bytes: int | None = Field(default=None, ge=0, le=2**60)
+    estimated_ram_bytes: int | None = Field(default=None, ge=0, le=2**60)
+    estimated_vram_bytes: int | None = Field(default=None, ge=0, le=2**60)
+    metadata_source: Literal["provider_reported", "configured"] = "provider_reported"
+
+
+class ModelSelection(Contract):
+    # A missing identifier explicitly selects by capability; no implicit fallback.
+    identifier: Label | None = None
+    provider: Literal["ollama", "openai_compatible"] | None = None
+    capabilities: list[Label] = Field(default_factory=list, max_length=32)
+    allow_declared_capabilities: bool = False
+    context_window: int | None = Field(default=None, ge=1, le=2**40)
+    stream: bool = True
+
+    @model_validator(mode="after")
+    def explicit_selection(self) -> "ModelSelection":
+        if self.identifier is None and not self.capabilities:
+            raise ValueError("Select an exact model or required capabilities")
+        return self
+
+
 class Advertisement(Contract):
     os: Literal["windows", "macos", "linux"]
     os_version: str = Field(min_length=1, max_length=100)
@@ -56,6 +90,8 @@ class Advertisement(Contract):
     scheduling_policy: Literal["dedicated", "preferred", "shared"] = "shared"
     concurrency_limit: int = Field(default=1, ge=1, le=128)
     job_protocol_version: Literal[1] | None = None
+    inference_protocol_version: Literal[1] | None = None
+    model_deployments: list[ModelDeployment] = Field(default_factory=list, max_length=128)
     allowed_job_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
     runtimes: list[Label] = Field(default_factory=list, max_length=32)
@@ -70,6 +106,9 @@ class Advertisement(Contract):
         combined = self.primary_capabilities + self.secondary_capabilities
         if len(combined) != len(set(combined)):
             raise ValueError("capabilities must be unique across specialties")
+        deployments = [(m.provider_id, m.identifier) for m in self.model_deployments]
+        if len(deployments) != len(set(deployments)):
+            raise ValueError("model deployments must be unique within a provider alias")
         return self
 
 

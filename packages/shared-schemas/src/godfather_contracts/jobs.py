@@ -1,12 +1,18 @@
 """Additive synthetic execution protocol v1; registration/heartbeat v1 stays valid."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
-from godfather_contracts import Contract, Label, ModelInventory
+from godfather_contracts import Contract, Label, ModelDeployment, ModelInventory, ModelSelection
+from godfather_contracts.inference import (
+    InferenceInput,
+    InferenceResult,
+    ProviderErrorCode,
+    StreamUpdate,
+)
 
 JobState = Literal[
     "PENDING", "ASSIGNED", "RUNNING", "RETRY_WAIT", "COMPLETED", "FAILED", "CANCELLED"
@@ -29,6 +35,14 @@ class Requirements(Contract):
     toolchains: list[Label] = Field(default_factory=list, max_length=32)
     sandbox_modes: list[Label] = Field(default_factory=list, max_length=16)
     models: list[ModelInventory] = Field(default_factory=list, max_length=32)
+    model_selection: ModelSelection | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible_requirements(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.model_selection is None:
+            data.pop("model_selection", None)
+        return data
 
 
 class SyntheticInput(Contract):
@@ -45,12 +59,31 @@ class RetryPolicy(Contract):
 
 class JobSubmission(Contract):
     workspace_id: UUID
-    type: Literal["synthetic.echo", "synthetic.fail"] = "synthetic.echo"
+    type: Literal["synthetic.echo", "synthetic.fail", "inference.text"] = "synthetic.echo"
     requirements: Requirements = Field(default_factory=Requirements)
-    input: SyntheticInput = Field(default_factory=SyntheticInput)
+    input: SyntheticInput | InferenceInput = Field(default_factory=SyntheticInput)
     priority: int = Field(default=0, ge=-100, le=100)
     timeout_seconds: int = Field(default=300, ge=1, le=86400)
     retry: RetryPolicy = Field(default_factory=RetryPolicy)
+
+    @model_validator(mode="after")
+    def execution_contract(self) -> "JobSubmission":
+        if self.type == "inference.text":
+            if (
+                not isinstance(self.input, InferenceInput)
+                or self.requirements.model_selection is None
+            ):
+                raise ValueError("Inference input and model selection are required")
+            if self.input.stream != self.requirements.model_selection.stream:
+                raise ValueError("Input and model selection stream modes must agree")
+        elif not isinstance(self.input, SyntheticInput) or self.requirements.model_selection:
+            raise ValueError("Synthetic jobs require synthetic input without model selection")
+        return self
+
+
+class InferenceSubmission(JobSubmission):
+    type: Literal["inference.text"] = "inference.text"
+    input: InferenceInput
 
 
 class SyntheticResult(Contract):
@@ -66,7 +99,7 @@ class JobView(Contract):
     status: JobState
     priority: int
     requirements: Requirements
-    input: SyntheticInput
+    input: SyntheticInput | InferenceInput
     timeout_seconds: int
     retry: RetryPolicy
     assigned_node_id: UUID | None
@@ -77,7 +110,7 @@ class JobView(Contract):
     cancel_requested_at: datetime | None
     next_run_at: datetime | None
     created_at: datetime
-    result: SyntheticResult | None
+    result: SyntheticResult | InferenceResult | None
 
 
 class JobPoll(Contract):
@@ -91,6 +124,14 @@ class Assignment(Contract):
     fencing_token: int
     lease_expires_at: datetime
     deadline_at: datetime
+    deployment: ModelDeployment | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible_assignment(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.deployment is None:
+            data.pop("deployment", None)
+        return data
 
 
 class PollResponse(Contract):
@@ -100,10 +141,11 @@ class PollResponse(Contract):
 class JobReport(JobPoll):
     attempt_id: UUID
     fencing_token: int = Field(ge=1)
-    action: Literal["ack", "start", "progress", "renew", "complete", "fail", "cancelled"]
+    action: Literal["ack", "start", "progress", "renew", "complete", "fail", "cancelled", "output"]
     progress: int | None = Field(default=None, ge=0, le=100)
-    result: SyntheticResult | None = None
-    error_code: Literal["transient_error", "permanent_error"] | None = None
+    result: SyntheticResult | InferenceResult | None = None
+    output: StreamUpdate | None = None
+    error_code: Literal["transient_error", "permanent_error"] | ProviderErrorCode | None = None
 
 
 class ReportResponse(Contract):

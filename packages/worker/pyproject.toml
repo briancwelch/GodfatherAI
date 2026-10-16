@@ -3,13 +3,14 @@ name = "godfather-worker"
 version = "0.1.0"
 description = "Outbound-only registration and health worker; no task execution"
 requires-python = ">=3.12"
-dependencies = ["godfather-contracts", "psutil>=7.2,<8"]
+dependencies = ["godfather-contracts", "godfather-model-gateway", "psutil>=7.2,<8"]
 
 [project.scripts]
 godfather-worker = "godfather_worker.cli:main"
 
 [tool.uv.sources]
 godfather-contracts = { workspace = true }
+godfather-model-gateway = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

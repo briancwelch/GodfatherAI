@@ -1,5 +1,13 @@
 # Early security boundaries
 
+## Phase 05 inference boundary
+
+An independent worker inference opt-in permits bounded text chat only. Jobs select models and typed parameters; they cannot supply endpoints, credentials, arbitrary tools, shell commands or provider-specific request bodies. Provider URLs and credential environment-variable names stay in worker-owned configuration; key values never enter registration, PostgreSQL, API logs or errors. Ollama must use worker loopback; remote compatible endpoints require approved HTTPS with certificate verification. Redirects and environment proxies are disabled.
+
+Model directory and inference streams/results/metrics require existing administrator credentials and workspace access. Directory visibility also respects owner sharing consent. Every partial/final report retains credential/session/attempt/fence/lease/deadline/permission checks. Bounded prefixes and final results remain private workspace data. SSE checks authorization repeatedly, suppresses invalid attempts, and tags/reset generations; clients must discard invalidated provisional text. Provider errors contain safe codes only, and metrics omit prompts/response text. Closing a provider connection is not proof of remote computation/billing cancellation.
+
+No production credentials, remote provider accounts, public Ollama, DigitalOcean resources or public endpoints are configured by this phase. Existing prerequisites for real data, remote access, browser sessions and public deployment remain in force. See [ADR 0005](../decisions/0005-worker-local-model-gateway.md). Earlier phase sections below record their historical scope.
+
 ## Phase 01
 
 The dashboard serves static development content without accounts, sessions, credentials, private workspaces, or operational APIs. It explicitly says no backend or user session is connected. Its navigation does not authorize actions. Authentication is not simulated with a browser flag or a cosmetic login form.

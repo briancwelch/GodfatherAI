@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 04 ? durable synthetic job scheduler.** Phase 03 registration, authentication, health transitions and tests were reverified first. PostgreSQL now owns jobs, assignments, attempts, leases, fences, retries, fairness and event history. Two opt-in simulated worker processes can execute synthetic jobs locally. The dashboard remains a nonfunctional shell. Inference, checkpoint restoration, real agents and remote deployment remain later phases.
+**Current milestone: Phase 05 — local inference and provider gateway.** Phase 04 scheduling, authentication, leases/fencing, retries, cancellation and native acceptance were reverified first. Opted-in workers discover and execute text inference through replaceable Ollama/OpenAI-compatible adapters. Model-aware scheduling, bounded attempt-tagged streaming, durable results and authenticated metrics retain PostgreSQL authority and node-owner restrictions. The dashboard remains a nonfunctional shell. The real-local-model acceptance gate remains unverified while Ollama is unavailable; see the Phase 05 report.
 
 ## Start here
 
@@ -13,6 +13,7 @@ One developer builds the platform for both administrators. The second administra
 3. Review [Phase 01 validation](docs/operations/phase-01.md) and [Phase 02 setup and results](docs/operations/phase-02.md).
 4. Follow [Phase 03 startup, credential provisioning and simulated workers](docs/operations/phase-03.md).
 5. Use [Phase 04 jobs, scheduler simulation and validation](docs/operations/phase-04.md) and the [job protocol](docs/protocols/jobs-v1.md).
+6. Follow [Phase 05 provider setup and inference validation](docs/operations/phase-05.md), [architecture](docs/architecture/model-gateway.md), and the [inference API contract](docs/protocols/inference-v1.md).
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
@@ -54,20 +55,21 @@ The doctor inspects tools and Docker availability without installing anything. T
 
 ## Layout
 
-| Path                      | Purpose                                                                |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell          |
-| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models       |
-| `packages/worker`         | Outbound registration, discovery, heartbeats and opt-in synthetic jobs |
-| `packages/shared-schemas` | Versioned worker registration/health contracts                         |
-| `infrastructure/docker`   | Dashboard build/runtime container                                      |
-| `scripts`                 | Portable development checks                                            |
-| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests   |
-| `docs/design`             | Authoritative frontend design guidance                                 |
-| `docs/architecture`       | Architecture and cross-platform compatibility                          |
-| `docs/decisions`          | Architecture decision records                                          |
-| `docs/operations`         | Setup, phase gates, troubleshooting                                    |
-| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                 |
+| Path                      | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell           |
+| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models        |
+| `packages/worker`         | Outbound registration, heartbeats, synthetic jobs and opt-in inference  |
+| `packages/model-gateway`  | Portable Ollama/OpenAI-compatible discovery and text inference adapters |
+| `packages/shared-schemas` | Versioned worker registration/health contracts                          |
+| `infrastructure/docker`   | Dashboard build/runtime container                                       |
+| `scripts`                 | Portable development checks                                             |
+| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests    |
+| `docs/design`             | Authoritative frontend design guidance                                  |
+| `docs/architecture`       | Architecture and cross-platform compatibility                           |
+| `docs/decisions`          | Architecture decision records                                           |
+| `docs/operations`         | Setup, phase gates, troubleshooting                                     |
+| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                  |
 
 Future packages and infrastructure are created only when their milestones require them.
 
@@ -79,4 +81,4 @@ PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, lea
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01?03 passed their gates. Phase 04 was explicitly authorized; see its report for validation and limitations. Stop after Phase 04. Phase 05 requires explicit authorization.
+Phase 01–04 passed their gates. Phase 05 was explicitly authorized; see its report for executed checks, native mock-provider evidence, and the unresolved real-Ollama gate. Stop after Phase 05. Phase 06 requires explicit authorization.

@@ -1,0 +1,16 @@
+[project]
+name = "godfather-model-gateway"
+version = "0.1.0"
+description = "Portable provider-neutral text inference adapters"
+requires-python = ">=3.12"
+dependencies = ["godfather-contracts", "httpx2>=2.13,<3"]
+
+[tool.uv.sources]
+godfather-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/godfather_model_gateway"]

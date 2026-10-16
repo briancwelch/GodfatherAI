@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "godfather-api",
     "godfather-contracts",
+    "godfather-model-gateway",
     "godfather-worker",
     "the-godfather",
 ]
@@ -133,17 +134,34 @@ dependencies = [
 requires-dist = [{ name = "pydantic", specifier = ">=2.11,<3" }]
 
 [[package]]
+name = "godfather-model-gateway"
+version = "0.1.0"
+source = { editable = "packages/model-gateway" }
+dependencies = [
+    { name = "godfather-contracts" },
+    { name = "httpx2" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "godfather-contracts", editable = "packages/shared-schemas" },
+    { name = "httpx2", specifier = ">=2.13,<3" },
+]
+
+[[package]]
 name = "godfather-worker"
 version = "0.1.0"
 source = { editable = "packages/worker" }
 dependencies = [
     { name = "godfather-contracts" },
+    { name = "godfather-model-gateway" },
     { name = "psutil" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "godfather-contracts", editable = "packages/shared-schemas" },
+    { name = "godfather-model-gateway", editable = "packages/model-gateway" },
     { name = "psutil", specifier = ">=7.2,<8" },
 ]
 

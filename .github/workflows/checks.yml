@@ -101,6 +101,8 @@ jobs:
         run: uv run --locked --all-packages python -m scripts.check_worker_health
       - name: Durable scheduler, 100 jobs, two workers, restarts and lease expiry
         run: uv run --locked --all-packages python -m scripts.check_job_scheduler
+      - name: Inference gateway with native worker and loopback mock provider
+        run: uv run --locked --all-packages python -m scripts.check_model_inference
       - name: Container diagnostics
         if: failure()
         run: docker compose ps --all

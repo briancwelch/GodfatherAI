@@ -18,7 +18,7 @@ dev = [
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "packages/shared-schemas", "packages/worker"]
+members = ["apps/api", "packages/shared-schemas", "packages/worker", "packages/model-gateway"]
 
 [tool.ruff]
 target-version = "py312"

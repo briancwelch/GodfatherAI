@@ -4,7 +4,7 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from godfather_contracts import NodeView
+from godfather_contracts import ModelDeployment, NodeView
 from godfather_contracts.jobs import Requirements
 from pydantic import ValidationError
 from sqlalchemy import func, select, text
@@ -64,7 +64,10 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
 
 def matches(requirements: Requirements, node: NodeView, reserved: list[Requirements]) -> bool:
     """Fail closed on unknown required resources, with conservative reservations."""
-    if node.job_protocol_version != 1 or node.resources.source != "simulated":
+    if requirements.model_selection is not None:
+        if node.inference_protocol_version != 1:
+            return False
+    elif node.job_protocol_version != 1 or node.resources.source != "simulated":
         return False
     if requirements.os not in ("any", node.os) or requirements.architecture not in (
         "any",
@@ -85,6 +88,14 @@ def matches(requirements: Requirements, node: NodeView, reserved: list[Requireme
             return False
     if not all(model in node.installed_models for model in requirements.models):
         return False
+    if requirements.model_selection is not None:
+        return deployment_for(requirements, node, reserved) is not None
+    return resources_match(requirements, node, reserved)
+
+
+def resources_match(
+    requirements: Requirements, node: NodeView, reserved: list[Requirements]
+) -> bool:
     if requirements.cpu_count + sum(r.cpu_count for r in reserved) > node.resources.cpu_count:
         return False
     ram = requirements.ram_bytes
@@ -110,6 +121,49 @@ def matches(requirements: Requirements, node: NodeView, reserved: list[Requireme
             if requirements.gpu_memory_bytes + sum(r.gpu_memory_bytes for r in reserved) > free:
                 return False
     return True
+
+
+def reservation(requirements: Requirements, deployment: ModelDeployment | None) -> Requirements:
+    if deployment is None:
+        return requirements
+    return requirements.model_copy(
+        update={
+            "ram_bytes": max(requirements.ram_bytes, deployment.estimated_ram_bytes or 0),
+            "gpu_memory_bytes": max(
+                requirements.gpu_memory_bytes, deployment.estimated_vram_bytes or 0
+            ),
+        }
+    )
+
+
+def deployment_for(
+    requirements: Requirements, node: NodeView, reserved: list[Requirements]
+) -> ModelDeployment | None:
+    selection = requirements.model_selection
+    if selection is None:
+        return None
+    for model in sorted(node.model_deployments, key=lambda m: (m.provider_id, m.identifier)):
+        capabilities = set(model.verified_capabilities)
+        if selection.allow_declared_capabilities:
+            capabilities.update(model.declared_capabilities)
+        if (
+            model.available
+            and (selection.identifier is None or selection.identifier == model.identifier)
+            and (selection.provider is None or selection.provider == model.provider)
+            and set(selection.capabilities) <= capabilities
+            and "chat" in model.operations
+            and (not selection.stream or "stream" in model.operations)
+            and (
+                selection.context_window is None
+                or (
+                    model.context_window is not None
+                    and model.context_window >= selection.context_window
+                )
+            )
+            and resources_match(reservation(requirements, model), node, reserved)
+        ):
+            return model
+    return None
 
 
 def job_event(
@@ -221,12 +275,23 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
     active_by_owner = Counter(j.owner_id for j in active_jobs)
     for job in active_jobs:
         if job.assigned_node_id in reservations:
-            reservations[job.assigned_node_id].append(Requirements.model_validate(job.requirements))
+            attempt = session.scalar(
+                select(Attempt).where(Attempt.job_id == job.id, Attempt.number == job.attempt_count)
+            )
+            deployment = None
+            if attempt and attempt.result.get("deployment"):
+                deployment = ModelDeployment.model_validate(attempt.result["deployment"])
+            reservations[job.assigned_node_id].append(
+                reservation(Requirements.model_validate(job.requirements), deployment)
+            )
     # No fixed queue window: an incompatible head cannot hide compatible queued jobs.
     pending = list(
         session.scalars(
             select(Job)
-            .where(Job.status == "PENDING", Job.type.in_(("synthetic.echo", "synthetic.fail")))
+            .where(
+                Job.status == "PENDING",
+                Job.type.in_(("synthetic.echo", "synthetic.fail", "inference.text")),
+            )
             .order_by(Job.priority.desc(), Job.created_at, Job.id)
             .with_for_update(skip_locked=True)
         ).all()
@@ -281,10 +346,12 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                     0 if n.scheduling_policy == "preferred" and n.owner_id == job.owner_id else 1,
                     -len(set(requirements.capabilities) & set(views[n.id].primary_capabilities)),
                     len(reservations[n.id]),
+                    views[n.id].resources.cpu_percent or 0,
                     str(n.id),
                 )
             )
             node = candidates[0]
+            deployment = deployment_for(requirements, views[node.id], reservations[node.id])
             job.attempt_count += 1
             job.fencing_token += 1
             job.status, job.assigned_node_id = "ASSIGNED", node.id
@@ -302,6 +369,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 lease_expires_at=min(
                     deadline, now + timedelta(seconds=settings.execution_lease_seconds)
                 ),
+                result={"deployment": deployment.model_dump(mode="json")} if deployment else {},
             )
             session.add(attempt)
             session.flush()
@@ -309,7 +377,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             turn += 1
             users[job.owner_id].scheduling_turn = turn
             active_by_owner[job.owner_id] += 1
-            reservations[node.id].append(requirements)
+            reservations[node.id].append(reservation(requirements, deployment))
             pending.remove(job)
             count += 1
             selected = True

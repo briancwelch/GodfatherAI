@@ -51,7 +51,10 @@ class WorkerClient:
             method="POST",
         )
         with self.opener.open(request, timeout=10) as response:
-            return json.loads(response.read(65536))
+            data = response.read(1024**2 + 1)
+            if len(data) > 1024**2:
+                raise ValueError("Coordinator response exceeds the protocol limit")
+            return json.loads(data)
 
 
 def retryable(error: HTTPError) -> bool:

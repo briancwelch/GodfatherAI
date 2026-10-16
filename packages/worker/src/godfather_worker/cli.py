@@ -1,20 +1,24 @@
 """Run one outbound worker; synthetic execution requires explicit simulator opt-in."""
 
 import argparse
+import asyncio
 import json
 import logging
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic
 from urllib.error import HTTPError, URLError
 from uuid import uuid4
 
 from godfather_contracts import Heartbeat, Registration
 from godfather_contracts.jobs import JobPoll, PollResponse
+from godfather_model_gateway import ProviderConfig
 from pydantic import ValidationError
 
 from godfather_worker.client import WorkerClient, retryable
 from godfather_worker.discovery import discover, discover_resources
+from godfather_worker.inference import discover_models, execute_inference
 from godfather_worker.jobs import execute
 from godfather_worker.simulated import profile
 
@@ -38,6 +42,11 @@ def main() -> int:
     parser.add_argument("--policy", choices=("dedicated", "preferred", "shared"))
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--execute-synthetic", action="store_true")
+    parser.add_argument(
+        "--inference-config",
+        type=Path,
+        help="Opt in to text inference with worker-owned provider JSON settings",
+    )
     parser.add_argument("--step-seconds", type=float, default=0)
     parser.add_argument("--allow-owner", type=str, action="append", default=[])
     parser.add_argument("--allow-workspace", type=str, action="append", default=[])
@@ -45,6 +54,16 @@ def main() -> int:
     try:
         if args.execute_synthetic and not args.simulate:
             raise ValueError("Synthetic execution requires a simulated profile")
+        if args.inference_config and args.execute_synthetic:
+            raise ValueError("Choose synthetic execution or inference per worker process")
+        configs: list[ProviderConfig] = []
+        if args.inference_config:
+            raw_configs = json.loads(args.inference_config.read_text(encoding="utf-8"))
+            if not isinstance(raw_configs, list) or not 1 <= len(raw_configs) <= 8:
+                raise ValueError("Configure one to eight providers")
+            configs = [ProviderConfig.model_validate(c) for c in raw_configs]
+            if len({c.id for c in configs}) != len(configs):
+                raise ValueError("Provider aliases must be unique")
         if not 0 <= args.step_seconds <= 30:
             raise ValueError("Synthetic step duration must be between 0 and 30 seconds")
         credentials = json.loads(args.credential_file.read_text(encoding="utf-8"))
@@ -66,6 +85,12 @@ def main() -> int:
         if args.concurrency is not None:
             values["concurrency_limit"] = args.concurrency
         values["job_protocol_version"] = 1 if args.execute_synthetic else None
+        if configs:
+            if args.concurrency not in (None, 1):
+                raise ValueError("Phase 05 inference workers execute one attempt at a time")
+            values["concurrency_limit"] = 1
+            values["inference_protocol_version"] = 1
+            values["model_deployments"] = asyncio.run(discover_models(configs))
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
@@ -76,9 +101,17 @@ def main() -> int:
     registered = False
     node_id = None
     delay = 1
+    refresh_at = monotonic() + 30
     try:
         while not stop.is_set():
             try:
+                if configs and monotonic() >= refresh_at:
+                    deployments = asyncio.run(discover_models(configs))
+                    registration = registration.model_copy(
+                        update={"model_deployments": deployments}
+                    )
+                    refresh_at = monotonic() + 30
+                    registered = False  # Same session: atomically replaces durable inventory.
                 if not registered:
                     result = client.post("/api/v1/workers/register", registration)
                     node_id = result.node_id
@@ -97,7 +130,7 @@ def main() -> int:
                     )
                     emit("worker.heartbeat", node_id=str(node_id), state=result.state)
                 delay = 1
-                if args.execute_synthetic:
+                if args.execute_synthetic or configs:
                     assert node_id is not None
                     polled = PollResponse.model_validate(
                         client.post_document(
@@ -106,17 +139,30 @@ def main() -> int:
                         )
                     )
                     if polled.assignment is not None:
-                        execute(
-                            client,
-                            node_id,
-                            registration,
-                            polled.assignment,
-                            stop,
-                            args.step_seconds,
-                            result.heartbeat_interval_seconds,
-                        )
+                        if polled.assignment.job.type == "inference.text" and configs:
+                            asyncio.run(
+                                execute_inference(
+                                    client,
+                                    node_id,
+                                    registration,
+                                    polled.assignment,
+                                    stop,
+                                    result.heartbeat_interval_seconds,
+                                    configs,
+                                )
+                            )
+                        else:
+                            execute(
+                                client,
+                                node_id,
+                                registration,
+                                polled.assignment,
+                                stop,
+                                args.step_seconds,
+                                result.heartbeat_interval_seconds,
+                            )
                         emit(
-                            "worker.synthetic_attempt_finished",
+                            "worker.attempt_finished",
                             job_id=str(polled.assignment.job.id),
                         )
                     else:
@@ -124,7 +170,11 @@ def main() -> int:
                 else:
                     stop.wait(result.heartbeat_interval_seconds)
             except HTTPError as error:
-                if args.execute_synthetic and error.code == 409 and "/jobs/" in error.url:
+                if (
+                    (args.execute_synthetic or configs)
+                    and error.code == 409
+                    and "/jobs/" in error.url
+                ):
                     emit("worker.stale_attempt_discarded")
                     stop.wait(1)
                     continue

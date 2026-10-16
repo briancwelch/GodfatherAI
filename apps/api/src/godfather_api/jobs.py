@@ -6,6 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer
+from godfather_contracts import ModelDeployment
+from godfather_contracts.inference import MAX_TEXT, InferenceInput, InferenceResult
 from godfather_contracts.jobs import (
     Assignment,
     AttemptView,
@@ -16,6 +18,7 @@ from godfather_contracts.jobs import (
     JobView,
     PollResponse,
     ReportResponse,
+    SyntheticResult,
 )
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -196,7 +199,7 @@ def events(
 def worker_node(node_id: UUID, payload: JobPoll, request: Request, session: Session) -> Node:
     credential = authenticate(request, session, "worker")
     if payload.job_protocol_version != 1:
-        raise HTTPException(426, "Synthetic job protocol v1 is required")
+        raise HTTPException(426, "Execution protocol v1 is required")
     if credential.node_id != node_id:
         raise HTTPException(403, "Credential is scoped to another node")
     node = session.scalar(select(Node).where(Node.id == node_id).with_for_update())
@@ -204,11 +207,12 @@ def worker_node(node_id: UUID, payload: JobPoll, request: Request, session: Sess
         raise HTTPException(409, "Register this worker session first")
     if node.state == "disabled":
         raise HTTPException(403, "Node is disabled")
-    if (
-        node.runtimes.get("job_protocol_version") != 1
-        or node.resources.get("source") != "simulated"
-    ):
-        raise HTTPException(403, "Synthetic execution requires explicit simulated worker opt-in")
+    synthetic = (
+        node.runtimes.get("job_protocol_version") == 1
+        and node.resources.get("source") == "simulated"
+    )
+    if not synthetic and node.runtimes.get("inference_protocol_version") != 1:
+        raise HTTPException(403, "Execution requires explicit worker opt-in")
     return node
 
 
@@ -241,6 +245,9 @@ def poll(node_id: UUID, payload: JobPoll, request: Request, session: SessionDep)
             fencing_token=attempt.fencing_token,
             lease_expires_at=attempt.lease_expires_at,
             deadline_at=attempt.deadline_at,
+            deployment=ModelDeployment.model_validate(attempt.result["deployment"])
+            if job.type == "inference.text"
+            else None,
         )
     )
 
@@ -271,6 +278,15 @@ def report(
         raise HTTPException(409, "Attempt is stale, expired or no longer owns this job")
     if not permitted(session, job, node):
         raise HTTPException(409, "Workspace or node-owner execution permission was withdrawn")
+    inference = job.type == "inference.text"
+    if inference:
+        if node.runtimes.get("inference_protocol_version") != 1:
+            raise HTTPException(403, "Inference requires explicit worker opt-in")
+    elif (
+        node.runtimes.get("job_protocol_version") != 1
+        or node.resources.get("source") != "simulated"
+    ):
+        raise HTTPException(403, "Synthetic execution requires simulated worker opt-in")
     cancelled = job.cancel_requested_at is not None
     if cancelled and payload.action in ("complete", "fail", "cancelled", "start"):
         job.status, job.assigned_node_id = "CANCELLED", None
@@ -287,6 +303,32 @@ def report(
             raise HTTPException(409, "Acknowledge assignment before starting")
         job.status, attempt.status, attempt.started_at = "RUNNING", "RUNNING", now
         job_event(session, job, "started", now, attempt)
+    elif payload.action == "output":
+        if not inference or job.status != "RUNNING" or payload.output is None:
+            raise HTTPException(422, "Running inference and a bounded output update are required")
+        if not InferenceInput.model_validate(job.input_refs).stream:
+            raise HTTPException(422, "This job did not request streaming output")
+        # Cancellation cannot publish more private partial output.
+        if not cancelled:
+            previous = attempt.result
+            stored_sequence = previous.get("sequence", 0)
+            sequence = stored_sequence if isinstance(stored_sequence, int) else 0
+            chunk = payload.output
+            if chunk.sequence == sequence:
+                if previous.get("last_text") != chunk.text:
+                    raise HTTPException(409, "Output sequence was already used")
+            elif chunk.sequence == sequence + 1:
+                text = str(previous.get("text", "")) + chunk.text
+                if len(text) > MAX_TEXT:
+                    raise HTTPException(422, "Inference output limit exceeded")
+                attempt.result = {
+                    **previous,
+                    "text": text,
+                    "sequence": chunk.sequence,
+                    "last_text": chunk.text,
+                }
+            else:
+                raise HTTPException(409, "Output must append the next sequence")
     elif payload.action in ("renew", "progress"):
         if job.status != "RUNNING":
             raise HTTPException(409, "Start execution before reporting progress or renewing")
@@ -302,6 +344,17 @@ def report(
     elif payload.action == "complete":
         if job.status != "RUNNING" or payload.result is None:
             raise HTTPException(422, "Running execution and a synthetic result are required")
+        if inference:
+            if not isinstance(payload.result, InferenceResult):
+                raise HTTPException(422, "An inference result is required")
+            if payload.result.deployment.model_dump(mode="json") != attempt.result.get(
+                "deployment"
+            ):
+                raise HTTPException(409, "Result must use the assigned model deployment")
+            if not payload.result.text.startswith(str(attempt.result.get("text", ""))):
+                raise HTTPException(409, "Final text must extend the streamed prefix")
+        elif not isinstance(payload.result, SyntheticResult):
+            raise HTTPException(422, "A synthetic result is required")
         attempt.result = payload.result.model_dump(mode="json")
         job.result_refs = attempt.result
         job.status, job.assigned_node_id = "COMPLETED", None
@@ -310,8 +363,16 @@ def report(
     elif payload.action == "fail":
         if job.status != "RUNNING" or payload.error_code is None:
             raise HTTPException(422, "Running execution and a classified error are required")
+        if not inference and payload.error_code not in ("transient_error", "permanent_error"):
+            raise HTTPException(422, "Synthetic failures require synthetic error codes")
         finish_failure(
-            session, job, attempt, now, payload.error_code, payload.error_code == "transient_error"
+            session,
+            job,
+            attempt,
+            now,
+            payload.error_code,
+            payload.error_code
+            in ("transient_error", "provider_unavailable", "provider_timeout", "rate_limited"),
         )
     else:
         raise HTTPException(409, "There is no cancellation request to acknowledge")

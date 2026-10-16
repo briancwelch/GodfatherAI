@@ -1,5 +1,7 @@
 # Worker protocol v1: registration and health
 
+Phase 05 adds optional `inference_protocol_version` and bounded `model_deployments` registration fields, documented in [inference v1](inference-v1.md). Existing workers can omit both. Synthetic execution and inference have independent opt-ins; physical discovery is permitted for inference without granting host tools or shell access.
+
 This document records the Phase 03 baseline. Phase 04 adds backward-compatible, opt-in [synthetic execution](jobs-v1.md), dependency inventory and owner/workspace contribution allowlists. Registration-only workers continue to operate and receive no jobs.
 
 The canonical typed contract is `godfather_contracts` in `packages/shared-schemas`. This phase carries no tasks, execution permissions, leases, checkpoints or inference requests. A protocol change requires documented compatibility or migration; currently only integer version `1` is accepted. Authenticated unsupported versions receive HTTP 426 without modifying a node.

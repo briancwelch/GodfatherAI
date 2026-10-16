@@ -210,6 +210,8 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
         mode="json",
         include={
             "job_protocol_version",
+            "inference_protocol_version",
+            "model_deployments",
             "runtimes",
             "installed_models",
             "dependencies",

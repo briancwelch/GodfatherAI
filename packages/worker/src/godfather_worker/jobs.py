@@ -40,6 +40,8 @@ def execute(
     No local progress is advertised as a recoverable checkpoint.
     """
     route = f"/api/v1/workers/{node_id}/jobs/{assignment.job.id}/report"
+    if not isinstance(assignment.job.input, SyntheticInput):
+        raise ValueError("Synthetic execution requires synthetic input")
 
     def report(action: str, **values: object) -> ReportResponse:
         payload = JobReport.model_validate(
