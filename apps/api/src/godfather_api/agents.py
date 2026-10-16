@@ -288,6 +288,7 @@ def inspect_workflow(job_id: UUID, request: Request, session: SessionDep) -> dic
         "status": run.status,
         "current_step": run.cursor,
         "checkpoint_version": run.checkpoint_version,
+        "recovery_error": run.recovery_error,
         "state": service.workflow_assignment(
             session, request.app.state.artifacts, job, attempt
         ).state.model_dump(mode="json")

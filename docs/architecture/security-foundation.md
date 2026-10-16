@@ -1,5 +1,23 @@
 # Early security boundaries
 
+## Phase 07–08 local Command Center and recovery
+
+The Command Center uses real backend state through an allowlisted same-origin
+Next.js proxy. An existing administrator credential is backend-validated and held
+in an eight-hour HttpOnly/SameSite=Strict cookie. It is never written to JavaScript
+storage, client bundles or JSON responses. Backend authentication, revocation and
+workspace/job-control permissions apply to every call. Foreign Host values and
+mutation Origin mismatches are refused; API targets are local only. HTTP cookies
+are restricted to trusted loopback development, not production login or Phase 09 RBAC.
+
+Nodes retain existing platform-admin health visibility. Workspace jobs, agents and
+events remain scoped; node history excludes other private workspaces. Recovery
+cannot expand tool/host/owner consent or silently enable paid inference. Invalid
+checkpoint/version restoration requires review; unsafe tools remain unsupported.
+Manual retries are restricted to classified safe failures and bounded. No
+force-recovery or owner-grant override is exposed. See [ADR 0007](../decisions/0007-cross-node-recovery-and-local-command-center.md)
+and [the runbook](../operations/phase-07-08.md). Earlier sections are historical.
+
 ## Phase 06 workflow boundary
 
 Immutable agent versions and workflow state are private to authorized workspaces. Definition changes require workspace administration; platform role alone cannot bypass private workspace scope. Every tool needs a supported trusted implementation, agent permission and an independent worker-owner tool/permission grant. Models provide validated data to predefined steps and cannot select arbitrary tools. No shell, arbitrary Python/SQL, contributor-host paths, Git writes, WordPress or account access is available.

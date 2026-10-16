@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from godfather_api.artifacts import LocalArtifactStore
 from godfather_api.config import Settings
 from godfather_api.database import Database
 from godfather_api.logging import correlation_id
@@ -202,6 +203,9 @@ def finish_failure(
 
     end_attempt(session, job, attempt, code, retryable and job.attempt_count <= job.retry_limit)
     attempt.status, attempt.finished_at = "FAILED", now
+    if job.type == "agent.workflow" and code in ("lease_expired", "timeout"):
+        attempt.status = "INTERRUPTED"
+        attempt.lease_expires_at = min(attempt.lease_expires_at, now)
     attempt.error = {"code": code, "retryable": retryable}
     job.assigned_node_id = None
     job.result_refs = {}
@@ -263,7 +267,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
     """
     if not session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": SCHEDULER_LOCK}):
         return 0
-    from godfather_api.workflow_service import eligible
+    from godfather_api.workflow_service import eligible, restoration_ready
 
     maintain(session, settings, now)
     # Credential revocation/disabled owner is checked again on delivery and reports.
@@ -330,6 +334,23 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 requirements = Requirements.model_validate(job.requirements)
             except ValidationError:
                 continue  # Legacy schema-only rows cannot bypass typed execution validation.
+            previous = (
+                session.scalar(
+                    select(Attempt).where(
+                        Attempt.job_id == job.id, Attempt.number == job.attempt_count
+                    )
+                )
+                if job.attempt_count
+                else None
+            )
+            if (
+                job.type == "agent.workflow"
+                and previous is not None
+                and not restoration_ready(
+                    session, LocalArtifactStore(settings.artifact_directory), job, previous
+                )
+            ):
+                continue
             candidates = [
                 n
                 for n in nodes
@@ -369,9 +390,11 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             )
             node = candidates[0]
             deployment = deployment_for(requirements, views[node.id], reservations[node.id])
+            checkpoint_version = 0
             if job.type == "agent.workflow":
                 run = session.get(WorkflowRun, job.id)
                 assert run is not None
+                checkpoint_version = run.checkpoint_version
                 if run.recovery_node_id is None:
                     run.recovery_node_id = node.id
             job.attempt_count += 1
@@ -392,10 +415,28 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                     deadline, now + timedelta(seconds=settings.execution_lease_seconds)
                 ),
                 result={"deployment": deployment.model_dump(mode="json")} if deployment else {},
+                recovered_from_attempt_id=previous.id if previous else None,
+                resumed_checkpoint_version=checkpoint_version,
             )
             session.add(attempt)
             session.flush()
             job_event(session, job, "assigned", now, attempt, {"fencing_token": job.fencing_token})
+            if previous is not None:
+                job_event(
+                    session,
+                    job,
+                    "recovery.assigned",
+                    now,
+                    attempt,
+                    {
+                        "from_attempt_id": str(previous.id),
+                        "from_node_id": str(previous.node_id),
+                        "to_node_id": str(node.id),
+                        "checkpoint_version": attempt.resumed_checkpoint_version,
+                        "cross_node": previous.node_id != node.id,
+                        "reason": previous.error.get("code"),
+                    },
+                )
             turn += 1
             users[job.owner_id].scheduling_turn = turn
             active_by_owner[job.owner_id] += 1

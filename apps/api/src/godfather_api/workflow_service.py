@@ -78,13 +78,13 @@ def eligible(session: Session, job: Job, node: Node, view: NodeView) -> bool:
         and previous.error.get("code") in ("lease_expired", "timeout")
         and previous.session_id == node.session_id
     ):
-        return False  # Phase 06 interruption recovery requires an explicitly restarted process.
+        return False  # A partitioned process cannot reacquire its own expired attempt.
     return (
         run is not None
         and agent is not None
         and agent.enabled
         and view.workflow_protocol_version == 1
-        and (run.recovery_node_id is None or run.recovery_node_id == node.id)
+        and run.status != "REVIEW_REQUIRED"
     )
 
 
@@ -144,6 +144,11 @@ def workflow_assignment(
     if agent is None or run is None or run.agent_id != agent.id:
         raise HTTPException(409, "Workflow metadata is inconsistent")
     view = agent_view(agent)
+    if (
+        run.workflow_id != view.definition.workflow.id
+        or run.workflow_version != view.definition.workflow.version
+    ):
+        raise HTTPException(409, "Pinned workflow version does not match execution metadata")
     state = WorkflowState(
         job_id=job.id,
         agent_id=agent.agent_key,
@@ -204,7 +209,24 @@ def workflow_assignment(
         raise HTTPException(
             409, "Checkpoint does not match this immutable workflow version"
         ) from None
+    # Verify the entire committed prefix, including artifacts not used by the next step.
+    # A corrupt prefix must never become an apparently successful restored workflow.
+    for committed_step in state.completed:
+        load_artifact(session, store, job, committed_step.output)
     return result
+
+
+def restoration_ready(session: Session, store: ArtifactStore, job: Job, previous: Attempt) -> bool:
+    run = session.get(WorkflowRun, job.id)
+    if run is None or run.status == "REVIEW_REQUIRED":
+        return False
+    try:
+        workflow_assignment(session, store, job, previous)
+    except HTTPException:
+        run.status, run.recovery_error = "REVIEW_REQUIRED", "checkpoint_unavailable_or_invalid"
+        event(session, job, previous, "review_required", {"code": run.recovery_error})
+        return False
+    return True
 
 
 def event(

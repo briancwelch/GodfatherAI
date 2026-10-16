@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "The Godfather · Command Center",
-  description: "Local development shell for The Godfather Command Center.",
+  description: "Private local administration for The Godfather control plane.",
   robots: { index: false, follow: false },
 };
 

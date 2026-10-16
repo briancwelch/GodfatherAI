@@ -1,5 +1,15 @@
 # Cross-platform compatibility policy
 
+## Current Phase 07–08 recovery
+
+The original same-node restriction below is superseded by compatible cross-node
+recovery. OS, architecture, runtime/dependency/toolchain, model, hardware/resource,
+workflow version and independent owner/workspace checks remain mandatory. Committed
+JSON artifacts are served by the existing coordinator store; worker-local files or
+GPU memory are never assumed portable. Tests cover simulated Windows-to-macOS/Linux
+recovery and incompatible backups. Physical OS/GPU evidence remains separate. See
+[Phase 07–08](../operations/phase-07-08.md).
+
 ## Phase 06 workflows and checkpoint artifacts
 
 The agent runtime and deterministic read-only tool registry use portable Python and JSON references. The coordinator owns immutable output/checkpoint files in its persistent local volume; workers restore through authenticated, fenced APIs and never serialize host paths, GPU state, open handles or Python process objects. File operations are isolated in the local storage backend. Worker/model operations remain OS/provider-neutral; JSON-mode hints do not change older inference assignment shapes. Tool and owner-permission checks apply on both the backend and worker.

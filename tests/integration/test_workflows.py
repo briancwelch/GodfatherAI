@@ -134,14 +134,14 @@ def first_checkpoint(h: Harness, a: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_worker(
-    h: Harness, assignment: dict[str, Any], provider: MockModel | None = None
+    h: Harness, assignment: dict[str, Any], provider: MockModel | None = None, index: int = 0
 ) -> MockModel:
     instance = provider or MockModel()
     asyncio.run(
         execute_agent(
-            APIWorkerClient(h),
-            UUID(h.workers[0]["credential_id"]),
-            h.registrations[0],
+            APIWorkerClient(h, index),
+            UUID(h.workers[index]["credential_id"]),
+            h.registrations[index],
             Assignment.model_validate(assignment),
             threading.Event(),
             10,
@@ -210,7 +210,6 @@ def test_three_step_worker_gateway_checkpoint_and_final_result(
 
 def test_restart_restores_checkpoint_without_repeating_committed_steps(h: Harness) -> None:
     enable(h)
-    enable(h, 1)
     job = submit(h, create(h))
     h.tick()
     a = h.poll()
@@ -218,7 +217,7 @@ def test_restart_restores_checkpoint_without_repeating_committed_steps(h: Harnes
     saved = first_checkpoint(h, a)
     expire(h, a)
     assert h.get(job["id"])["status"] == "PENDING"
-    assert h.tick() == 0 and h.poll(1) is None  # Cross-node reassignment remains Phase 07.
+    assert h.tick() == 0 and h.poll(1) is None  # Backup has not opted into workflows.
     original_client = h.client
     with TestClient(create_app(Settings(health_monitor_enabled=False))) as restarted:
         h.client = restarted

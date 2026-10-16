@@ -237,7 +237,8 @@ class Attempt(Entity, Base):
         UniqueConstraint("id", "job_id", name="uq_attempts_id_job"),
         CheckConstraint("number > 0 AND fencing_token > 0", name="positive_tokens"),
         CheckConstraint(
-            "status IN ('ASSIGNED','RUNNING','COMPLETED','FAILED','CANCELLED')", name="status"
+            "status IN ('ASSIGNED','RUNNING','COMPLETED','FAILED','CANCELLED','INTERRUPTED')",
+            name="status",
         ),
     )
     job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="RESTRICT"), index=True)
@@ -249,6 +250,10 @@ class Attempt(Entity, Base):
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    recovered_from_attempt_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("attempts.id", ondelete="RESTRICT")
+    )
+    resumed_checkpoint_version: Mapped[int] = mapped_column(Integer, server_default="0")
     result: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -316,7 +321,8 @@ class WorkflowRun(Base):
             "cursor >= 0 AND cursor <= 32 AND checkpoint_version = cursor", name="cursor"
         ),
         CheckConstraint(
-            "status IN ('READY','RUNNING','INTERRUPTED','COMPLETED','FAILED','CANCELLED')",
+            "status IN ('READY','RUNNING','INTERRUPTED','COMPLETED','FAILED',"
+            "'CANCELLED','REVIEW_REQUIRED')",
             name="status",
         ),
     )
@@ -329,7 +335,8 @@ class WorkflowRun(Base):
     cursor: Mapped[int] = mapped_column(Integer, server_default="0")
     checkpoint_version: Mapped[int] = mapped_column(Integer, server_default="0")
     status: Mapped[str] = mapped_column(String(16), server_default="READY")
-    # Phase 06 recovery is same-node; this never binds a portable agent definition.
+    recovery_error: Mapped[str | None] = mapped_column(String(64))
+    # Retained as the first execution node for history; no longer restricts failover.
     recovery_node_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("nodes.id", ondelete="RESTRICT")
     )

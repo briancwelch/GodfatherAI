@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from godfather_api.agents import router as agents_router
 from godfather_api.artifacts import LocalArtifactStore
+from godfather_api.command_center import router as command_center_router
 from godfather_api.config import Settings
 from godfather_api.database import Database
 from godfather_api.inference import router as inference_router
@@ -149,4 +150,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(jobs_router)
     app.include_router(agents_router)
     app.include_router(inference_router)
+    app.include_router(command_center_router)
     return app

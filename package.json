@@ -10,6 +10,7 @@
     "npm": ">=11 <12"
   },
   "scripts": {
+    "test": "node --test tests/dashboard-components.cjs",
     "dev": "npm run dev --workspace @godfather/dashboard",
     "build": "npm run build --workspace @godfather/dashboard",
     "start": "npm run start --workspace @godfather/dashboard",

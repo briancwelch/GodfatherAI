@@ -107,6 +107,8 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/dashboard.Dockerfile
+    environment:
+      GODFATHER_API_URL: http://api:8000
     ports:
       - "127.0.0.1:3000:3000"
     init: true

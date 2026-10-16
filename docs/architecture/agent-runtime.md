@@ -1,5 +1,16 @@
 # Agent runtime and durable workflows
 
+## Current Phase 07–08 extension
+
+[ADR 0007](../decisions/0007-cross-node-recovery-and-local-command-center.md)
+supersedes the same-node restriction in the historical Phase 06 sections below.
+Compatible authorized nodes may now recover automatically, retaining attempt links
+and checkpoint history. Interrupted workflow attempts use `INTERRUPTED`;
+`REVIEW_REQUIRED` pauses an invalid artifact or pinned-version restoration. Every
+committed output is integrity checked before reassignment. Bounded retry/backoff,
+owner restrictions, workflow/worker v1 contracts and read-only tool limits remain.
+The local Command Center consumes the same APIs. See [operations](../operations/phase-07-08.md).
+
 Phase 06 executes a predefined sequential workflow through the existing scheduler and model gateway. It does not implement autonomous agents, arbitrary tools, multi-agent handoffs, cross-node failover, cloud/BYOK execution or full dashboard management. The [BYOK proposal](byok-plan.md) is design only.
 
 ## Portable definitions and identities

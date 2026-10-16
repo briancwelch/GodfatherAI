@@ -26,7 +26,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from godfather_api import workflow_service
-from godfather_api.models import Attempt, Event, Job, Node, Workspace, WorkspaceMember
+from godfather_api.models import Attempt, Event, Job, Node, WorkflowRun, Workspace, WorkspaceMember
 from godfather_api.nodes import SessionDep, authenticate
 from godfather_api.scheduler import (
     ACTIVE,
@@ -162,6 +162,49 @@ def cancel_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
             attempt.status, attempt.finished_at = "CANCELLED", now
         job_event(session, job, "cancelled", now, attempt, actor_id=actor.owner_id)
         workflow_service.end_attempt(session, job, attempt, "cancelled")
+    session.flush()
+    return view(session, job)
+
+
+@router.post("/jobs/{job_id}/retry", response_model=JobView)
+def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
+    actor = authenticate(request, session, "admin")
+    job = authorized_job(session, job_id, actor.owner_id, True)
+    workspace = session.get(Workspace, job.workspace_id)
+    membership = session.get(WorkspaceMember, (job.workspace_id, actor.owner_id))
+    if (
+        job.owner_id != actor.owner_id
+        and (workspace is None or workspace.owner_id != actor.owner_id)
+        and (membership is None or membership.role != "admin")
+    ):
+        raise HTTPException(403, "Only the job owner or workspace administrator may retry")
+    previous = current_attempt(session, job)
+    if (
+        job.status != "FAILED"
+        or previous is None
+        or job.cancel_requested_at is not None
+        or job.attempt_count >= 11
+        or previous.error.get("code")
+        not in (
+            "lease_expired",
+            "timeout",
+            "transient_error",
+            "provider_unavailable",
+            "provider_timeout",
+            "rate_limited",
+            "step_timeout",
+        )
+    ):
+        raise HTTPException(409, "This job is not eligible for safe bounded retry")
+    run = session.get(WorkflowRun, job.id)
+    if run is not None:
+        if run.status == "REVIEW_REQUIRED":
+            raise HTTPException(409, "Workflow recovery requires review")
+        run.status = "INTERRUPTED"
+    job.status, job.next_run_at = "PENDING", None
+    job_event(
+        session, job, "manual_retry_requested", datetime.now(UTC), previous, actor_id=actor.owner_id
+    )
     session.flush()
     return view(session, job)
 

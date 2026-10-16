@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 06 — agent runtime and durable workflow checkpoints.** Portable immutable agent versions run predefined model/tool steps through the existing scheduler and gateway. PostgreSQL owns execution state and metadata; a private local persistent volume holds immutable checkpoint/output artifacts. Native mock and real Ollama demonstrations passed process interruption, API restart, same-node recovery, no repeated committed steps and stale-write rejection. The dashboard remains a disconnected shell. BYOK remains a planning-only extension.
+**Current milestone: combined Phase 07–08 — automatic cross-node failover and the local Command Center.** Compatible authorized workers restore read-only workflows from integrity-checked durable checkpoints. PostgreSQL owns execution state and recovery history; the private artifact volume holds committed state. The dashboard displays real scoped data and supports job submission, inspection, cancellation/retry, node controls, agent/model views and audit filtering. BYOK remains planning only. Phase 09 is not authorized.
 
 ## Start here
 
@@ -15,6 +15,7 @@ One developer builds the platform for both administrators. The second administra
 5. Use [Phase 04 jobs, scheduler simulation and validation](docs/operations/phase-04.md) and the [job protocol](docs/protocols/jobs-v1.md).
 6. Follow [Phase 05 provider setup and inference validation](docs/operations/phase-05.md), [architecture](docs/architecture/model-gateway.md), and the [inference API contract](docs/protocols/inference-v1.md).
 7. Use [Phase 06 agent definitions, local commands and recovery evidence](docs/operations/phase-06.md), [runtime architecture](docs/architecture/agent-runtime.md), and the [workflow API contract](docs/protocols/agents-v1.md).
+8. Follow [Phase 07–08 startup, browser acceptance and security limits](docs/operations/phase-07-08.md) and [ADR 0007](docs/decisions/0007-cross-node-recovery-and-local-command-center.md).
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
@@ -33,7 +34,7 @@ docker compose --profile tools run --rm migrate
 docker compose up --wait
 ```
 
-Open **http://localhost:3000** for the shell and **http://localhost:8000/api/v1** for the API. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
+Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Connect with an existing provisioned administrator credential; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
 
 For frontend hot reload, start only the dependencies and run Next.js natively:
 
@@ -56,31 +57,31 @@ The doctor inspects tools and Docker availability without installing anything. T
 
 ## Layout
 
-| Path                      | Purpose                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell           |
-| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models        |
-| `packages/worker`         | Outbound registration, heartbeats, synthetic jobs and opt-in inference  |
-| `packages/model-gateway`  | Portable Ollama/OpenAI-compatible discovery and text inference adapters |
-| `packages/agent-runtime`  | Portable sequential workflows and validated read-only tool contracts    |
-| `packages/shared-schemas` | Versioned worker registration/health contracts                          |
-| `infrastructure/docker`   | Dashboard build/runtime container                                       |
-| `scripts`                 | Portable development checks                                             |
-| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests    |
-| `docs/design`             | Authoritative frontend design guidance                                  |
-| `docs/architecture`       | Architecture and cross-platform compatibility                           |
-| `docs/decisions`          | Architecture decision records                                           |
-| `docs/operations`         | Setup, phase gates, troubleshooting                                     |
-| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                  |
+| Path                      | Purpose                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind and local operational Command Center |
+| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models          |
+| `packages/worker`         | Outbound registration, heartbeats, synthetic jobs and opt-in inference    |
+| `packages/model-gateway`  | Portable Ollama/OpenAI-compatible discovery and text inference adapters   |
+| `packages/agent-runtime`  | Portable sequential workflows and validated read-only tool contracts      |
+| `packages/shared-schemas` | Versioned worker registration/health contracts                            |
+| `infrastructure/docker`   | Dashboard build/runtime container                                         |
+| `scripts`                 | Portable development checks                                               |
+| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests      |
+| `docs/design`             | Authoritative frontend design guidance                                    |
+| `docs/architecture`       | Architecture and cross-platform compatibility                             |
+| `docs/decisions`          | Architecture decision records                                             |
+| `docs/operations`         | Setup, phase gates, troubleshooting                                       |
+| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                    |
 
 Future packages and infrastructure are created only when their milestones require them.
 
 ## Safety and milestone boundaries
 
-The dashboard is a local shell, without a login or private data. It does not claim operational state. Node APIs require provisioned worker or administrator bearer credentials. Browser sessions, full RBAC and remote exposure remain separately gated; see the [security foundation](docs/architecture/security-foundation.md).
+The dashboard is restricted to trusted local development. It validates existing administrator credentials through a same-origin server bridge and uses an HttpOnly/SameSite cookie. Every backend operation revalidates existing permissions. Simulated/unknown telemetry is explicit. Production login, full RBAC and remote exposure remain separately gated; see the [security foundation](docs/architecture/security-foundation.md).
 
 PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, leases, retries and events. Redis is transient. Workers connect outbound, and owners control their host permissions. A platform administrator cannot bypass those restrictions.
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01–05 passed their gates, including real Ollama acceptance before Phase 06. Phase 06 implements only sequential read-only workflows and same-node process recovery; see its report for actual checks and limits. Stop after Phase 06. Phase 07 remains unapproved. [Hybrid inference/BYOK](docs/architecture/byok-plan.md) is planning only and requires separate explicit implementation authorization.
+Phase 01–06 passed their gates; real Ollama streaming/non-streaming and restart durability were revalidated before this combined Phase 07–08 milestone. Recovery covers committed portable state and supported read-only steps. See the [combined report](docs/operations/phase-07-08.md) for executed checks and limits. Stop after Phase 08. Phase 09 and [hybrid inference/BYOK](docs/architecture/byok-plan.md) require separate explicit authorization.

@@ -1,5 +1,21 @@
 # Agents, workflows and checkpoint protocol v1
 
+## Phase 07–08 compatible recovery extension
+
+The historical Phase 06 same-node restriction below no longer applies. Worker and
+workflow v1 assignment/report shapes remain unchanged. Administrator attempt views
+add `recovered_from_attempt_id` and `resumed_checkpoint_version`; interrupted workflow
+attempts have status `INTERRUPTED`. Workflow inspection adds `recovery_error`;
+`REVIEW_REQUIRED` prevents automatic replay of an invalid checkpoint/version.
+`job.recovery.assigned` records both nodes/attempts, checkpoint version and reason.
+Definitions still permit only supported model/read-only tool steps.
+
+Local Command Center projections under `/api/v1/command-center` enforce existing
+admin/workspace authorization. Events accept node/user/job/agent UUIDs, exact type,
+derived severity and timezone-qualified `since`/`until`, with 100-row paging.
+`POST /jobs/{job_id}/retry` accepts only safe failed jobs under existing job-control
+permissions and an eleven-total-attempt ceiling. See [ADR 0007](../decisions/0007-cross-node-recovery-and-local-command-center.md).
+
 All endpoints are under `/api/v1` and use existing administrator/individual-worker bearer credentials, backend workspace authorization, safe errors and correlation IDs. These are local-development APIs, not browser sessions or full Phase 09 RBAC. Definitions and jobs never carry provider keys, host paths or arbitrary tool code.
 
 ## Client API

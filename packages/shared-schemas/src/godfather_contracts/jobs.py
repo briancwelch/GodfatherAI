@@ -150,6 +150,8 @@ class AttemptView(Contract):
     started_at: datetime | None
     finished_at: datetime | None
     error: dict[str, object]
+    recovered_from_attempt_id: UUID | None = None
+    resumed_checkpoint_version: int = 0
 
 
 class EventView(Contract):
