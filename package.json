@@ -1,0 +1,24 @@
+{
+  "name": "the-godfather",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/dashboard"
+  ],
+  "engines": {
+    "node": ">=24.22.0 <25",
+    "npm": ">=11 <12"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @godfather/dashboard",
+    "build": "npm run build --workspace @godfather/dashboard",
+    "start": "npm run start --workspace @godfather/dashboard",
+    "lint": "npm run lint --workspace @godfather/dashboard",
+    "typecheck": "npm run typecheck --workspace @godfather/dashboard",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
+  }
+}

@@ -1,0 +1,38 @@
+# Local credentials and machine state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.tools/
+.cache/
+.venv/
+.vscode/*
+!.vscode/extensions.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# JavaScript
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+npm-debug.log*
+playwright-report/
+test-results/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp

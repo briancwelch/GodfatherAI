@@ -1,0 +1,11 @@
+AGENTS.md
+docs/design/UI-UX.md
+package-lock.json
+uv.lock
+.tools/
+.cache/
+.venv/
+node_modules/
+**/.next/
+**/next-env.d.ts
+**/*.tsbuildinfo
