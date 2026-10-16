@@ -7,7 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.security import HTTPBearer
 from godfather_contracts.execution import Requirements
-from sqlalchemy import Select, String, case, false, func, or_, select
+from sqlalchemy import Select, String, case, false, func, or_, select, true
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from godfather_api import agents, inference, jobs, workflow_service
@@ -25,13 +26,26 @@ from godfather_api.models import (
     Workspace,
     WorkspaceMember,
 )
-from godfather_api.nodes import SessionDep, authenticate, connection_at, node_view
+from godfather_api.nodes import (
+    SessionDep,
+    authenticate,
+    connection_at,
+    human_event_details,
+    human_node_view,
+    node_view,
+    node_visibility,
+)
 from godfather_api.scheduler import matches, permitted, workspace_access
 
 router = APIRouter(
     prefix="/api/v1/command-center", dependencies=[Depends(HTTPBearer(auto_error=False))]
 )
 PAGE_SIZE = 100
+
+
+def manages(session: Session, workspace: Workspace, actor_id: UUID) -> bool:
+    membership = session.get(WorkspaceMember, (workspace.id, actor_id))
+    return workspace.owner_id == actor_id or (membership is not None and membership.role == "admin")
 
 
 def severity_expression() -> ColumnElement[str]:
@@ -50,7 +64,7 @@ def severity_expression() -> ColumnElement[str]:
     )
 
 
-def event_data(row: Event, severity: str) -> dict[str, object]:
+def event_data(row: Event, severity: str, actor_id: UUID) -> dict[str, object]:
     return {
         "id": str(row.id),
         "type": row.type,
@@ -61,7 +75,7 @@ def event_data(row: Event, severity: str) -> dict[str, object]:
         "node_id": str(row.node_id) if row.node_id else None,
         "attempt_id": str(row.attempt_id) if row.attempt_id else None,
         "severity": severity,
-        "details": row.details,
+        "details": human_event_details(row, actor_id),
         "correlation_id": row.correlation_id,
     }
 
@@ -81,7 +95,7 @@ def events(
     until: datetime | None = None,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     if workspace_id is not None and not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found or permission denied")
     if any(value is not None and value.tzinfo is None for value in (since, until)):
@@ -101,7 +115,10 @@ def events(
     query = select(Event, severity_expression()).where(
         or_(
             Event.workspace_id.in_(visible),
-            (Event.workspace_id.is_(None) & Event.node_id.is_not(None)),
+            (
+                Event.workspace_id.is_(None)
+                & Event.node_id.in_(select(Node.id).where(node_visibility(session, actor.owner_id)))
+            ),
         )
     )
     if workspace_id is not None:
@@ -132,7 +149,7 @@ def events(
         query.order_by(Event.created_at.desc(), Event.id.desc()).limit(PAGE_SIZE).offset(offset)
     )
     return {
-        "items": [event_data(e, s) for e, s in rows],
+        "items": [event_data(e, s, actor.owner_id) for e, s in rows],
         "total": total,
         "offset": offset,
         "limit": PAGE_SIZE,
@@ -149,7 +166,7 @@ def overview(
     search: Annotated[str, Query(max_length=200)] = "",
     status: Annotated[str, Query(max_length=32)] = "",
 ) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     member_ids = select(WorkspaceMember.workspace_id).where(
         WorkspaceMember.user_id == actor.owner_id
     )
@@ -165,26 +182,30 @@ def overview(
     )
     if workspace_id is not None and selected is None:
         raise HTTPException(404, "Workspace not found or permission denied")
-    node_query = select(Node).where(Node.session_id.is_not(None))
+    node_query = select(Node).where(
+        Node.session_id.is_not(None), node_visibility(session, actor.owner_id)
+    )
     node_counts = dict(
         session.execute(
             select(Node.state, func.count())
-            .where(Node.session_id.is_not(None))
+            .where(Node.session_id.is_not(None), node_visibility(session, actor.owner_id))
             .group_by(Node.state)
         )
         .tuples()
         .all()
     )
+    live_jobs = true() if session.info.get("test") else ~Job.type.like("synthetic.%")
     job_query = (
         select(Job).where(Job.workspace_id == selected.id)
         if selected
         else select(Job).where(false())
     )
+    job_query = job_query.where(live_jobs)
     job_counts = (
         dict(
             session.execute(
                 select(Job.status, func.count())
-                .where(Job.workspace_id == selected.id)
+                .where(Job.workspace_id == selected.id, live_jobs)
                 .group_by(Job.status)
             )
             .tuples()
@@ -312,7 +333,11 @@ def overview(
                     "tool_permissions": definition.permissions,
                 }
             )
-            probe = Job(owner_id=actor.owner_id, workspace_id=selected.id)
+            probe = Job(
+                owner_id=actor.owner_id,
+                workspace_id=selected.id,
+                requirements=requirements.model_dump(mode="json"),
+            )
             if any(
                 v.workflow_protocol_version == 1
                 and permitted(session, probe, n)
@@ -334,7 +359,13 @@ def overview(
         "actor_id": str(actor.owner_id),
         "workspace_id": str(selected.id) if selected else None,
         "workspaces": [
-            {"id": str(w.id), "name": w.name, "owner_id": str(w.owner_id)} for w in workspaces
+            {
+                "id": str(w.id),
+                "name": w.name,
+                "owner_id": str(w.owner_id),
+                "can_manage": manages(session, w, actor.owner_id),
+            }
+            for w in workspaces
         ],
         "node_counts": node_counts,
         "job_counts": job_counts,
@@ -346,7 +377,7 @@ def overview(
         },
         "nodes": [
             {
-                **node_view(session, n).model_dump(mode="json"),
+                **human_node_view(session, n, actor.owner_id).model_dump(mode="json"),
                 "visible_active_jobs": active.get(n.id, 0),
             }
             for n in node_rows
@@ -368,11 +399,15 @@ def overview(
 
 @router.get("/jobs/{job_id}")
 def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = jobs.authorized_job(session, job_id, actor.owner_id)
     run = session.get(WorkflowRun, job.id)
     agent = session.get(Agent, job.agent_id) if job.agent_id else None
+    workspace = session.get(Workspace, job.workspace_id)
+    assert workspace is not None
     return {
+        "can_control": job.owner_id == actor.owner_id
+        or manages(session, workspace, actor.owner_id),
         "job": jobs.view(session, job).model_dump(mode="json"),
         "attempts": [a.model_dump(mode="json") for a in jobs.attempts(job_id, request, session)],
         "workflow": {
@@ -403,8 +438,10 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
 
 @router.get("/nodes/{node_id}")
 def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
-    node = session.get(Node, node_id)
+    actor = authenticate(request, session, "human")
+    node = session.scalar(
+        select(Node).where(Node.id == node_id, node_visibility(session, actor.owner_id))
+    )
     if node is None or node.session_id is None:
         raise HTTPException(404, "Node not found")
     member_ids = select(WorkspaceMember.workspace_id).where(
@@ -426,7 +463,8 @@ def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[st
         .limit(PAGE_SIZE)
     ).all()
     return {
-        "node": node_view(session, node).model_dump(mode="json"),
+        "can_control": node.owner_id == actor.owner_id,
+        "node": human_node_view(session, node, actor.owner_id).model_dump(mode="json"),
         "jobs": [jobs.view(session, j).model_dump(mode="json") for j in assigned],
         "events": events(request, session, node_id=node_id),
     }
@@ -434,7 +472,7 @@ def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[st
 
 @router.get("/agents/{agent_id}")
 def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     agent = agents.find_agent(session, agent_id, actor.owner_id)
     rows = session.execute(
         select(Job.id, Attempt.node_id, Agent.version, WorkflowStepRecord)

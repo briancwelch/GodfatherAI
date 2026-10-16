@@ -8,6 +8,7 @@ from godfather_api.config import Settings
 
 class Database:
     def __init__(self, settings: Settings) -> None:
+        self.environment = settings.environment
         timeout = settings.database_timeout_seconds
         self.engine: Engine = create_engine(
             settings.database_url,
@@ -21,7 +22,9 @@ class Database:
                 "options": f"-c timezone=UTC -c statement_timeout={timeout * 1000}",
             },
         )
-        self.sessions: sessionmaker[Session] = sessionmaker(self.engine, expire_on_commit=False)
+        self.sessions: sessionmaker[Session] = sessionmaker(
+            self.engine, expire_on_commit=False, info={"test": settings.environment == "test"}
+        )
 
     def ready(self) -> bool:
         """Require connectivity and the exact migration head, without schema mutation."""

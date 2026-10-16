@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: combined Phase 07–08 — automatic cross-node failover and the local Command Center.** Compatible authorized workers restore read-only workflows from integrity-checked durable checkpoints. PostgreSQL owns execution state and recovery history; the private artifact volume holds committed state. The dashboard displays real scoped data and supports job submission, inspection, cancellation/retry, node controls, agent/model views and audit filtering. BYOK remains planning only. Phase 09 is not authorized.
+**Current milestone: Phase 09 - Google OIDC, multi-user administration and independent owner authorization.** Human access is invitation-only, with revocable PostgreSQL-backed sessions. Worker credentials and lease/fencing protections remain independent. Operational views use authenticated backend state. Real Google login requires operator OAuth setup and remains unverified. BYOK remains planning only. Phase 10 is not authorized.
 
 ## Start here
 
@@ -15,7 +15,8 @@ One developer builds the platform for both administrators. The second administra
 5. Use [Phase 04 jobs, scheduler simulation and validation](docs/operations/phase-04.md) and the [job protocol](docs/protocols/jobs-v1.md).
 6. Follow [Phase 05 provider setup and inference validation](docs/operations/phase-05.md), [architecture](docs/architecture/model-gateway.md), and the [inference API contract](docs/protocols/inference-v1.md).
 7. Use [Phase 06 agent definitions, local commands and recovery evidence](docs/operations/phase-06.md), [runtime architecture](docs/architecture/agent-runtime.md), and the [workflow API contract](docs/protocols/agents-v1.md).
-8. Follow [Phase 07–08 startup, browser acceptance and security limits](docs/operations/phase-07-08.md) and [ADR 0007](docs/decisions/0007-cross-node-recovery-and-local-command-center.md).
+8. Review [Phase 07-08 recovery evidence](docs/operations/phase-07-08.md).
+9. Follow [Phase 09 Google setup and migration](docs/operations/phase-09.md), [authentication architecture](docs/architecture/authentication.md), and [real integration verification](docs/operations/phase-09-integration.md).
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
@@ -34,7 +35,7 @@ docker compose --profile tools run --rm migrate
 docker compose up --wait
 ```
 
-Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Connect with an existing provisioned administrator credential; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
+Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Configure Google OIDC and bootstrap or explicitly link the first verified administrator using the Phase 09 guide. Subsequent users require invitations; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
 
 For frontend hot reload, start only the dependencies and run Next.js natively:
 
@@ -78,10 +79,10 @@ Future packages and infrastructure are created only when their milestones requir
 
 ## Safety and milestone boundaries
 
-The dashboard is restricted to trusted local development. It validates existing administrator credentials through a same-origin server bridge and uses an HttpOnly/SameSite cookie. Every backend operation revalidates existing permissions. Simulated/unknown telemetry is explicit. Production login, full RBAC and remote exposure remain separately gated; see the [security foundation](docs/architecture/security-foundation.md).
+The dashboard uses Google OIDC and HttpOnly/SameSite application sessions through a same-origin server bridge. Google tokens never enter browser storage. Workspace membership and node-owner consent remain separate from platform roles. No Google client or public deployment is configured automatically; see the [authentication architecture](docs/architecture/authentication.md).
 
 PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, leases, retries and events. Redis is transient. Workers connect outbound, and owners control their host permissions. A platform administrator cannot bypass those restrictions.
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01–06 passed their gates; real Ollama streaming/non-streaming and restart durability were revalidated before this combined Phase 07–08 milestone. Recovery covers committed portable state and supported read-only steps. See the [combined report](docs/operations/phase-07-08.md) for executed checks and limits. Stop after Phase 08. Phase 09 and [hybrid inference/BYOK](docs/architecture/byok-plan.md) require separate explicit authorization.
+Phase 01-08 baseline checks passed before Phase 09 changes. The Phase 09 report separates isolated automated OIDC tests, actual local worker/model integration and pending real Google acceptance. No Phase 10 deployment or frontier billing integration is authorized. Stop after Phase 09.

@@ -1,6 +1,7 @@
 """Real PostgreSQL scheduling, concurrency and recovery with controlled time."""
 
 import os
+import threading
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,9 @@ from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
+from fastapi import Request
 from fastapi.testclient import TestClient
+from godfather_api import jobs
 from godfather_api.app import create_app
 from godfather_api.config import Settings
 from godfather_api.database import Database
@@ -18,10 +21,12 @@ from godfather_api.models import Attempt, Job, Node, User, Workspace, WorkspaceM
 from godfather_api.provision import provision
 from godfather_api.scheduler import ACTIVE, scheduler_tick
 from godfather_contracts import Registration
+from godfather_contracts.execution import JobPoll
 from godfather_contracts.jobs import SyntheticInput, SyntheticResult
 from godfather_worker.jobs import synthetic_result
 from godfather_worker.simulated import profile
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 pytestmark = pytest.mark.integration
 
@@ -331,6 +336,37 @@ def test_node_disconnection_revocation_and_session_fencing(h: Harness) -> None:
     h.complete(replacement, 1)
     h.report(assignment, "complete", expected=409)
     assert h.get(job["id"])["status"] == "COMPLETED"
+
+
+def test_cancel_audit_does_not_deadlock_with_a_worker_holding_its_node(
+    h: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = h.submit()
+    h.tick()
+    assignment = h.poll()
+    assert assignment is not None
+    h.start(assignment)
+    acquired, release = threading.Event(), threading.Event()
+    original = jobs.worker_node
+
+    def hold_node(node_id: UUID, payload: JobPoll, request: Request, session: Session) -> Node:
+        node = original(node_id, payload, request, session)
+        acquired.set()
+        assert release.wait(5), "Test must release the worker without relying on sleeps"
+        return node
+
+    monkeypatch.setattr(jobs, "worker_node", hold_node)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(h.report, assignment, "renew")
+        try:
+            assert acquired.wait(3)
+            response = h.client.post(f"/api/v1/jobs/{job['id']}/cancel", headers=headers(h.admin))
+            assert response.status_code == 200, response.text
+        finally:
+            release.set()
+        assert future.result(timeout=5)["cancel_requested"]
+    h.report(assignment, "cancelled")
+    assert h.get(job["id"])["status"] == "CANCELLED"
 
 
 def test_owner_consent_and_workspace_access_are_both_required(h: Harness) -> None:

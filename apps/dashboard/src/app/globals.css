@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+.administration-page {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.administration-page form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+.administration-page form > button {
+  justify-self: start;
+}
+.administration-page .role-choices {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.administration-page .role-choices label,
+.administration-page label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.administration-page input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+.administration-page pre {
+  max-width: 100%;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
 :root {
   color-scheme: light;
   --background: #f5f6f8;

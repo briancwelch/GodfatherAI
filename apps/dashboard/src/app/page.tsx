@@ -1,4 +1,8 @@
 ﻿import CommandCenter from "@/components/command-center";
-export default function Home() {
-  return <CommandCenter />;
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth?: string }>;
+}) {
+  return <CommandCenter authError={(await searchParams).auth} />;
 }

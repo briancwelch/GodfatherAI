@@ -138,6 +138,7 @@ export function ConfirmAction({
   return (
     <>
       <button
+        type="button"
         className="action secondary"
         onClick={() => {
           setError("");
@@ -158,6 +159,7 @@ export function ConfirmAction({
         {error && <p role="alert">{error}</p>}
         <div className="actions">
           <button
+            type="button"
             className="action secondary"
             disabled={busy}
             onClick={() => dialog.current?.close()}
@@ -165,6 +167,7 @@ export function ConfirmAction({
             Keep current state
           </button>
           <button
+            type="button"
             className="action"
             disabled={busy}
             onClick={async () => {

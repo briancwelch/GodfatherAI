@@ -21,6 +21,38 @@ for (const extension of [".tsx", ".ts"]) {
 const ui = require("../apps/dashboard/src/components/operational.tsx");
 const contracts = require("../apps/dashboard/src/lib/contracts.ts");
 const server = require("../apps/dashboard/src/lib/control-server.ts");
+const login = require("../apps/dashboard/src/components/google-login.tsx");
+const administration = require("../apps/dashboard/src/components/administration.tsx");
+
+test("Google sign-in has invitation-only onboarding and truthful unavailable state", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(login.GoogleLogin, { error: "unavailable" }),
+  );
+  assert.match(html, /Continue with Google/);
+  assert.match(html, /Invitation token/);
+  assert.match(html, /unavailable or not configured/);
+  assert.ok(!html.includes("Administrator credential"));
+});
+
+test("administration renders backend account identity and hides platform controls for contributors", () => {
+  const user = {
+    id: "test-only-id",
+    display_name: "<Test contributor>",
+    email: "test@example.invalid",
+    roles: ["contributor"],
+    permissions: ["nodes.contribute"],
+    enabled: true,
+    picture: null,
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(administration.default, { initialUser: user }),
+  );
+  assert.match(html, /&lt;Test contributor&gt;/);
+  assert.match(html, /Owned node onboarding/);
+  assert.ok(!html.includes("<h2>Users</h2>"));
+  assert.ok(!html.includes("<h2>Invitations</h2>"));
+  assert.match(html, /Loading authorized workspaces/);
+});
 test("status labels remain explicit and output is escaped", () => {
   const html = renderToStaticMarkup(
     React.createElement(ui.StatusBadge, { value: "REVIEW_REQUIRED" }),

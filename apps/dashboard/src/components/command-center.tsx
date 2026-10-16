@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { GoogleLogin } from "@/components/google-login";
 import { Button } from "@/components/ui/button";
 import {
   ConfirmAction,
@@ -80,18 +81,17 @@ const labels: Record<Section, string> = {
 export default function CommandCenter({
   section = "overview",
   detailId,
+  authError,
 }: {
   section?: Section;
   detailId?: string;
+  authError?: string;
 }) {
   const [workspace, setWorkspace] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
-  const [token, setToken] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [loginError, setLoginError] = useState("");
   const query = new URLSearchParams({
     section,
     offset: String(offset),
@@ -100,30 +100,13 @@ export default function CommandCenter({
     ...(workspace ? { workspace_id: workspace } : {}),
   });
   const state = usePoll<Snapshot>(`command-center?${query}`, revision);
+  const identity = usePoll<{
+    display_name: string;
+    email: string;
+    roles: string[];
+  }>("auth/me", revision);
   const data = state.data;
   const refresh = () => setRevision((r) => r + 1);
-  async function connect(e: FormEvent) {
-    e.preventDefault();
-    setConnecting(true);
-    setLoginError("");
-    try {
-      const r = await fetch("/api/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      setToken("");
-      if (!r.ok)
-        throw new Error(
-          "Administrator credential rejected or local API unavailable.",
-        );
-      refresh();
-    } catch (e) {
-      setLoginError(e instanceof Error ? e.message : "Connection failed.");
-    } finally {
-      setConnecting(false);
-    }
-  }
   return (
     <div className="command-layout">
       <a className="skip-link" href="#main-content">
@@ -144,6 +127,7 @@ export default function CommandCenter({
               {labels[key]}
             </a>
           ))}
+          <a href="/administration">Account / Administration</a>
         </nav>
         <p className="sidebar-note">
           PostgreSQL is authoritative.
@@ -169,15 +153,28 @@ export default function CommandCenter({
                 <option value="dark">Dark</option>
               </select>
             </label>
+            {identity.data && (
+              <span>
+                {identity.data.display_name} ? {identity.data.roles.join(", ")}
+              </span>
+            )}
             {data && (
               <Button
                 variant="outline"
                 onClick={async () => {
-                  await fetch("/api/session", { method: "DELETE" });
+                  const result = await fetch("/api/auth/logout", {
+                    method: "POST",
+                  });
+                  if (!result.ok) {
+                    window.alert(
+                      "Logout not confirmed; retry when the API is available.",
+                    );
+                    return;
+                  }
                   window.location.assign("/");
                 }}
               >
-                Disconnect
+                Sign out
               </Button>
             )}
           </div>
@@ -196,42 +193,13 @@ export default function CommandCenter({
             )}
           </div>
           {!data && state.error === "401" ? (
-            <section className="panel connect-panel">
-              <h2>Connect to the local control plane</h2>
-              <p>
-                Use an existing administrator credential. The API enforces
-                workspace and node-owner permissions.
-              </p>
-              <form onSubmit={connect}>
-                <label>
-                  Administrator credential
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    required
-                    minLength={43}
-                    maxLength={43}
-                  />
-                </label>
-                <Button disabled={connecting}>
-                  {connecting ? "Connecting…" : "Connect"}
-                </Button>
-              </form>
-              {loginError && <p role="alert">{loginError}</p>}
-              <p className="muted">
-                Held in an HttpOnly cookie for up to eight hours. Local
-                development only; production login and full RBAC remain Phase
-                09.
-              </p>
-            </section>
+            <GoogleLogin error={authError} />
           ) : (
             <>
               {state.error && (
                 <p role="alert" className="notice error">
                   {state.error === "401"
-                    ? "Credential expired or revoked. Disconnect and reconnect."
+                    ? "Session expired or revoked. Sign in again."
                     : state.error === "403"
                       ? "Permission denied."
                       : "Refresh failed. Displayed data may be stale; no action confirmed."}
@@ -531,7 +499,7 @@ function Overview({ data }: { data: Snapshot }) {
         <Metric
           label="Online / registered nodes"
           value={`${data.node_counts.online || 0} / ${total}`}
-          detail="Includes labeled simulations"
+          detail="Actual worker reports"
         />
         <Metric
           label="Running / assigned jobs"
@@ -605,7 +573,6 @@ function Overview({ data }: { data: Snapshot }) {
 }
 
 function SubmitJob({ data }: { data: Snapshot }) {
-  const [kind, setKind] = useState("workflow");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -615,25 +582,13 @@ function SubmitJob({ data }: { data: Snapshot }) {
     const f = new FormData(e.currentTarget);
     try {
       const a = data.agents.find((a) => a.version_id === f.get("agent"));
-      const job = await api<JobInfo>(
-        kind === "workflow" ? "workflow/jobs" : "jobs",
-        kind === "workflow"
-          ? {
-              workspace_id: data.workspace_id,
-              agent_id: a?.id,
-              agent_version: a?.version,
-              input: { instruction: f.get("instruction") },
-              priority: Number(f.get("priority")),
-            }
-          : {
-              workspace_id: data.workspace_id,
-              type: "synthetic.echo",
-              input: { value: f.get("instruction"), steps: 3 },
-              requirements: { capabilities: ["coding"] },
-              priority: Number(f.get("priority")),
-              retry: { limit: 1, backoff_seconds: 0 },
-            },
-      );
+      const job = await api<JobInfo>("workflow/jobs", {
+        workspace_id: data.workspace_id,
+        agent_id: a?.id,
+        agent_version: a?.version,
+        input: { instruction: f.get("instruction") },
+        priority: Number(f.get("priority")),
+      });
       window.location.assign(`/jobs/${job.id}`);
     } catch {
       setError(
@@ -647,35 +602,22 @@ function SubmitJob({ data }: { data: Snapshot }) {
     <details className="panel submission">
       <summary>Submit a job</summary>
       <form onSubmit={submit}>
+        <p>Recoverable read-only workflow</p>
         <label>
-          Workload
-          <select value={kind} onChange={(e) => setKind(e.target.value)}>
-            <option value="workflow">Recoverable read-only workflow</option>
-            <option value="synthetic">Synthetic coding-compatible test</option>
+          Agent and pinned version
+          <select name="agent" required>
+            {data.agents
+              .filter((a) => a.enabled)
+              .map((a) => (
+                <option key={a.version_id} value={a.version_id}>
+                  {a.definition.name} ? v{a.version}
+                </option>
+              ))}
           </select>
         </label>
-        {kind === "workflow" && (
-          <label>
-            Agent and pinned version
-            <select name="agent" required>
-              {data.agents
-                .filter((a) => a.enabled)
-                .map((a) => (
-                  <option key={a.version_id} value={a.version_id}>
-                    {a.definition.name} · v{a.version}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
         <label>
           Instruction
-          <textarea
-            name="instruction"
-            required
-            maxLength={kind === "workflow" ? 4096 : 1000}
-            rows={3}
-          />
+          <textarea name="instruction" required maxLength={4096} rows={3} />
         </label>
         <details>
           <summary>Advanced options</summary>
@@ -698,9 +640,7 @@ function SubmitJob({ data }: { data: Snapshot }) {
         {error && <p role="alert">{error}</p>}
         <Button
           disabled={
-            busy ||
-            !data.workspace_id ||
-            (kind === "workflow" && !data.agents.some((a) => a.enabled))
+            busy || !data.workspace_id || !data.agents.some((a) => a.enabled)
           }
         >
           {busy ? "Submitting…" : "Submit job"}
@@ -809,7 +749,8 @@ function JobInspection({
         </dd>
       </dl>
       <div className="actions">
-        {!["FAILED", "CANCELLED", "COMPLETED"].includes(j.status) &&
+        {detail.can_control &&
+          !["FAILED", "CANCELLED", "COMPLETED"].includes(j.status) &&
           !j.cancel_requested_at && (
             <ConfirmAction
               label="Cancel job"
@@ -820,7 +761,7 @@ function JobInspection({
               }}
             />
           )}
-        {retryEligible(detail) && (
+        {detail.can_control && retryEligible(detail) && (
           <ConfirmAction
             label="Retry job"
             description="Queue a bounded retry. Committed steps remain; uncommitted read-only work may repeat. Permissions are rechecked."
@@ -1061,17 +1002,18 @@ function NodeInspection({
         </dd>
       </dl>
       <div className="actions">
-        {["drain", "disable", "enable"].map((action) => (
-          <ConfirmAction
-            key={action}
-            label={`${action[0].toUpperCase() + action.slice(1)} node`}
-            description={`${action === "drain" ? "Stop new assignments; active work can finish." : action === "disable" ? "Block worker requests and new work. Active attempts expire and may recover elsewhere." : "Restore scheduling eligibility when health permits."} Owner tool, host and workspace restrictions remain enforced.`}
-            onConfirm={async () => {
-              await api(`nodes/${n.node_id}/control`, { action });
-              refresh();
-            }}
-          />
-        ))}
+        {detail.can_control &&
+          ["drain", "disable", "enable", "revoke"].map((action) => (
+            <ConfirmAction
+              key={action}
+              label={`${action[0].toUpperCase() + action.slice(1)} node`}
+              description={`${action === "drain" ? "Stop new assignments; active work can finish." : action === "disable" ? "Block worker requests and new work. Active attempts expire and may recover elsewhere." : action === "revoke" ? "Permanently invalidate this machine credential. Reconnection and reports are denied; active attempts expire and may recover elsewhere." : "Restore scheduling eligibility when health permits."} Owner tool, host and workspace restrictions remain enforced.`}
+              onConfirm={async () => {
+                await api(`nodes/${n.node_id}/control`, { action });
+                refresh();
+              }}
+            />
+          ))}
       </div>
       <JsonDetails label="Available models" value={n.model_deployments} />
       <JsonDetails
@@ -1150,19 +1092,23 @@ function Agents({ data, refresh }: { data: Snapshot; refresh: () => void }) {
           },
           {
             label: "Control",
-            cell: (a) => (
-              <ConfirmAction
-                label={a.enabled ? "Disable agent" : "Enable agent"}
-                description="Change availability for this version. Disabling prevents new step starts. Cancel a job to stop current execution."
-                onConfirm={async () => {
-                  await api(`agents/${a.id}/versions/${a.version}/control`, {
-                    action: a.enabled ? "disable" : "enable",
-                  });
-                  setSelected(null);
-                  refresh();
-                }}
-              />
-            ),
+            cell: (a) =>
+              data.workspaces.find((w) => w.id === data.workspace_id)
+                ?.can_manage ? (
+                <ConfirmAction
+                  label={a.enabled ? "Disable agent" : "Enable agent"}
+                  description="Change availability for this version. Disabling prevents new step starts. Cancel a job to stop current execution."
+                  onConfirm={async () => {
+                    await api(`agents/${a.id}/versions/${a.version}/control`, {
+                      action: a.enabled ? "disable" : "enable",
+                    });
+                    setSelected(null);
+                    refresh();
+                  }}
+                />
+              ) : (
+                "Workspace administration required"
+              ),
           },
         ]}
       />
@@ -1181,11 +1127,18 @@ function Agents({ data, refresh }: { data: Snapshot; refresh: () => void }) {
           />
           <h3>Workflow execution history</h3>
           {history.error && <p role="alert">History unavailable.</p>}
-          <JsonDetails
-            label="Assigned model deployments and observed usage (latest 100 model steps)"
-            value={history.data?.assignments || []}
-          />
-          <EventTimeline events={history.data?.events.items || []} />
+          {!history.data && !history.error && (
+            <p role="status">Loading workflow history…</p>
+          )}
+          {history.data && (
+            <>
+              <JsonDetails
+                label="Assigned model deployments and observed usage (latest 100 model steps)"
+                value={history.data.assignments}
+              />
+              <EventTimeline events={history.data.events.items} />
+            </>
+          )}
           <button
             className="action secondary"
             onClick={() => setSelected(null)}

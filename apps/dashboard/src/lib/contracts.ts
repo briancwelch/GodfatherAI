@@ -122,7 +122,12 @@ export interface Snapshot {
   generated_at: string;
   actor_id: string;
   workspace_id: string | null;
-  workspaces: { id: string; name: string; owner_id: string }[];
+  workspaces: {
+    id: string;
+    name: string;
+    owner_id: string;
+    can_manage: boolean;
+  }[];
   node_counts: Record<string, number>;
   job_counts: Record<string, number>;
   agent_counts: {
@@ -174,6 +179,7 @@ export interface CheckpointInfo {
   artifact: { id: string; checksum: string; size_bytes: number };
 }
 export interface JobDetail {
+  can_control: boolean;
   job: JobInfo;
   attempts: AttemptInfo[];
   workflow: {
@@ -198,6 +204,7 @@ export interface JobDetail {
   output: Json;
 }
 export interface NodeDetail {
+  can_control: boolean;
   node: NodeInfo;
   jobs: JobInfo[];
   events: EventPage;

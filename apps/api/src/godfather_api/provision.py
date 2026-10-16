@@ -29,6 +29,10 @@ def provision(
     token = secrets.token_urlsafe(32)
     with database.sessions.begin() as session:
         if kind == "admin":
+            if database.environment != "test":
+                raise ValueError(
+                    "Human onboarding requires Google OIDC; legacy credentials are test-only"
+                )
             if email is None or not (3 <= len(email) <= 320) or "@" not in email:
                 raise ValueError("A valid local administrator email is required")
             owner = session.scalar(select(User).where(User.email == email).with_for_update())
@@ -83,7 +87,9 @@ def main() -> int:
                 owner = session.get(User, args.owner_id)
                 if owner is None or not owner.enabled:
                     raise ValueError("Enabled owner is required")
-                workspace = Workspace(owner_id=owner.id, name=args.name)
+                workspace = Workspace(
+                    owner_id=owner.id, name=args.name, allowed_models=[], allowed_tools=[]
+                )
                 session.add(workspace)
                 session.flush()
                 session.add(

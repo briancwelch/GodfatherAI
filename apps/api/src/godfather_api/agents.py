@@ -98,7 +98,7 @@ def flush_agent(session: Session) -> None:
 
 @router.post("/agents", response_model=AgentView, status_code=201)
 def create_agent(payload: AgentCreate, request: Request, session: SessionDep) -> AgentView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     manage_workspace(session, payload.workspace_id, actor.owner_id)
     try:
         validate_agent(payload.definition)
@@ -127,7 +127,7 @@ def list_agents(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AgentView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     if not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found or permission denied")
     rows = session.scalars(
@@ -154,7 +154,7 @@ def inspect_agent(
     session: SessionDep,
     version: Annotated[int | None, Query(ge=1)] = None,
 ) -> AgentView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     return service.agent_view(find_agent(session, agent_id, actor.owner_id, version))
 
 
@@ -166,7 +166,7 @@ def versions(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[AgentView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     agent = find_agent(session, agent_id, actor.owner_id)
     return [
         service.agent_view(row)
@@ -184,7 +184,7 @@ def versions(
 def create_version(
     agent_id: UUID, payload: AgentVersionCreate, request: Request, session: SessionDep
 ) -> AgentView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     previous = find_agent(session, agent_id, actor.owner_id, lock=True)
     manage_workspace(session, previous.workspace_id, actor.owner_id)
     if previous.version != payload.expected_version:
@@ -212,7 +212,7 @@ def create_version(
 def control_agent(
     agent_id: UUID, version: int, payload: AgentControl, request: Request, session: SessionDep
 ) -> AgentView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     agent = find_agent(session, agent_id, actor.owner_id, version, True)
     manage_workspace(session, agent.workspace_id, actor.owner_id)
     service.agent_view(agent)  # Refuse enabling unsupported legacy definitions.
@@ -223,13 +223,13 @@ def control_agent(
 
 @router.get("/tools")
 def tools(request: Request, session: SessionDep) -> list[dict[str, object]]:
-    authenticate(request, session, "admin")
+    authenticate(request, session, "human")
     return [tool.model_dump(mode="json") for tool in REGISTRY.values()]
 
 
 @router.post("/workflow/jobs", response_model=JobView, status_code=201)
 def submit_workflow(payload: WorkflowSubmission, request: Request, session: SessionDep) -> JobView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     agent = find_agent(session, payload.agent_id, actor.owner_id, payload.agent_version)
     if agent.workspace_id != payload.workspace_id:
         raise HTTPException(404, "Agent does not belong to this workspace")
@@ -276,7 +276,7 @@ def workflow_job(session: Session, job_id: UUID, actor_id: UUID) -> Job:
 
 @router.get("/workflow/jobs/{job_id}")
 def inspect_workflow(job_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = workflow_job(session, job_id, actor.owner_id)
     run = session.get(WorkflowRun, job.id)
     assert run is not None
@@ -299,7 +299,7 @@ def inspect_workflow(job_id: UUID, request: Request, session: SessionDep) -> dic
 
 @router.get("/workflow/jobs/{job_id}/steps")
 def steps(job_id: UUID, request: Request, session: SessionDep) -> list[dict[str, object]]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = workflow_job(session, job_id, actor.owner_id)
     records = session.scalars(
         select(WorkflowStepRecord)
@@ -325,7 +325,7 @@ def steps(job_id: UUID, request: Request, session: SessionDep) -> list[dict[str,
 
 @router.get("/workflow/jobs/{job_id}/checkpoints", response_model=list[CheckpointView])
 def checkpoints(job_id: UUID, request: Request, session: SessionDep) -> list[CheckpointView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = workflow_job(session, job_id, actor.owner_id)
     return [
         service.checkpoint_view(session, job, cp)
@@ -337,7 +337,7 @@ def checkpoints(job_id: UUID, request: Request, session: SessionDep) -> list[Che
 
 @router.get("/workflow/jobs/{job_id}/result")
 def result(job_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = workflow_job(session, job_id, actor.owner_id)
     attempt = current_attempt(session, job)
     final: object = None
@@ -355,7 +355,7 @@ def result(job_id: UUID, request: Request, session: SessionDep) -> dict[str, obj
 
 @router.get("/workflow/jobs/{job_id}/artifacts/{artifact_id}")
 def artifact(job_id: UUID, artifact_id: UUID, request: Request, session: SessionDep) -> object:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = workflow_job(session, job_id, actor.owner_id)
     row = session.get(Artifact, artifact_id)
     if row is None or row.job_id != job.id:

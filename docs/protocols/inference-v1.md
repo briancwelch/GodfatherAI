@@ -1,5 +1,11 @@
 # Inference extension v1
 
+Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Google OIDC/application sessions replace human bearer login in normal operation;
+worker machine credentials remain independent. Earlier bearer/simulator procedures
+below are historical and restricted to isolated automated tests. Phase 09 does not
+authorize public deployment or Phase 10.
+
 All routes use `/api/v1`, existing bearer credentials, correlation IDs, commit-before-success transactions, safe validation/errors and backend workspace authorization. Provisioned administrator credentials remain the local client foundation. This is not browser authentication or full Phase 09 RBAC. Node-owner consent is enforced independently.
 
 ## Endpoints

@@ -1,13 +1,29 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { redirect } from "next/navigation";
 
-export const credentialCookie = "godfather_local_credential";
+export const credentialCookie = "godfather_session";
+
+export function webOrigin(): string {
+  const value = process.env.GODFATHER_WEB_ORIGIN ?? "http://127.0.0.1:3000";
+  const url = new URL(value);
+  if (
+    value !== "https://app.the-godfather.ai" &&
+    !(
+      url.protocol === "http:" &&
+      ["127.0.0.1", "localhost"].includes(url.hostname)
+    )
+  )
+    throw new Error("Unsupported application origin");
+  if (url.origin !== value)
+    throw new Error("An exact application origin is required");
+  return value;
+}
 
 export function localRequest(request: NextRequest, mutation = false): boolean {
   const host = request.headers.get("host") ?? "";
-  if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host)) return false;
-  if (mutation && request.headers.get("origin") !== `http://${host}`)
-    return false;
+  if (host !== new URL(webOrigin()).host) return false;
+  if (mutation && request.headers.get("origin") !== webOrigin()) return false;
   return true;
 }
 
@@ -15,8 +31,11 @@ export function apiBase(): string {
   const value = process.env.GODFATHER_API_URL ?? "http://127.0.0.1:8000";
   const url = new URL(value);
   if (
-    url.protocol !== "http:" ||
-    !["127.0.0.1", "localhost", "api"].includes(url.hostname) ||
+    !(
+      (url.protocol === "http:" &&
+        ["127.0.0.1", "localhost", "api"].includes(url.hostname)) ||
+      value === "https://api.the-godfather.ai"
+    ) ||
     url.username ||
     url.password ||
     url.search ||
@@ -41,7 +60,8 @@ export async function backend(
     redirect: "error",
     signal: AbortSignal.timeout(15000),
     headers: {
-      Authorization: `Bearer ${token}`,
+      "X-Godfather-Session": token,
+      Origin: webOrigin(),
       "Content-Type": "application/json",
     },
   });
@@ -50,6 +70,9 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
+    "auth/me",
+    "administration/(users|invitations|audit|node-credentials)",
+    `administration/workspaces/${uuid}/members`,
     "command-center",
     "command-center/events",
     `command-center/(jobs|nodes|agents)/${uuid}`,
@@ -57,6 +80,13 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "agents",
+    `agents/${uuid}/versions`,
+    "administration/(invitations|workspaces|node-credentials)",
+    `administration/node-credentials/${uuid}/revoke`,
+    `administration/users/${uuid}(/revoke-sessions)?`,
+    `administration/invitations/${uuid}/revoke`,
+    `administration/workspaces/${uuid}/(members|policy)`,
     `jobs/${uuid}/(cancel|retry)`,
     `nodes/${uuid}/control`,
     `agents/${uuid}/versions/[0-9]+/control`,
@@ -83,7 +113,7 @@ export async function proxy(request: NextRequest, segments: string[]) {
   const token = (await cookies()).get(credentialCookie)?.value;
   if (!token)
     return NextResponse.json(
-      { detail: "Connect an administrator credential" },
+      { detail: "Google Sign-In required" },
       { status: 401 },
     );
   if (Number(request.headers.get("content-length") ?? 0) > 16384)
@@ -112,4 +142,17 @@ export async function proxy(request: NextRequest, segments: string[]) {
       { status: 503 },
     );
   }
+}
+
+export async function requireUser() {
+  const token = (await cookies()).get(credentialCookie)?.value;
+  if (!token) redirect("/?auth=required");
+  let response: Response;
+  try {
+    response = await backend("auth/me", token);
+  } catch {
+    redirect("/?auth=unavailable");
+  }
+  if (!response.ok) redirect("/?auth=required");
+  return response.json();
 }

@@ -83,12 +83,16 @@ def authorized_job(session: Session, job_id: UUID, actor_id: UUID, lock: bool = 
     job = session.scalar(query.with_for_update() if lock else query)
     if job is None or not workspace_access(session, actor_id, job.workspace_id):
         raise HTTPException(404, "Job not found in an authorized workspace")
+    if not session.info.get("test") and job.type.startswith("synthetic."):
+        raise HTTPException(404, "Test job unavailable in live mode")
     return job
 
 
 @router.post("/jobs", response_model=JobView, status_code=201)
 def submit(payload: JobSubmission, request: Request, session: SessionDep) -> JobView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
+    if not session.info.get("test") and payload.type.startswith("synthetic."):
+        raise HTTPException(403, "Synthetic jobs are restricted to isolated tests")
     if not workspace_access(session, actor.owner_id, payload.workspace_id):
         raise HTTPException(404, "Workspace not found or permission denied")
     job = Job(
@@ -115,7 +119,7 @@ def list_jobs(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[JobView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     memberships = select(WorkspaceMember.workspace_id).where(
         WorkspaceMember.user_id == actor.owner_id
     )
@@ -124,6 +128,8 @@ def list_jobs(
         .join(Workspace, Job.workspace_id == Workspace.id)
         .where(or_(Workspace.owner_id == actor.owner_id, Job.workspace_id.in_(memberships)))
     )
+    if not session.info.get("test"):
+        query = query.where(~Job.type.like("synthetic.%"))
     return [
         view(session, job)
         for job in session.scalars(
@@ -134,13 +140,13 @@ def list_jobs(
 
 @router.get("/jobs/{job_id}", response_model=JobView)
 def inspect_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     return view(session, authorized_job(session, job_id, actor.owner_id))
 
 
 @router.post("/jobs/{job_id}/cancel", response_model=JobView)
 def cancel_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = authorized_job(session, job_id, actor.owner_id, True)
     workspace = session.get(Workspace, job.workspace_id)
     membership = session.get(WorkspaceMember, (job.workspace_id, actor.owner_id))
@@ -168,7 +174,7 @@ def cancel_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
 
 @router.post("/jobs/{job_id}/retry", response_model=JobView)
 def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     job = authorized_job(session, job_id, actor.owner_id, True)
     workspace = session.get(Workspace, job.workspace_id)
     membership = session.get(WorkspaceMember, (job.workspace_id, actor.owner_id))
@@ -211,7 +217,7 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
 
 @router.get("/jobs/{job_id}/attempts", response_model=list[AttemptView])
 def attempts(job_id: UUID, request: Request, session: SessionDep) -> list[AttemptView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     authorized_job(session, job_id, actor.owner_id)
     return [
         AttemptView.model_validate(a, from_attributes=True)
@@ -229,7 +235,7 @@ def events(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[EventView]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     authorized_job(session, job_id, actor.owner_id)
     return [
         EventView.model_validate(e, from_attributes=True)
@@ -249,7 +255,9 @@ def worker_node(node_id: UUID, payload: JobPoll, request: Request, session: Sess
         raise HTTPException(426, "Execution protocol v1 is required")
     if credential.node_id != node_id:
         raise HTTPException(403, "Credential is scoped to another node")
-    node = session.scalar(select(Node).where(Node.id == node_id).with_for_update())
+    # Serialize worker mutations without blocking FK KEY SHARE checks from job
+    # cancellation audit inserts. Node identity keys are immutable on this path.
+    node = session.scalar(select(Node).where(Node.id == node_id).with_for_update(key_share=True))
     if node is None or node.session_id != payload.session_id:
         raise HTTPException(409, "Register this worker session first")
     if node.state == "disabled":

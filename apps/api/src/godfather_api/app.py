@@ -15,8 +15,10 @@ from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 
+from godfather_api.administration import router as administration_router
 from godfather_api.agents import router as agents_router
 from godfather_api.artifacts import LocalArtifactStore
+from godfather_api.authentication import router as authentication_router
 from godfather_api.command_center import router as command_center_router
 from godfather_api.config import Settings
 from godfather_api.database import Database
@@ -110,6 +112,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 logger.error("request.failed", extra={"error_type": type(error).__name__})
                 response = JSONResponse({"detail": "Internal server error"}, status_code=500)
             response.headers["X-Correlation-ID"] = request_id
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
             route = request.scope.get("route")
             logger.info(
                 "request.completed",
@@ -151,4 +155,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(agents_router)
     app.include_router(inference_router)
     app.include_router(command_center_router)
+    app.include_router(authentication_router)
+    app.include_router(administration_router)
     return app

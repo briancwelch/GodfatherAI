@@ -1,5 +1,11 @@
 # Job API and synthetic worker protocol v1
 
+Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Google OIDC/application sessions replace human bearer login in normal operation;
+worker machine credentials remain independent. Earlier bearer/simulator procedures
+below are historical and restricted to isolated automated tests. Phase 09 does not
+authorize public deployment or Phase 10.
+
 Phase 06 reuses this state machine, locks, leases and fencing for [sequential agent workflows](agents-v1.md). Its dedicated submission/step/checkpoint routes add no second scheduler. Automatic cross-node workflow failover remains Phase 07; old synthetic assignment shapes are preserved.
 
 This records the Phase 04 baseline. Phase 05 adds opt-in model-aware text inference through the [inference extension v1](inference-v1.md), while preserving synthetic job semantics and strict older assignment shapes. Only opted-in inference workers receive its additional payloads.

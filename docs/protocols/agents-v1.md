@@ -1,5 +1,11 @@
 # Agents, workflows and checkpoint protocol v1
 
+Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Google OIDC/application sessions replace human bearer login in normal operation;
+worker machine credentials remain independent. Earlier bearer/simulator procedures
+below are historical and restricted to isolated automated tests. Phase 09 does not
+authorize public deployment or Phase 10.
+
 ## Phase 07–08 compatible recovery extension
 
 The historical Phase 06 same-node restriction below no longer applies. Worker and

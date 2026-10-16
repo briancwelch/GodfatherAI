@@ -18,6 +18,7 @@ from godfather_api.models import (
     AccessCredential,
     Attempt,
     Event,
+    GoogleIdentity,
     Job,
     Node,
     User,
@@ -41,6 +42,37 @@ def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bo
 
 
 def permitted(session: Session, job: Job, node: Node) -> bool:
+    from godfather_api.authentication import permissions
+
+    node_owner = session.get(User, node.owner_id)
+    if (
+        node_owner is None
+        or not node_owner.enabled
+        or "nodes.contribute" not in permissions(node_owner)
+    ):
+        return False
+    if not session.info.get("test") and node.resources.get("source") != "physical":
+        return False
+    if (
+        not session.info.get("test")
+        and session.scalar(select(GoogleIdentity.id).where(GoogleIdentity.user_id == node.owner_id))
+        is None
+    ):
+        return False
+    workspace = session.get(Workspace, job.workspace_id)
+    requirements = Requirements.model_validate(job.requirements or {})
+    if workspace is None:
+        return False
+    if workspace.allowed_models is not None:
+        selection = requirements.model_selection
+        if selection is not None and selection.identifier not in workspace.allowed_models:
+            return False
+        if not set(requirements.models) <= set(workspace.allowed_models):
+            return False
+    if workspace.allowed_tools is not None and any(
+        f"{t.name}@{t.version}" not in workspace.allowed_tools for t in requirements.tools
+    ):
+        return False
     owner = session.get(User, job.owner_id)
     if (
         owner is None

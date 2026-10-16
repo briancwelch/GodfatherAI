@@ -13,6 +13,8 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2.0,<2.1",
     "uvicorn>=0.34,<1",
+    "authlib>=1.9.1,<2",
+    "httpx2>=2.13,<3",
 ]
 
 [tool.uv.sources]

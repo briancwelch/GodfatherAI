@@ -1,5 +1,11 @@
 # Phase 07–08: Automatic failover and local Command Center
 
+Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Google OIDC/application sessions replace human bearer login in normal operation;
+worker machine credentials remain independent. Earlier bearer/simulator procedures
+below are historical and restricted to isolated automated tests. Phase 09 does not
+authorize public deployment or Phase 10.
+
 The user explicitly authorized these phases as one combined milestone. Stop after
 Phase 08. Phase 09 and BYOK implementation remain unapproved.
 

@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from godfather_api.jobs import authorized_job, current_attempt, submit
-from godfather_api.models import AccessCredential, Attempt, Job, Node, User
+from godfather_api.models import AccessCredential, Attempt, Job, Node, User, Workspace
 from godfather_api.nodes import SessionDep, authenticate, connection_at, node_view
 from godfather_api.scheduler import permitted, workspace_access
 
@@ -37,8 +37,10 @@ def models(
     offset: Annotated[int, Query(ge=0)] = 0,
     node_id: UUID | None = None,
 ) -> list[dict[str, object]]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     workspace_permission(session, workspace_id, actor.owner_id)
+    workspace = session.get(Workspace, workspace_id)
+    assert workspace is not None
     probe = Job(owner_id=actor.owner_id, workspace_id=workspace_id)
     query = (
         select(Node)
@@ -64,6 +66,13 @@ def models(
             and connection_at(node.last_heartbeat_at, now, request.app.state.settings) == "online"
         )
         for deployment in view.model_deployments:
+            if (
+                workspace.allowed_models is not None
+                and deployment.identifier not in workspace.allowed_models
+            ):
+                continue
+            if not session.info.get("test") and node.resources.get("source") != "physical":
+                continue
             result.append(
                 {
                     "node_id": str(node.id),
@@ -142,13 +151,13 @@ def snapshot(session: Session, job: Job) -> dict[str, object]:
 
 @router.get("/inference/jobs/{job_id}/result")
 def result(job_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     return snapshot(session, inference_job(session, job_id, actor.owner_id))
 
 
 @router.get("/inference/jobs/{job_id}/stream")
 def stream(job_id: UUID, request: Request, session: SessionDep) -> StreamingResponse:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     inference_job(session, job_id, actor.owner_id)
 
     async def events() -> AsyncIterator[str]:
@@ -161,7 +170,7 @@ def stream(job_id: UUID, request: Request, session: SessionDep) -> StreamingResp
 
             def read() -> dict[str, object]:
                 with request.app.state.database.sessions.begin() as fresh:
-                    current_actor = authenticate(request, fresh, "admin")
+                    current_actor = authenticate(request, fresh, "human")
                     return snapshot(fresh, inference_job(fresh, job_id, current_actor.owner_id))
 
             try:
@@ -207,7 +216,7 @@ def stream(job_id: UUID, request: Request, session: SessionDep) -> StreamingResp
 
 @router.get("/inference/metrics")
 def metrics(workspace_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
-    actor = authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     workspace_permission(session, workspace_id, actor.owner_id)
     states: Counter[str] = Counter(
         {

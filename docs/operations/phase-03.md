@@ -1,5 +1,11 @@
 # Phase 03: Worker registration and health
 
+Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Google OIDC/application sessions replace human bearer login in normal operation;
+worker machine credentials remain independent. Earlier bearer/simulator procedures
+below are historical and restricted to isolated automated tests. Phase 09 does not
+authorize public deployment or Phase 10.
+
 ## Scope and prerequisite
 
 Phase 03 was explicitly authorized. Before changes, the Phase 02 migration succeeded, the existing real-PostgreSQL suite passed **44 tests**, and the actual API/PostgreSQL restart, persistence, outage (live 200 / ready 503) and recovery probe passed. The full repository check also passed. An initial overlapping restart/test run caused two connection errors; after the probe finished, the serial test run passed. No Phase 02 source defect was found.

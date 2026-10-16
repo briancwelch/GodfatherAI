@@ -56,12 +56,58 @@ class User(Entity, Base):
     role: Mapped[str] = mapped_column(String(32), server_default="member")
     enabled: Mapped[bool] = mapped_column(Boolean, server_default="true")
     scheduling_turn: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    roles: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")
+    picture: Mapped[str | None] = mapped_column(String(2048))
+
+
+class GoogleIdentity(Entity, Base):
+    __tablename__ = "google_identities"
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), unique=True)
+    subject: Mapped[str] = mapped_column(String(255), unique=True)
+
+
+class HumanSession(Entity, Owned, Base):
+    __tablename__ = "human_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
+class Invitation(Entity, Base):
+    __tablename__ = "invitations"
+    actor_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    email: Mapped[str] = mapped_column(String(320))
+    roles: Mapped[list[str]] = mapped_column(JSONB)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    used_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+
+
+class LoginTransaction(Entity, Base):
+    __tablename__ = "login_transactions"
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    browser_hash: Mapped[str] = mapped_column(String(64))
+    nonce: Mapped[str] = mapped_column(String(128))
+    verifier: Mapped[str] = mapped_column(String(128))
+    invitation_id: Mapped[UUID | None] = mapped_column(ForeignKey("invitations.id"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
+class AuthenticationLimit(Base):
+    __tablename__ = "authentication_limits"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    window: Mapped[int] = mapped_column(BigInteger)
+    count: Mapped[int] = mapped_column(Integer)
 
 
 class Workspace(Entity, Owned, Base):
     __tablename__ = "workspaces"
     name: Mapped[str] = mapped_column(String(200))
     is_shared: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    allowed_models: Mapped[list[str] | None] = mapped_column(JSONB)
+    allowed_tools: Mapped[list[str] | None] = mapped_column(JSONB)
 
 
 class WorkspaceMember(Base):

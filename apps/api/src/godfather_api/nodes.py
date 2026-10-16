@@ -4,7 +4,7 @@ import hashlib
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal, overload
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,14 +18,24 @@ from godfather_contracts import (
     Registration,
     WorkerAck,
 )
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from godfather_api.config import Settings
 from godfather_api.database import Database
 from godfather_api.logging import correlation_id
-from godfather_api.models import AccessCredential, Capability, Event, Node, NodeCapability, User
+from godfather_api.models import (
+    AccessCredential,
+    Capability,
+    Event,
+    GoogleIdentity,
+    HumanSession,
+    Node,
+    NodeCapability,
+    User,
+)
 
 logger = logging.getLogger("godfather.nodes")
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer(auto_error=False))])
@@ -45,7 +55,48 @@ def session_dependency(request: Request) -> Iterator[Session]:
 SessionDep = Annotated[Session, Depends(session_dependency, scope="function")]
 
 
-def authenticate(request: Request, session: Session, kind: str) -> AccessCredential:
+def node_visibility(session: Session, actor_id: UUID) -> ColumnElement[bool]:
+    from godfather_api.authentication import permissions
+
+    owner = session.get(User, actor_id)
+    scope = (
+        true() if owner and "platform.manage" in permissions(owner) else Node.owner_id == actor_id
+    )
+    live = (
+        true()
+        if session.info.get("test")
+        else (
+            (Node.resources["source"].astext == "physical")
+            & Node.owner_id.in_(select(GoogleIdentity.user_id))
+        )
+    )
+    return scope & live
+
+
+@overload
+def authenticate(
+    request: Request, session: Session, kind: Literal["worker", "admin"]
+) -> AccessCredential: ...
+
+
+@overload
+def authenticate(
+    request: Request, session: Session, kind: Literal["human"]
+) -> AccessCredential | HumanSession: ...
+
+
+def authenticate(request: Request, session: Session, kind: str) -> AccessCredential | HumanSession:
+    if kind == "human":
+        from godfather_api.authentication import human
+
+        settings: Settings = request.app.state.settings
+        if not (
+            settings.environment == "test"
+            and settings.test_legacy_credentials
+            and request.headers.get("authorization")
+        ):
+            return human(request, session)
+        kind = "admin"
     headers = request.headers.getlist("authorization")
     if len(headers) != 1:
         raise HTTPException(401, "A valid bearer credential is required")
@@ -67,6 +118,16 @@ def authenticate(request: Request, session: Session, kind: str) -> AccessCredent
     owner = session.get(User, credential.owner_id)
     if owner is None or not owner.enabled or (kind == "admin" and owner.role != "platform_admin"):
         raise HTTPException(403, "Credential owner is not permitted")
+    if kind == "worker":
+        from godfather_api.authentication import require_permission
+
+        require_permission(session, owner.id, "nodes.contribute")
+        if (
+            not session.info.get("test")
+            and session.scalar(select(GoogleIdentity.id).where(GoogleIdentity.user_id == owner.id))
+            is None
+        ):
+            raise HTTPException(403, "Worker owner requires an explicitly linked Google identity")
     return credential
 
 
@@ -153,6 +214,29 @@ def node_view(session: Session, node: Node) -> NodeView:
     )
 
 
+def human_node_view(session: Session, node: Node, actor_id: UUID) -> NodeView:
+    view = node_view(session, node)
+    if node.owner_id == actor_id:
+        return view
+    from godfather_api.scheduler import workspace_access
+
+    return view.model_copy(
+        update={
+            "allowed_workspace_ids": [
+                w for w in view.allowed_workspace_ids if workspace_access(session, actor_id, w)
+            ],
+            "allowed_job_owner_ids": [u for u in view.allowed_job_owner_ids if u == actor_id],
+        }
+    )
+
+
+def human_event_details(event: Event, actor_id: UUID) -> dict[str, object]:
+    # Global health history must not reveal private workspace grant UUIDs.
+    if event.type == "node.contribution_changed" and event.actor_id != actor_id:
+        return {"policy_changed": True}
+    return event.details
+
+
 def ack(node: Node, settings: Settings) -> WorkerAck:
     return WorkerAck.model_validate(
         {
@@ -174,6 +258,8 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
     credential = authenticate(request, session, "worker")
     check_protocol(payload.protocol_version)
     settings: Settings = request.app.state.settings
+    if settings.environment != "test" and payload.resources.source != "physical":
+        raise HTTPException(403, "Simulated workers are restricted to isolated tests")
     now = datetime.now(UTC)
     node = session.scalar(select(Node).where(Node.id == credential.node_id).with_for_update())
     created = node is None
@@ -303,37 +389,41 @@ def list_nodes(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[NodeView]:
-    authenticate(request, session, "admin")
+    actor = authenticate(request, session, "human")
     nodes = session.scalars(
         select(Node)
-        .where(Node.session_id.is_not(None))
+        .where(Node.session_id.is_not(None), node_visibility(session, actor.owner_id))
         .order_by(Node.created_at, Node.id)
         .limit(limit)
         .offset(offset)
     )
-    return [node_view(session, node) for node in nodes]
+    return [human_node_view(session, node, actor.owner_id) for node in nodes]
 
 
 @router.get("/nodes/{node_id}", response_model=NodeView)
 def inspect_node(node_id: UUID, request: Request, session: SessionDep) -> NodeView:
-    authenticate(request, session, "admin")
-    node = session.get(Node, node_id)
+    actor = authenticate(request, session, "human")
+    node = session.scalar(
+        select(Node).where(Node.id == node_id, node_visibility(session, actor.owner_id))
+    )
     if node is None or node.session_id is None:
         raise HTTPException(404, "Node not found")
-    return node_view(session, node)
+    return human_node_view(session, node, actor.owner_id)
 
 
 @router.post("/nodes/{node_id}/control", response_model=NodeView)
 def control_node(
     node_id: UUID, payload: NodeControl, request: Request, session: SessionDep
 ) -> NodeView:
-    admin = authenticate(request, session, "admin")
+    admin = authenticate(request, session, "human")
     credential = session.scalar(
         select(AccessCredential).where(AccessCredential.node_id == node_id).with_for_update()
     )
     node = session.scalar(select(Node).where(Node.id == node_id).with_for_update())
     if node is None or credential is None:
         raise HTTPException(404, "Node not found")
+    if node.owner_id != admin.owner_id:
+        raise HTTPException(403, "Only the node owner may change its contribution")
     if credential.revoked:
         raise HTTPException(409, "Node credential has been permanently revoked")
     previous = node.state

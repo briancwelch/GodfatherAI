@@ -1,11 +1,11 @@
 # Development setup
 
-Current milestone: [combined Phase 07–08](phase-07-08.md). The dashboard is now a
-local authenticated operational interface at **http://127.0.0.1:3000**. Explicitly
-apply `0005_cross_node_recovery`, preserve database/artifact volumes and use an
-existing provisioned administrator credential. The Phase 06 notes below are
-historical; same-node recovery and the disconnected shell are no longer current.
-Do not expose the dashboard remotely.
+Current milestone: [Phase 09 Google OIDC and administration](phase-09.md). The
+local Command Center is **http://127.0.0.1:3000**. Explicitly apply
+`0006_google_identity`, preserve database/artifact volumes, and configure Google
+Sign-In. Existing identities require explicit ownership-preserving linking;
+legacy human bearer login is no longer supported in normal operation. Earlier
+phase notes below are historical. No remote deployment is authorized.
 
 Phase 06 adds a private persistent API artifact volume and the explicit `0004_agent_runtime` migration. Follow [Phase 06 setup, demonstrations and storage limits](phase-06.md) before running workflows. Preserve both database and artifact volumes; workers gain no filesystem/shell permission from this storage backend. BYOK remains a separately authorized future implementation.
 
