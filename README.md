@@ -4,13 +4,15 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 02 — control-plane API.** Phase 01 passed local checks, clean-clone restoration, and all eight GitHub CI jobs. The API foundation adds health probes, PostgreSQL access, migrations, validated configuration, and structured logs. The dashboard remains a nonfunctional shell; there are no domain write endpoints, workers, scheduling, inference, or external integrations.
+**Current milestone: Phase 04 ? durable synthetic job scheduler.** Phase 03 registration, authentication, health transitions and tests were reverified first. PostgreSQL now owns jobs, assignments, attempts, leases, fences, retries, fairness and event history. Two opt-in simulated worker processes can execute synthetic jobs locally. The dashboard remains a nonfunctional shell. Inference, checkpoint restoration, real agents and remote deployment remain later phases.
 
 ## Start here
 
 1. Read [AGENTS.md](AGENTS.md) and the [UI/UX specification](docs/design/UI-UX.md).
 2. Follow the [Windows, macOS, and Linux setup guide](docs/operations/setup.md).
 3. Review [Phase 01 validation](docs/operations/phase-01.md) and [Phase 02 setup and results](docs/operations/phase-02.md).
+4. Follow [Phase 03 startup, credential provisioning and simulated workers](docs/operations/phase-03.md).
+5. Use [Phase 04 jobs, scheduler simulation and validation](docs/operations/phase-04.md) and the [job protocol](docs/protocols/jobs-v1.md).
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
@@ -52,27 +54,29 @@ The doctor inspects tools and Docker availability without installing anything. T
 
 ## Layout
 
-| Path                    | Purpose                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| `apps/dashboard`        | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell        |
-| `apps/api`              | FastAPI foundation, configuration, logging and SQLAlchemy models     |
-| `infrastructure/docker` | Dashboard build/runtime container                                    |
-| `scripts`               | Portable development checks                                          |
-| `tests`                 | Tooling/API unit tests and guarded real-PostgreSQL integration tests |
-| `docs/design`           | Authoritative frontend design guidance                               |
-| `docs/architecture`     | Architecture and cross-platform compatibility                        |
-| `docs/decisions`        | Architecture decision records                                        |
-| `docs/operations`       | Setup, phase gates, troubleshooting                                  |
-| `.github/workflows`     | Cross-platform checks and Linux container smoke checks               |
+| Path                      | Purpose                                                                |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind, minimal shadcn/ui shell          |
+| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models       |
+| `packages/worker`         | Outbound registration, discovery, heartbeats and opt-in synthetic jobs |
+| `packages/shared-schemas` | Versioned worker registration/health contracts                         |
+| `infrastructure/docker`   | Dashboard build/runtime container                                      |
+| `scripts`                 | Portable development checks                                            |
+| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests   |
+| `docs/design`             | Authoritative frontend design guidance                                 |
+| `docs/architecture`       | Architecture and cross-platform compatibility                          |
+| `docs/decisions`          | Architecture decision records                                          |
+| `docs/operations`         | Setup, phase gates, troubleshooting                                    |
+| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                 |
 
 Future packages and infrastructure are created only when their milestones require them.
 
 ## Safety and milestone boundaries
 
-The dashboard is a local shell, without a login or private data. It does not claim operational state. Authentication and server-side authorization are required before real data or remote exposure; see the [security foundation](docs/architecture/security-foundation.md).
+The dashboard is a local shell, without a login or private data. It does not claim operational state. Node APIs require provisioned worker or administrator bearer credentials. Browser sessions, full RBAC and remote exposure remain separately gated; see the [security foundation](docs/architecture/security-foundation.md).
 
-PostgreSQL will be authoritative for durable execution state. Redis is transient. Future workers connect outbound, and owners control their host permissions. A platform administrator cannot bypass those restrictions.
+PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, leases, retries and events. Redis is transient. Workers connect outbound, and owners control their host permissions. A platform administrator cannot bypass those restrictions.
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01 is verified complete. Phase 02 was explicitly authorized; see its report for validation and limitations. There is no second-developer acceptance requirement. Phase 03 requires explicit authorization.
+Phase 01?03 passed their gates. Phase 04 was explicitly authorized; see its report for validation and limitations. Stop after Phase 04. Phase 05 requires explicit authorization.

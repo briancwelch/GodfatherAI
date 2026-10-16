@@ -1,4 +1,4 @@
-"""Initial durable schema only. No registration, scheduling, leases or workflow execution."""
+"""Durable control-plane schema for identities and fenced synthetic execution."""
 
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -17,6 +17,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+)
+from sqlalchemy import (
+    text as sa_text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -52,6 +55,7 @@ class User(Entity, Base):
     display_name: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(32), server_default="member")
     enabled: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    scheduling_turn: Mapped[int] = mapped_column(BigInteger, server_default="0")
 
 
 class Workspace(Entity, Owned, Base):
@@ -82,6 +86,7 @@ class Node(Entity, Owned, Base):
         CheckConstraint("scheduling_policy IN ('dedicated','preferred','shared')", name="policy"),
         CheckConstraint("concurrency_limit > 0", name="concurrency"),
         CheckConstraint("protocol_version > 0", name="protocol"),
+        CheckConstraint("connection_status IN ('online','suspect','offline')", name="connection"),
     )
     name: Mapped[str] = mapped_column(String(200))
     os: Mapped[str] = mapped_column(String(16))
@@ -95,6 +100,28 @@ class Node(Entity, Owned, Base):
     runtimes: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     contribution_policy: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connection_status: Mapped[str] = mapped_column(String(16), server_default="offline")
+    session_id: Mapped[UUID | None]
+
+
+class AccessCredential(Entity, Owned, Base):
+    __tablename__ = "access_credentials"
+    __table_args__ = (
+        CheckConstraint("kind IN ('admin','worker')", name="kind"),
+        CheckConstraint(
+            "(kind='admin' AND name IS NULL AND node_id IS NULL) OR "
+            "(kind='worker' AND name IS NOT NULL)",
+            name="scope",
+        ),
+        UniqueConstraint("owner_id", "name", name="uq_credentials_owner_name"),
+    )
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str | None] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    node_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("nodes.id", ondelete="RESTRICT"), unique=True
+    )
+    revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
 
 class Capability(Entity, Base):
@@ -181,12 +208,25 @@ class Job(Entity, Owned, Base):
     requirements: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     input_refs: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     result_refs: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    assigned_node_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("nodes.id", ondelete="RESTRICT")
+    )
+    fencing_token: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    retry_backoff_seconds: Mapped[int] = mapped_column(Integer, server_default="1")
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    checkpoint_ref: Mapped[str | None] = mapped_column(Text)
     cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Attempt(Entity, Base):
     __tablename__ = "attempts"
     __table_args__ = (
+        Index(
+            "uq_attempts_active_job",
+            "job_id",
+            unique=True,
+            postgresql_where=sa_text("status IN ('ASSIGNED','RUNNING')"),
+        ),
         UniqueConstraint("job_id", "number", name="uq_attempts_job_number"),
         UniqueConstraint("job_id", "fencing_token", name="uq_attempts_job_fencing"),
         UniqueConstraint("id", "job_id", name="uq_attempts_id_job"),
@@ -200,6 +240,11 @@ class Attempt(Entity, Base):
     number: Mapped[int] = mapped_column(Integer)
     fencing_token: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(16), server_default="ASSIGNED")
+    session_id: Mapped[UUID | None]
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    result: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -236,6 +281,7 @@ class Event(Entity, Base):
         ),
         CheckConstraint("job_id IS NULL OR workspace_id IS NOT NULL", name="job_scope"),
     )
+    attempt_id: Mapped[UUID | None] = mapped_column(ForeignKey("attempts.id", ondelete="RESTRICT"))
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     workspace_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("workspaces.id", ondelete="RESTRICT"), index=True

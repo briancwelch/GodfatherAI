@@ -6,6 +6,7 @@ ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
     PATH=/app/.venv/bin:$PATH
 COPY pyproject.toml uv.lock ./
 COPY apps/api ./apps/api
+COPY packages ./packages
 COPY infrastructure/migrations ./infrastructure/migrations
 RUN uv sync --locked --all-packages --no-dev
 RUN groupadd --gid 10001 godfather && useradd --uid 10001 --gid 10001 --no-create-home godfather

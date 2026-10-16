@@ -24,6 +24,9 @@ Development is led by one developer. Both founding members are platform administ
 14. Design the coordinator for an independent, always-on Linux VPS; develop locally first. Never require either contributor's desktop to host the control plane.
 15. Keep checkpoints, artifacts, execution requirements, and agent definitions portable. A job may migrate only to a node that satisfies its OS, architecture, runtime, dependency, model, and tool requirements.
 16. For any frontend, dashboard, or UX/UI implementation, read and follow docs/design/UI-UX.md. AGENTS.md remains authoritative for architecture, security, and implementation phases. Do not introduce dashboard features outside the currently authorized phase.
+17. The Godfather must support an extensible number of users, worker nodes, and geographic locations. Never hardcode the initial two administrators, four example nodes, or Las Vegas/Los Angeles locations into application logic. All users and nodes must be dynamically managed through persistent identities, ownership relationships, permissions, and capability-based scheduling. Future contributors must be able to join or leave without requiring application code changes or orchestrator restarts.
+18. After completing a phase and before moving onto the next one, commit and push to Github repo, so each phase is saved.
+
 
 ## Architecture
 ```text

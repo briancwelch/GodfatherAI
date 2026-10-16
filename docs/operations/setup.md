@@ -95,7 +95,7 @@ Restore with `uv sync --locked --all-packages` and `npm ci` after pulling depend
 
 To switch to native mode, run `docker compose stop dashboard` before `npm run dev`. To stop the local stack, use `docker compose down`; the PostgreSQL named volume remains. Do not use volume deletion flags or reset a database without explicit authorization.
 
-The dashboard remains a disconnected shell. The Phase 02 API uses PostgreSQL on the internal backend network; the dashboard receives no database credentials. Redis remains transient and unused by the API. See [Phase 02](phase-02.md) for guarded PostgreSQL tests and restart verification. Always apply reviewed migrations explicitly before starting a changed API schema.
+The dashboard remains a disconnected shell. The API uses PostgreSQL on the internal backend network; the dashboard receives no database credentials. Redis remains transient and unused by the API. See [Phase 02](phase-02.md) for guarded PostgreSQL tests and restart verification, and [Phase 03](phase-03.md) for authenticated worker provisioning, four local simulator processes and health inspection. See [Phase 04](phase-04.md) for workspace/job commands and the two-process scheduler acceptance. Always apply reviewed migrations explicitly before starting a changed API schema.
 
 Before review, run:
 

@@ -80,6 +80,19 @@ def test_readiness_rejects_schema_drift_and_recovers(db: Database) -> None:
     assert db.ready()
 
 
+def test_phase03_upgrade_preserves_phase02_nodes(db: Database) -> None:
+    with db.sessions() as session:
+        node_id = session.scalar(select(Node.id))
+    command.downgrade(migration_config(), "0001_initial")
+    with db.engine.connect() as connection:
+        assert connection.scalar(text("SELECT id FROM nodes LIMIT 1")) == node_id
+    command.upgrade(migration_config(), "head")
+    with db.sessions() as session:
+        node = session.get(Node, node_id)
+        assert node is not None and node.connection_status == "offline"
+        assert node.session_id is None
+
+
 def seed_graph(db: Database) -> UUID:
     """Synthetic fixtures only; no provider keys, host paths, or real personal data."""
     with db.sessions.begin() as session:

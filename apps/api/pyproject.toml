@@ -4,14 +4,18 @@ version = "0.1.0"
 description = "The Godfather control-plane API"
 requires-python = ">=3.12"
 dependencies = [
+    "godfather-contracts",
     "alembic>=1.16,<2",
-    "fastapi>=0.115,<1",
+    "fastapi>=0.121,<1",
     "pydantic>=2.11,<3",
     "pydantic-settings>=2.9,<3",
     "psycopg[binary]>=3.2,<4",
     "sqlalchemy>=2.0,<2.1",
     "uvicorn>=0.34,<1",
 ]
+
+[tool.uv.sources]
+godfather-contracts = { workspace = true }
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

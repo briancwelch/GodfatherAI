@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -20,6 +20,23 @@ class Settings(BaseSettings):
     database_password: SecretStr
     database_timeout_seconds: int = Field(default=3, ge=1, le=30)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    heartbeat_interval_seconds: int = Field(default=10, ge=1, le=300)
+    suspect_after_seconds: int = Field(default=20, ge=2, le=1800)
+    offline_after_seconds: int = Field(default=30, ge=3, le=3600)
+    health_scan_seconds: int = Field(default=1, ge=1, le=60)
+    health_monitor_enabled: bool = True
+    scheduler_enabled: bool = True
+    execution_lease_seconds: int = Field(default=30, ge=3, le=3600)
+
+    @model_validator(mode="after")
+    def health_thresholds(self) -> "Settings":
+        if not (
+            self.heartbeat_interval_seconds
+            < self.suspect_after_seconds
+            < self.offline_after_seconds
+        ):
+            raise ValueError("heartbeat interval must be less than suspect and offline thresholds")
+        return self
 
     @field_validator("database_password")
     @classmethod

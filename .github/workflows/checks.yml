@@ -93,6 +93,14 @@ jobs:
           python-version: "3.14"
       - name: API and PostgreSQL restart, outage and recovery
         run: python -m scripts.check_api_restart
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.1"
+      - run: uv sync --locked --all-packages
+      - name: Four worker processes, independent health, and node persistence
+        run: uv run --locked --all-packages python -m scripts.check_worker_health
+      - name: Durable scheduler, 100 jobs, two workers, restarts and lease expiry
+        run: uv run --locked --all-packages python -m scripts.check_job_scheduler
       - name: Container diagnostics
         if: failure()
         run: docker compose ps --all

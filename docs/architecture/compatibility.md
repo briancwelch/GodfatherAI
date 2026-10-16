@@ -10,7 +10,7 @@ Use standard-library Python for portable development helpers, argument arrays ra
 
 Container images must support Linux amd64 and arm64; do not pin the Compose platform to one contributor's CPU. Verify actual image manifests and native builds when updating image tags. Container checks on Linux amd64 do not establish arm64 execution evidence.
 
-## Future workers (design constraint, no Phase 01 implementation)
+## Worker compatibility
 
 - Portable Python core; adapters isolate process spawning, shell/path handling, discovery, sandboxing, and service management.
 - Windows 11, supported macOS on Apple Silicon and Intel where feasible, and mainstream Linux including Ubuntu.
@@ -19,6 +19,10 @@ Container images must support Linux amd64 and arm64; do not pin the Compose plat
 - Jobs may migrate only when OS, architecture, dependencies, runtime, model, tools, permissions, and artifact requirements match.
 - Checkpoints and artifacts must be centrally accessible, durable, portable and versioned. Local paths, unsaved files and GPU state are not recoverable checkpoints.
 
-Multiple simulated worker processes must be able to share one physical development machine in later phases. Simulated Windows/macOS labels test matching logic; physical OS runners test adapters. GPU/inference backends require actual hardware validation and must be marked untested until exercised.
+Phase 03 implements a portable installable Python registration/health worker and mocked OS discovery adapters. Four explicitly labeled Windows/macOS simulation profiles can run as separate processes on one development machine. Simulated labels and discovery mocks do not establish physical OS/GPU behavior. The existing CI OS matrix covers worker tests when executed. GPU/inference backends require actual hardware validation and must be marked untested until exercised.
 
-No worker, protocol, scheduler, model gateway, checkpoint store, or failover implementation is included in Phase 01.
+Phase 01 included no worker implementation; Phase 03 adds protocol v1 registration and health only. Scheduling, model execution, checkpoint storage and failover remain later phases. Unknown architectures and unavailable telemetry are reported explicitly; backend discovery is not inference certification. See [Phase 03](../operations/phase-03.md).
+
+## Phase 04 synthetic execution
+
+The portable worker can opt into bounded synthetic jobs with a separate additive execution contract. Matching checks actual advertised OS/architecture, capabilities, exact runtime/dependency/toolchain/model labels, sandbox mode and known resources. Version requirements belong in exact labels. Resource reservations and concurrency limits are enforced transactionally. Existing registration-only workers receive no jobs. Windows/macOS profiles on a Windows host remain simulations. No shell, actual coding, models, GPU inference, checkpoint restoration or external side effects are executed. See [Phase 04](../operations/phase-04.md).

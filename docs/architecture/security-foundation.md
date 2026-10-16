@@ -22,4 +22,18 @@ Both founders are equal platform administrators. Platform authority cannot grant
 
 Public deployment additionally requires TLS, rate limits, secret storage, audit logging, backup/restore verification and explicit authorization. Proposed public hostnames are not domain ownership or deployment readiness. Full RBAC is Phase 09; its later position does not permit unauthenticated earlier remote or real-data operations.
 
-Authentication implementation remains deferred for these local metadata-only phases; this document establishes the boundary and prerequisites, not a claim that login exists.
+## Phase 03 minimum API and worker authentication
+
+New node APIs require independently provisioned bearer credentials. Offline local provisioning uses existing database authority; there is no unauthenticated enrollment endpoint. PostgreSQL stores only digests of random 256-bit secrets. Worker identities are bound to owners and reserved UUIDs. Revocation, owner-enabled checks and server-validated administrator roles are enforced on every operation. Both founders can administer shared health, while no endpoint grants host paths, shell access, tool exposure or changes to owner contribution policies.
+
+Administrator credentials are separate from worker credentials. Workers can register and heartbeat only their provisioned identity; they cannot inspect the node directory or call administration endpoints. Process session UUIDs reject duplicate live processes and stale heartbeat sessions. These are not execution attempt leases or scheduler fencing tokens.
+
+Local wrappers capture one-time provisioning stdout into ignored files without printing tokens. Newly created POSIX files/directories use 0600/0700. Windows inherits directory ACLs, so owner-private directories are required. Request logs and validation errors omit payload values and credentials. Lifecycle events persist safe audit details in PostgreSQL. Workers initiate outbound requests only, disable proxy/redirect forwarding and require certificate-validated HTTPS beyond loopback. No home-network inbound ports, remote integrations or public services are configured.
+
+This local minimum does not implement browser login, full workspace RBAC, remote invitations, rate limits, production secret storage or identity-preserving credential rotation. These remain prerequisites before real-data/remote/public exposure as applicable. See [ADR 0003](../decisions/0003-worker-identity-and-health.md) and [Phase 03 operations](../operations/phase-03.md).
+
+## Phase 04 job boundary
+
+Job submission/history require authenticated administrator credentials plus workspace ownership or explicit membership. Platform administration does not reveal private workspaces. Cancellation requires the job owner or workspace administrator. The node owner must have workspace access; cross-owner execution additionally requires explicit owner and workspace allowlists supplied by that node's individual credential, with a compatible non-dedicated policy. Health controls cannot grant execution consent. Contribution changes are audited and delivery/reports revalidate permissions.
+
+Only opt-in simulated workers can execute the bounded synthetic handlers. Fenced reports verify identity, session, attempt, generation, active ownership, lease and deadline under PostgreSQL locks. Terminal/stale attempts cannot write results. No shell, filesystem path, arbitrary code, SQL, model, MCP or production side-effect payload is accepted. API and databases retain existing local network restrictions. Full browser sessions, contributor/member RBAC, rate limiting and production hardening remain later gates. See [ADR 0004](../decisions/0004-durable-synthetic-scheduler.md).

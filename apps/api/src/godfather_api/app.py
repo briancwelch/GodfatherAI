@@ -1,20 +1,27 @@
 """Application factory: versioned foundation, health probes and request telemetry."""
 
+import asyncio
 import logging
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from time import perf_counter
 from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.concurrency import run_in_threadpool
 
 from godfather_api.config import Settings
 from godfather_api.database import Database
+from godfather_api.jobs import router as jobs_router
 from godfather_api.logging import configure_logging, correlation_id
+from godfather_api.nodes import router as nodes_router
+from godfather_api.nodes import sweep_health
+from godfather_api.scheduler import scheduler_tick
 
 logger = logging.getLogger("godfather.api")
 CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -36,10 +43,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.database = Database(config)
+        app.state.settings = config
+        stop = asyncio.Event()
+
+        async def monitor() -> None:
+            while not stop.is_set():
+                try:
+                    await run_in_threadpool(sweep_health, app.state.database, config)
+                    if config.scheduler_enabled:
+                        await run_in_threadpool(scheduler_tick, app.state.database, config)
+                except SQLAlchemyError as error:
+                    logger.warning(
+                        "health_scan.unavailable", extra={"error_type": type(error).__name__}
+                    )
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(stop.wait(), timeout=config.health_scan_seconds)
+
+        task = asyncio.create_task(monitor()) if config.health_monitor_enabled else None
         logger.info("application.started")
         try:
             yield
         finally:
+            stop.set()
+            if task is not None:
+                await task
             app.state.database.close()
             logger.info("application.stopped")
 
@@ -51,6 +78,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/api/v1/openapi.json",
     )
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:
+        # Never echo arbitrary payload values (including accidental credentials).
+        return JSONResponse(
+            {"detail": "Invalid request; consult the versioned API schema"}, status_code=422
+        )
 
     @app.middleware("http")
     async def request_context(
@@ -107,4 +141,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Health(status="not_ready")
 
     app.include_router(router)
+    app.include_router(nodes_router)
+    app.include_router(jobs_router)
     return app

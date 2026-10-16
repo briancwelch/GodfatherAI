@@ -26,7 +26,9 @@ def api(monkeypatch: pytest.MonkeyPatch, logs: StringIO) -> Iterator[tuple[TestC
     database = Mock(spec=Database)
     database.ready.return_value = True
     monkeypatch.setattr("godfather_api.app.Database", lambda _: database)
-    app = create_app(Settings(database_password=SecretStr("unit-secret")))
+    app = create_app(
+        Settings(database_password=SecretStr("unit-secret"), health_monitor_enabled=False)
+    )
     handler = logging.getLogger("godfather").handlers[0]
     assert isinstance(handler, logging.StreamHandler)
     handler.setStream(logs)
@@ -76,7 +78,8 @@ def test_api_version_and_health_contract(api: tuple[TestClient, Mock]) -> None:
     assert client.get("/health/ready").json() == {"status": "ready"}
     assert client.get("/docs").status_code == 404
     paths = client.get("/api/v1/openapi.json").json()["paths"]
-    assert set(paths) == {"/api/v1", "/health/live", "/health/ready"}
+    assert {"/api/v1", "/health/live", "/health/ready"} <= set(paths)
+    assert "/api/v1/workers/register" in paths
 
 
 def test_readiness_refuses_unmigrated_schema(api: tuple[TestClient, Mock]) -> None:

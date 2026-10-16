@@ -11,13 +11,14 @@ dev = [
     "mypy>=1.19,<2",
     "pytest>=9,<10",
     "ruff>=0.14,<1",
+    "types-psutil>=7.2,<8",
 ]
 
 [tool.uv]
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api"]
+members = ["apps/api", "packages/shared-schemas", "packages/worker"]
 
 [tool.ruff]
 target-version = "py312"
@@ -31,7 +32,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
 strict = true
-files = ["apps/api/src", "infrastructure/migrations", "scripts", "tests"]
+files = ["apps/api/src", "packages", "infrastructure/migrations", "scripts", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
