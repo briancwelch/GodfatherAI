@@ -48,14 +48,15 @@ Replace VERSION with the actual version; Intel uses `macos-x64`.
 ## Build checks and boundaries
 
 The workflow installs uv 0.13.1 and native Homebrew Python 3.14 with Tk support
-on each ephemeral runner. `uv sync --locked --all-packages` checks the application
-lockfile. The existing builder exports the locked worker-only dependency closure
+on each ephemeral runner. `uv sync --locked --package godfather-worker` checks the
+application lockfile and installs the worker plus development test tools, without
+unrelated coordinator/API dependencies. The existing builder exports the worker closure
 and installs build-only PyInstaller 6.22.3 in its isolated environment. Build hook
 transitive dependencies and Homebrew patch versions are not fully locked; these
 remain release-hardening work. No new application dependency is introduced.
 
 Checks cover the actual runner/interpreter architecture, Tk initialization,
-worker protocol/desktop unit tests, CLI `--help`, frozen app `--self-test`, code
+desktop lifecycle/security unit tests, CLI `--help`, frozen app `--self-test`, code
 signature integrity, Mach-O architectures, DMG integrity and SHA-256. A second
 smoke test mounts the finished DMG read-only, checks its guides/manifest, copies
 the app into a temporary directory, unmounts the DMG and launches the copy with
