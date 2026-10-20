@@ -2,9 +2,11 @@
 
 **macOS update:** The [Mac candidate](../../packages/worker/macos/README.md) now has
 local desktop, Keychain and owner-approved browser pairing source, an additive
-enrollment migration and native `.app`/DMG build automation. Native builds,
-Developer ID signing/notarization, physical acceptance and production deployment
-remain pending. [ADR 0010](../decisions/0010-macos-worker-browser-pairing.md) supersedes
+enrollment migration and native `.app`/DMG build automation. The manual
+[GitHub Actions build](macos-worker-actions.md) has passed native ARM64 and Intel
+packaging/startup checks and uploaded unsigned development candidates. Developer
+ID signing/notarization, physical acceptance and production deployment remain
+pending. [ADR 0010](../decisions/0010-macos-worker-browser-pairing.md) supersedes
 the manual-secret Mac enrollment proposal below. The rest of this document records
 the earlier cross-platform distribution plan; Windows/Linux native installers and
 secure-store adapters remain future work.

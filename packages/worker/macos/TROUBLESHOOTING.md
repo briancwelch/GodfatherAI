@@ -125,7 +125,7 @@ GPU hardware is visible locally as reported/unverified but not advertised as a
 scheduling budget. Existing Ollama may use its configured GPU and more CPU/RAM.
 Do not enable inference if the owner needs a hard host-resource ceiling.
 
-## Acceptance checklist (pending native execution)
+## Recipient acceptance checklist (pending physical execution)
 
 On separate clean arm64 and x86_64 Macs with no developer tools: verify checksum,
 install, Gatekeeper/Developer ID/ticket, UI scaling and keyboard use, Google invitation

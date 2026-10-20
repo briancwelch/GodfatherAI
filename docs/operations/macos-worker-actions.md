@@ -95,3 +95,30 @@ Architecture/linkage or isolated startup failures prevent artifact upload.
 For an existing/partial output error, use a fresh version or rerun on a fresh
 runner. If a runner is queued, check GitHub Actions availability and the private
 repository's Actions allowance/billing; no extra build service is required.
+
+## Verified initial build: 2026-10-20
+
+[Run 39502464147](https://github.com/briancwelch/GodfatherAI/actions/runs/39502464147)
+completed successfully on both requested native runners using worker source commit
+`af866acceee7840c47e927b53df8e7af22c6047d`. Candidate version:
+`0.1.0-dev.39502464147.1`. Both jobs passed their 22 desktop/package unit tests,
+standalone build, CLI help, frozen Tk/Keychain-framework startup, DMG mount/copy/
+unmount startup, architecture, bundled-library, signature-integrity and checksum
+checks. Both artifacts were uploaded. Their downloaded DMGs were independently
+hashed again on Windows and matched the packaged SHA-256 files:
+
+| Target    | DMG SHA-256                                                        |
+| --------- | ------------------------------------------------------------------ |
+| ARM64     | `ed3d87f1fff386764edd7b2fa7333254653138ef3264ca774062070273c6aa11` |
+| Intel x64 | `0fd6ea6f8e839f3ded676bd3e7a3cb07b2eba010a6278b02448e8c08b336c458` |
+
+Local configuration checks passed with actionlint 1.7.12, Prettier, Ruff and strict
+mypy. The broader focused Windows worker/desktop/package suite passed 49 tests.
+The exact worker-only CI dependency command was also checked in a separate local
+environment with 22 passing tests. The initial runs exposed an unnecessary
+API-only cryptography build dependency on Intel and an omitted root test-tools
+group; the final workflow fixes both without changing `uv.lock`.
+
+These results establish native CI packaging/startup only. The recipient acceptance
+and signing limitations above still apply. No production service, deployment,
+enrollment migration, private account or release publication was changed.
