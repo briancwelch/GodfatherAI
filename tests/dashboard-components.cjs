@@ -23,6 +23,54 @@ const contracts = require("../apps/dashboard/src/lib/contracts.ts");
 const server = require("../apps/dashboard/src/lib/control-server.ts");
 const login = require("../apps/dashboard/src/components/google-login.tsx");
 const administration = require("../apps/dashboard/src/components/administration.tsx");
+const shell = require("../apps/dashboard/src/components/application-shell.tsx");
+
+test("desktop shell uses backend environment and accessible section navigation", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      shell.ApplicationShell,
+      {
+        section: "agents",
+        data: {
+          environment: "production",
+          generated_at: "2026-10-20T20:00:00Z",
+          workspace_id: "scope",
+          workspaces: [{ id: "scope", name: "Private work" }],
+        },
+        account: { display_name: "Test owner", roles: ["platform_admin"] },
+        refresh: () => {},
+      },
+      React.createElement("main", { id: "main-content" }, "Workspace"),
+    ),
+  );
+  assert.match(html, /production environment/);
+  assert.match(html, /Agents ribbon/);
+  assert.match(html, /aria-current="page"/);
+  assert.match(html, /Private work/);
+  assert.ok(!/TRUSTED LOCAL|Phase 07|ElementCAD/.test(html));
+  const unknown = renderToStaticMarkup(
+    React.createElement(shell.ApplicationShell, {
+      section: "overview",
+      refresh: () => {},
+    }),
+  );
+  assert.match(unknown, /Environment unavailable/);
+  assert.ok(!unknown.includes("production environment"));
+});
+
+test("unavailable ribbon commands explain why and remain keyboard discoverable", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(shell.UnavailableCommand, {
+      label: "Run",
+      reason: "Select an enabled version",
+    }),
+  );
+  assert.match(html, /tabIndex="0"|tabindex="0"/);
+  assert.match(html, /disabled/);
+  assert.match(html, /Select an enabled version/);
+  assert.equal(server.allowedPath("agent-options", "GET"), true);
+  assert.equal(server.allowedPath("agent-options", "POST"), false);
+});
 
 test("Google sign-in has invitation-only onboarding and truthful unavailable state", () => {
   const html = renderToStaticMarkup(

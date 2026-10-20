@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { ConfirmAction, DataTable, JsonDetails } from "./operational";
 import type { Snapshot } from "../lib/contracts";
 
@@ -52,11 +53,6 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
     );
   return response.json() as Promise<T>;
 }
-const csv = (value: FormDataEntryValue | null) =>
-  String(value ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
 
 export default function Administration({
   initialUser,
@@ -82,6 +78,8 @@ export default function Administration({
     | null
   >(null);
   const [workspace, setWorkspace] = useState("");
+  const [catalog, setCatalog] = useState<string[]>([]);
+  const [tools, setTools] = useState<string[]>([]);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [secret, setSecret] = useState<unknown>(null);
   const [error, setError] = useState("");
@@ -91,6 +89,9 @@ export default function Administration({
   const load = useCallback(async () => {
     const current = await call<Account>("auth/me");
     setUser(current);
+    const registry =
+      await call<{ reference: { name: string; version: number } }[]>("tools");
+    setTools(registry.map((t) => `${t.reference.name}@${t.reference.version}`));
     setSnapshot(await call<Snapshot>("command-center"));
     setCredentials(
       await call<MachineCredential[]>(
@@ -130,6 +131,12 @@ export default function Administration({
       void call<Membership>(`administration/workspaces/${workspace}/members`)
         .then((data) => {
           if (active) setMembership(data);
+          return call<{ catalog: { identifier: string }[] }>(
+            `models/install-options?workspace_id=${workspace}`,
+          );
+        })
+        .then((options) => {
+          if (active) setCatalog(options.catalog.map((m) => m.identifier));
         })
         .catch((e) => {
           if (active) setError(String(e.message));
@@ -164,512 +171,603 @@ export default function Administration({
   }
   const selected = snapshot?.workspaces.find((w) => w.id === workspace);
   return (
-    <main id="main-content" className="command-body administration-page">
-      <div className="page-heading">
-        <div>
-          <a href="/">The Godfather / Command Center</a>
-          <h1>Account / Administration</h1>
-          <p>Persisted identities, owner permissions and security history.</p>
+    <ApplicationShell
+      section="administration"
+      data={snapshot}
+      account={user}
+      refresh={() => void load().catch((e) => setError(e.message))}
+      ribbon={
+        <RibbonGroup label="Administration">
+          {[
+            "Users",
+            "Invitations",
+            "Workspaces",
+            "Permissions",
+            "Settings",
+          ].map((label) => (
+            <button
+              className="action secondary"
+              key={label}
+              disabled={!platform && ["Users", "Invitations"].includes(label)}
+              title={
+                !platform && ["Users", "Invitations"].includes(label)
+                  ? "Platform administration required"
+                  : undefined
+              }
+              onClick={() => {
+                const heading = [...document.querySelectorAll("main h2")].find(
+                  (h) =>
+                    h.textContent ===
+                    ({ Permissions: "Workspaces", Settings: "Your account" }[
+                      label
+                    ] || label),
+                );
+                heading?.scrollIntoView({ block: "start", behavior: "smooth" });
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </RibbonGroup>
+      }
+    >
+      <main id="main-content" className="command-body administration-page">
+        <div className="page-heading">
+          <div>
+            <a href="/">The Godfather / Command Center</a>
+            <h1>Account / Administration</h1>
+            <p>Persisted identities, owner permissions and security history.</p>
+          </div>
+          <button
+            className="action"
+            disabled={busy}
+            onClick={() => void load().catch((e) => setError(e.message))}
+          >
+            Refresh
+          </button>
         </div>
-        <button
-          className="action"
-          disabled={busy}
-          onClick={() => void load().catch((e) => setError(e.message))}
-        >
-          Refresh
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="notice error">
-          {error} <a href="/">Return to sign-in</a>
-        </p>
-      )}
-      {busy && <p role="status">Waiting for backend confirmation…</p>}
-      <section className="panel">
-        <h2>Your account</h2>
-        <p>
-          {user.display_name} · {user.email}
-        </p>
-        <p>
-          {user.roles.join(", ")} · Account ID {user.id}
-        </p>
-        <ConfirmAction
-          label="Revoke all my sessions"
-          description="Sign out every application session for your account. Google sessions remain independent."
-          onConfirm={async () => {
-            const response = await fetch("/api/auth/revoke", {
-              method: "POST",
-            });
-            if (!response.ok) throw new Error("Revocation not confirmed");
-            window.location.assign("/");
-          }}
-        />
-        <button
-          className="action"
-          onClick={async () => {
-            const response = await fetch("/api/auth/logout", {
-              method: "POST",
-            });
-            if (response.ok) window.location.assign("/");
-            else setError("Logout not confirmed.");
-          }}
-        >
-          Sign out
-        </button>
-      </section>
-      {secret !== null && (
-        <section className="panel">
-          <h2>One-time delivery</h2>
-          <p>
-            Deliver this secret through an approved private channel. It will not
-            be shown again. Never paste it into logs or source control.
+        {error && (
+          <p role="alert" className="notice error">
+            {error} <a href="/">Return to sign-in</a>
           </p>
-          <pre>{JSON.stringify(secret, null, 2)}</pre>
-          <button className="action" onClick={() => setSecret(null)}>
-            Dismiss secret
+        )}
+        {busy && <p role="status">Waiting for backend confirmation…</p>}
+        <section className="panel">
+          <h2>Your account</h2>
+          <p>
+            {user.display_name} · {user.email}
+          </p>
+          <p>
+            {user.roles.join(", ")} · Account ID {user.id}
+          </p>
+          <ConfirmAction
+            label="Revoke all my sessions"
+            description="Sign out every application session for your account. Google sessions remain independent."
+            onConfirm={async () => {
+              const response = await fetch("/api/auth/revoke", {
+                method: "POST",
+              });
+              if (!response.ok) throw new Error("Revocation not confirmed");
+              window.location.assign("/");
+            }}
+          />
+          <button
+            className="action"
+            onClick={async () => {
+              const response = await fetch("/api/auth/logout", {
+                method: "POST",
+              });
+              if (response.ok) window.location.assign("/");
+              else setError("Logout not confirmed.");
+            }}
+          >
+            Sign out
           </button>
         </section>
-      )}
-      <section className="panel">
-        <h2>Workspaces</h2>
-        {!snapshot ? (
-          <p role="status">Loading authorized workspaces…</p>
-        ) : (
-          <label>
-            Workspace
-            <select
-              value={workspace}
-              onChange={(e) => {
-                setMembership(null);
-                setWorkspace(e.target.value);
-              }}
-            >
-              <option value="">Select workspace</option>
-              {snapshot.workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <form
-          method="post"
-          onSubmit={(e) => {
-            const f = form(e);
-            void operate("administration/workspaces", { name: f.get("name") });
-          }}
-        >
-          <label>
-            New private workspace name
-            <input name="name" required maxLength={200} />
-          </label>
-          <button className="action" disabled={busy}>
-            Create workspace
-          </button>
-        </form>
-        {membership && (
-          <>
+        {secret !== null && (
+          <section className="panel">
+            <h2>One-time delivery</h2>
             <p>
-              Owner {membership.owner_id} ·{" "}
-              {membership.shared ? "Explicitly shared" : "Private"}
+              Deliver this secret through an approved private channel. It will
+              not be shown again. Never paste it into logs or source control.
             </p>
-            <DataTable
-              caption="Workspace members"
-              rows={membership.members}
-              rowKey={(m) => m.user_id}
-              columns={[
-                { label: "Account ID", cell: (m) => m.user_id },
-                { label: "Role", cell: (m) => m.role },
-              ]}
-            />
-            <JsonDetails
-              label="Workspace model and tool permissions"
-              value={{
-                models: membership.allowed_models,
-                tools: membership.allowed_tools,
-              }}
-            />
-          </>
+            <pre>{JSON.stringify(secret, null, 2)}</pre>
+            <button className="action" onClick={() => setSecret(null)}>
+              Dismiss secret
+            </button>
+          </section>
         )}
-        {selected?.can_manage && (
-          <>
-            <form
-              method="post"
-              onSubmit={(e) => {
-                const f = form(e);
-                if (window.confirm("Apply this workspace membership change?"))
-                  void operate(
-                    `administration/workspaces/${workspace}/members`,
-                    { user_id: f.get("user_id"), role: f.get("role") },
-                  );
-              }}
-            >
-              <label>
-                Invited account ID
-                <input name="user_id" required />
-              </label>
-              <label>
-                Workspace role
-                <select name="role">
-                  <option value="member">Member</option>
-                  <option value="admin">Workspace administrator</option>
-                  <option value="remove">Remove access</option>
-                </select>
-              </label>
-              <button className="action" disabled={busy}>
-                Apply membership
-              </button>
-            </form>
-            <form
-              method="post"
-              key={workspace}
-              onSubmit={(e) => {
-                const f = form(e);
-                if (
-                  window.confirm(
-                    "Apply model and tool restrictions? Active execution rechecks these permissions.",
-                  )
-                )
-                  void operate(
-                    `administration/workspaces/${workspace}/policy`,
-                    {
-                      allowed_models: csv(f.get("models")),
-                      allowed_tools: csv(f.get("tools")),
-                    },
-                  );
-              }}
-            >
-              <label>
-                Allowed exact model identifiers (comma separated)
-                <input
-                  name="models"
-                  defaultValue={membership?.allowed_models?.join(", ") ?? ""}
-                />
-              </label>
-              <label>
-                Allowed read-only tools (name@version, comma separated)
-                <input
-                  name="tools"
-                  defaultValue={membership?.allowed_tools?.join(", ") ?? ""}
-                />
-              </label>
-              <button className="action" disabled={busy}>
-                Apply execution policy
-              </button>
-              <p>
-                Empty lists deny model/tool use. Exact model selection is
-                required under a model allowlist. Node-owner grants also apply.
-              </p>
-            </form>
-          </>
-        )}
-      </section>
-      {(user.permissions.includes("nodes.contribute") ||
-        !!credentials?.length) && (
         <section className="panel">
-          <h2>Owned node onboarding</h2>
-          <p>
-            Generate a machine credential for a worker you own. Configure
-            contribution limits and tool grants in the worker’s private local
-            configuration. Machine credentials are independent of Google login.
-          </p>
-          {user.permissions.includes("nodes.contribute") && (
-            <form
-              method="post"
-              onSubmit={(e) => {
-                const f = form(e);
-                void operate(
-                  "administration/node-credentials",
-                  { name: f.get("name") },
-                  true,
-                );
-              }}
-            >
-              <label>
-                Unique node name
-                <input name="name" required maxLength={100} />
-              </label>
-              <button className="action" disabled={busy}>
-                Create worker credential
-              </button>
-            </form>
+          <h2>Workspaces</h2>
+          {!snapshot ? (
+            <p role="status">Loading authorized workspaces…</p>
+          ) : (
+            <label>
+              Workspace
+              <select
+                value={workspace}
+                onChange={(e) => {
+                  setMembership(null);
+                  setWorkspace(e.target.value);
+                }}
+              >
+                <option value="">Select workspace</option>
+                {snapshot.workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-          {credentials && (
-            <DataTable
-              caption="Owned worker credentials"
-              rows={credentials}
-              rowKey={(c) => c.id}
-              columns={[
-                {
-                  label: "Node / credential",
-                  cell: (c) => (
-                    <>
-                      {c.name}
-                      <small>{c.id}</small>
-                    </>
-                  ),
-                },
-                {
-                  label: "Status",
-                  cell: (c) =>
-                    c.revoked
-                      ? "Revoked"
-                      : c.node_id
-                        ? "Registered"
-                        : "Awaiting registration",
-                },
-                {
-                  label: "Control",
-                  cell: (c) =>
-                    c.revoked ? (
-                      "Unavailable"
-                    ) : (
-                      <ConfirmAction
-                        label="Revoke worker credential"
-                        description="Permanently invalidate this owned machine credential, including one not yet registered."
-                        onConfirm={() =>
-                          operate(
-                            `administration/node-credentials/${c.id}/revoke`,
-                            {},
-                          )
-                        }
+          <form
+            method="post"
+            onSubmit={(e) => {
+              const f = form(e);
+              void operate("administration/workspaces", {
+                name: f.get("name"),
+              });
+            }}
+          >
+            <label>
+              New private workspace name
+              <input name="name" required maxLength={200} />
+            </label>
+            <button className="action" disabled={busy}>
+              Create workspace
+            </button>
+          </form>
+          {membership && (
+            <>
+              <p>
+                Owner {membership.owner_id} ·{" "}
+                {membership.shared ? "Explicitly shared" : "Private"}
+              </p>
+              <DataTable
+                caption="Workspace members"
+                rows={membership.members}
+                rowKey={(m) => m.user_id}
+                columns={[
+                  { label: "Account ID", cell: (m) => m.user_id },
+                  { label: "Role", cell: (m) => m.role },
+                ]}
+              />
+              <JsonDetails
+                label="Workspace model and tool permissions"
+                value={{
+                  models: membership.allowed_models,
+                  tools: membership.allowed_tools,
+                }}
+              />
+            </>
+          )}
+          {selected?.can_manage && (
+            <>
+              <form
+                method="post"
+                onSubmit={(e) => {
+                  const f = form(e);
+                  if (window.confirm("Apply this workspace membership change?"))
+                    void operate(
+                      `administration/workspaces/${workspace}/members`,
+                      { user_id: f.get("user_id"), role: f.get("role") },
+                    );
+                }}
+              >
+                <label>
+                  Invited account
+                  <select name="user_id" required>
+                    <option value="">Select an account</option>
+                    {[
+                      ...new Set([
+                        ...(accounts || []).map((a) => a.id),
+                        ...(membership?.members || []).map((m) => m.user_id),
+                      ]),
+                    ].map((id) => (
+                      <option key={id} value={id}>
+                        {accounts?.find((a) => a.id === id)?.email ||
+                          `Existing workspace member ${id.slice(0, 8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Workspace role
+                  <select name="role">
+                    <option value="member">Member</option>
+                    <option value="admin">Workspace administrator</option>
+                    <option value="remove">Remove access</option>
+                  </select>
+                </label>
+                <button className="action" disabled={busy}>
+                  Apply membership
+                </button>
+              </form>
+              <form
+                method="post"
+                key={`${workspace}:${JSON.stringify(membership?.allowed_models)}:${JSON.stringify(membership?.allowed_tools)}`}
+                onSubmit={(e) => {
+                  const f = form(e);
+                  if (
+                    window.confirm(
+                      "Apply model and tool restrictions? Active execution rechecks these permissions.",
+                    )
+                  )
+                    void operate(
+                      `administration/workspaces/${workspace}/policy`,
+                      {
+                        allowed_models: f.getAll("models"),
+                        allowed_tools: f.getAll("tools"),
+                      },
+                    );
+                }}
+              >
+                <fieldset>
+                  <legend>Allowed models</legend>
+                  {[
+                    ...new Set([
+                      ...catalog,
+                      ...(snapshot?.models || []).map(
+                        (m) => m.deployment.identifier,
+                      ),
+                      ...(membership?.allowed_models || []),
+                    ]),
+                  ].map((model) => (
+                    <label className="check-label" key={model}>
+                      <input
+                        type="checkbox"
+                        name="models"
+                        value={model}
+                        defaultChecked={membership?.allowed_models?.includes(
+                          model,
+                        )}
                       />
-                    ),
-                },
-              ]}
-            />
+                      {model}
+                    </label>
+                  ))}
+                </fieldset>
+                <fieldset>
+                  <legend>Allowed read-only tools</legend>
+                  {[
+                    ...new Set([
+                      ...tools,
+                      ...(membership?.allowed_tools || []),
+                    ]),
+                  ].map((tool) => (
+                    <label className="check-label" key={tool}>
+                      <input
+                        type="checkbox"
+                        name="tools"
+                        value={tool}
+                        defaultChecked={membership?.allowed_tools?.includes(
+                          tool,
+                        )}
+                      />
+                      {tool}
+                    </label>
+                  ))}
+                </fieldset>
+                <button className="action" disabled={busy}>
+                  Apply execution policy
+                </button>
+                <p>
+                  Empty lists deny model/tool use. Exact model selection is
+                  required under a model allowlist. Node-owner grants also
+                  apply.
+                </p>
+              </form>
+            </>
           )}
-          <a href="/nodes">Inspect and control registered nodes</a>
-          {!platform && (
+        </section>
+        {(user.permissions.includes("nodes.contribute") ||
+          !!credentials?.length) && (
+          <section className="panel">
+            <h2>Owned node onboarding</h2>
+            <p>
+              Generate a machine credential for a worker you own. Configure
+              contribution limits and tool grants in the worker’s private local
+              configuration. Machine credentials are independent of Google
+              login.
+            </p>
+            {user.permissions.includes("nodes.contribute") && (
+              <form
+                method="post"
+                onSubmit={(e) => {
+                  const f = form(e);
+                  void operate(
+                    "administration/node-credentials",
+                    { name: f.get("name") },
+                    true,
+                  );
+                }}
+              >
+                <label>
+                  Unique node name
+                  <input name="name" required maxLength={100} />
+                </label>
+                <button className="action" disabled={busy}>
+                  Create worker credential
+                </button>
+              </form>
+            )}
+            {credentials && (
+              <DataTable
+                caption="Owned worker credentials"
+                rows={credentials}
+                rowKey={(c) => c.id}
+                columns={[
+                  {
+                    label: "Node / credential",
+                    cell: (c) => (
+                      <>
+                        {c.name}
+                        <small>{c.id}</small>
+                      </>
+                    ),
+                  },
+                  {
+                    label: "Status",
+                    cell: (c) =>
+                      c.revoked
+                        ? "Revoked"
+                        : c.node_id
+                          ? "Registered"
+                          : "Awaiting registration",
+                  },
+                  {
+                    label: "Control",
+                    cell: (c) =>
+                      c.revoked ? (
+                        "Unavailable"
+                      ) : (
+                        <ConfirmAction
+                          label="Revoke worker credential"
+                          description="Permanently invalidate this owned machine credential, including one not yet registered."
+                          onConfirm={() =>
+                            operate(
+                              `administration/node-credentials/${c.id}/revoke`,
+                              {},
+                            )
+                          }
+                        />
+                      ),
+                  },
+                ]}
+              />
+            )}
+            <a href="/nodes">Inspect and control registered nodes</a>
+            {!platform && (
+              <div className="actions">
+                <button
+                  className="action"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - 100))}
+                >
+                  Previous credentials
+                </button>
+                <button
+                  className="action"
+                  disabled={(credentials?.length ?? 0) < 100}
+                  onClick={() => setOffset(offset + 100)}
+                >
+                  Next credentials
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+        {platform && (
+          <>
+            <section className="panel">
+              <h2>Invitations</h2>
+              <form
+                method="post"
+                onSubmit={(e) => {
+                  const f = form(e);
+                  void operate(
+                    "administration/invitations",
+                    {
+                      email: f.get("email"),
+                      roles: f.getAll("roles"),
+                      hours: Number(f.get("hours")),
+                    },
+                    true,
+                  );
+                }}
+              >
+                <label>
+                  Google account email
+                  <input name="email" type="email" required maxLength={320} />
+                </label>
+                <RoleChoices selected={["member"]} />
+                <label>
+                  Valid hours
+                  <input
+                    name="hours"
+                    type="number"
+                    min={1}
+                    max={168}
+                    defaultValue={24}
+                    required
+                  />
+                </label>
+                <button className="action" disabled={busy}>
+                  Create invitation
+                </button>
+              </form>
+              {invitations === null ? (
+                <p>Loading invitations…</p>
+              ) : (
+                <DataTable
+                  caption="Persisted invitations"
+                  rows={invitations}
+                  rowKey={(i) => i.id}
+                  columns={[
+                    {
+                      label: "Email / roles",
+                      cell: (i) => `${i.email} · ${i.roles.join(", ")}`,
+                    },
+                    {
+                      label: "Status",
+                      cell: (i) =>
+                        i.revoked
+                          ? "Revoked"
+                          : i.used_by
+                            ? "Used"
+                            : new Date(i.expires_at) <= new Date()
+                              ? "Expired"
+                              : `Expires ${new Date(i.expires_at).toLocaleString()}`,
+                    },
+                    {
+                      label: "Control",
+                      cell: (i) =>
+                        !i.revoked && !i.used_by ? (
+                          <ConfirmAction
+                            label="Revoke invitation"
+                            description="Permanently prevent this unused invitation from activating an account."
+                            onConfirm={() =>
+                              operate(
+                                `administration/invitations/${i.id}/revoke`,
+                                {},
+                              )
+                            }
+                          />
+                        ) : (
+                          "Unavailable"
+                        ),
+                    },
+                  ]}
+                />
+              )}
+            </section>
+            <section className="panel">
+              <h2>Users</h2>
+              <p>
+                Google-linked application identities. Existing local identities
+                require explicit offline linking; ownership and history are
+                preserved.
+              </p>
+              {accounts === null ? (
+                <p>Loading users…</p>
+              ) : accounts.length === 0 ? (
+                <p>No linked users.</p>
+              ) : (
+                accounts.map((account) => (
+                  <form
+                    method="post"
+                    className="panel"
+                    key={
+                      account.id +
+                      account.roles.join() +
+                      String(account.enabled)
+                    }
+                    onSubmit={(e) => {
+                      const f = form(e);
+                      if (
+                        window.confirm(
+                          "Apply roles/account status and revoke this user’s sessions?",
+                        )
+                      )
+                        void operate(`administration/users/${account.id}`, {
+                          roles: f.getAll("roles"),
+                          enabled: f.has("enabled"),
+                        });
+                    }}
+                  >
+                    <h3>{account.display_name}</h3>
+                    <p>
+                      {account.email} · {account.id}
+                    </p>
+                    <RoleChoices selected={account.roles} />
+                    <label>
+                      <input
+                        type="checkbox"
+                        name="enabled"
+                        defaultChecked={account.enabled}
+                      />{" "}
+                      Account enabled
+                    </label>
+                    <button className="action" disabled={busy}>
+                      Save account and revoke sessions
+                    </button>
+                    <ConfirmAction
+                      label="Revoke user sessions"
+                      description="Invalidate every application session for this user."
+                      onConfirm={() =>
+                        operate(
+                          `administration/users/${account.id}/revoke-sessions`,
+                          {},
+                        )
+                      }
+                    />
+                  </form>
+                ))
+              )}
+            </section>
+            <section className="panel">
+              <h2>Security audit</h2>
+              {audit === null ? (
+                <p>Loading audit history…</p>
+              ) : (
+                <DataTable
+                  caption="Durable security events"
+                  rows={audit}
+                  rowKey={(e) => e.id}
+                  columns={[
+                    {
+                      label: "Time",
+                      cell: (e) => new Date(e.timestamp).toLocaleString(),
+                    },
+                    {
+                      label: "Actor / action",
+                      cell: (e) =>
+                        `${e.actor_id ?? "Unauthenticated"} · ${e.action}`,
+                    },
+                    {
+                      label: "Details / correlation",
+                      cell: (e) => (
+                        <>
+                          <JsonDetails
+                            label="Outcome and target"
+                            value={e.details}
+                          />
+                          {e.correlation_id}
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </section>
             <div className="actions">
               <button
                 className="action"
                 disabled={offset === 0}
                 onClick={() => setOffset(Math.max(0, offset - 100))}
               >
-                Previous credentials
+                Previous 100
               </button>
+              <span>Records from {offset + 1}</span>
               <button
                 className="action"
-                disabled={(credentials?.length ?? 0) < 100}
+                disabled={
+                  !accounts ||
+                  Math.max(
+                    accounts.length,
+                    invitations?.length ?? 0,
+                    audit?.length ?? 0,
+                    credentials?.length ?? 0,
+                  ) < 100
+                }
                 onClick={() => setOffset(offset + 100)}
               >
-                Next credentials
+                Next 100
               </button>
             </div>
-          )}
-        </section>
-      )}
-      {platform && (
-        <>
-          <section className="panel">
-            <h2>Invitations</h2>
-            <form
-              method="post"
-              onSubmit={(e) => {
-                const f = form(e);
-                void operate(
-                  "administration/invitations",
-                  {
-                    email: f.get("email"),
-                    roles: f.getAll("roles"),
-                    hours: Number(f.get("hours")),
-                  },
-                  true,
-                );
-              }}
-            >
-              <label>
-                Google account email
-                <input name="email" type="email" required maxLength={320} />
-              </label>
-              <RoleChoices selected={["member"]} />
-              <label>
-                Valid hours
-                <input
-                  name="hours"
-                  type="number"
-                  min={1}
-                  max={168}
-                  defaultValue={24}
-                  required
-                />
-              </label>
-              <button className="action" disabled={busy}>
-                Create invitation
-              </button>
-            </form>
-            {invitations === null ? (
-              <p>Loading invitations…</p>
-            ) : (
-              <DataTable
-                caption="Persisted invitations"
-                rows={invitations}
-                rowKey={(i) => i.id}
-                columns={[
-                  {
-                    label: "Email / roles",
-                    cell: (i) => `${i.email} · ${i.roles.join(", ")}`,
-                  },
-                  {
-                    label: "Status",
-                    cell: (i) =>
-                      i.revoked
-                        ? "Revoked"
-                        : i.used_by
-                          ? "Used"
-                          : new Date(i.expires_at) <= new Date()
-                            ? "Expired"
-                            : `Expires ${new Date(i.expires_at).toLocaleString()}`,
-                  },
-                  {
-                    label: "Control",
-                    cell: (i) =>
-                      !i.revoked && !i.used_by ? (
-                        <ConfirmAction
-                          label="Revoke invitation"
-                          description="Permanently prevent this unused invitation from activating an account."
-                          onConfirm={() =>
-                            operate(
-                              `administration/invitations/${i.id}/revoke`,
-                              {},
-                            )
-                          }
-                        />
-                      ) : (
-                        "Unavailable"
-                      ),
-                  },
-                ]}
-              />
-            )}
-          </section>
-          <section className="panel">
-            <h2>Users</h2>
-            <p>
-              Google-linked application identities. Existing local identities
-              require explicit offline linking; ownership and history are
-              preserved.
-            </p>
-            {accounts === null ? (
-              <p>Loading users…</p>
-            ) : accounts.length === 0 ? (
-              <p>No linked users.</p>
-            ) : (
-              accounts.map((account) => (
-                <form
-                  method="post"
-                  className="panel"
-                  key={
-                    account.id + account.roles.join() + String(account.enabled)
-                  }
-                  onSubmit={(e) => {
-                    const f = form(e);
-                    if (
-                      window.confirm(
-                        "Apply roles/account status and revoke this user’s sessions?",
-                      )
-                    )
-                      void operate(`administration/users/${account.id}`, {
-                        roles: f.getAll("roles"),
-                        enabled: f.has("enabled"),
-                      });
-                  }}
-                >
-                  <h3>{account.display_name}</h3>
-                  <p>
-                    {account.email} · {account.id}
-                  </p>
-                  <RoleChoices selected={account.roles} />
-                  <label>
-                    <input
-                      type="checkbox"
-                      name="enabled"
-                      defaultChecked={account.enabled}
-                    />{" "}
-                    Account enabled
-                  </label>
-                  <button className="action" disabled={busy}>
-                    Save account and revoke sessions
-                  </button>
-                  <ConfirmAction
-                    label="Revoke user sessions"
-                    description="Invalidate every application session for this user."
-                    onConfirm={() =>
-                      operate(
-                        `administration/users/${account.id}/revoke-sessions`,
-                        {},
-                      )
-                    }
-                  />
-                </form>
-              ))
-            )}
-          </section>
-          <section className="panel">
-            <h2>Security audit</h2>
-            {audit === null ? (
-              <p>Loading audit history…</p>
-            ) : (
-              <DataTable
-                caption="Durable security events"
-                rows={audit}
-                rowKey={(e) => e.id}
-                columns={[
-                  {
-                    label: "Time",
-                    cell: (e) => new Date(e.timestamp).toLocaleString(),
-                  },
-                  {
-                    label: "Actor / action",
-                    cell: (e) =>
-                      `${e.actor_id ?? "Unauthenticated"} · ${e.action}`,
-                  },
-                  {
-                    label: "Details / correlation",
-                    cell: (e) => (
-                      <>
-                        <JsonDetails
-                          label="Outcome and target"
-                          value={e.details}
-                        />
-                        {e.correlation_id}
-                      </>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </section>
-          <div className="actions">
-            <button
-              className="action"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - 100))}
-            >
-              Previous 100
-            </button>
-            <span>Records from {offset + 1}</span>
-            <button
-              className="action"
-              disabled={
-                !accounts ||
-                Math.max(
-                  accounts.length,
-                  invitations?.length ?? 0,
-                  audit?.length ?? 0,
-                  credentials?.length ?? 0,
-                ) < 100
-              }
-              onClick={() => setOffset(offset + 100)}
-            >
-              Next 100
-            </button>
-          </div>
-        </>
-      )}
-    </main>
+          </>
+        )}
+      </main>
+    </ApplicationShell>
   );
 }
 

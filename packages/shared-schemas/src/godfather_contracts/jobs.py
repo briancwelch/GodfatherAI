@@ -18,6 +18,7 @@ from godfather_contracts.inference import (
     ProviderErrorCode,
     StreamUpdate,
 )
+from godfather_contracts.model_management import ModelInstallInput, ModelInstallResult
 
 JobState = Literal[
     "PENDING", "ASSIGNED", "RUNNING", "RETRY_WAIT", "COMPLETED", "FAILED", "CANCELLED"
@@ -76,7 +77,7 @@ class JobView(Contract):
     status: JobState
     priority: int
     requirements: Requirements
-    input: SyntheticInput | InferenceInput | WorkflowInput
+    input: SyntheticInput | InferenceInput | WorkflowInput | ModelInstallInput
     timeout_seconds: int
     retry: RetryPolicy
     assigned_node_id: UUID | None
@@ -87,7 +88,7 @@ class JobView(Contract):
     cancel_requested_at: datetime | None
     next_run_at: datetime | None
     created_at: datetime
-    result: SyntheticResult | InferenceResult | WorkflowResult | None
+    result: SyntheticResult | InferenceResult | WorkflowResult | ModelInstallResult | None
 
 
 class Assignment(Contract):
@@ -116,7 +117,7 @@ class PollResponse(Contract):
 class JobReport(AttemptIdentity):
     action: Literal["ack", "start", "progress", "renew", "complete", "fail", "cancelled", "output"]
     progress: int | None = Field(default=None, ge=0, le=100)
-    result: SyntheticResult | InferenceResult | WorkflowResult | None = None
+    result: SyntheticResult | InferenceResult | WorkflowResult | ModelInstallResult | None = None
     output: StreamUpdate | None = None
     error_code: (
         Literal[

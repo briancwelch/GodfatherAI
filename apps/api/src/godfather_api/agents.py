@@ -32,12 +32,13 @@ from godfather_api.models import (
     Checkpoint,
     Event,
     Job,
+    Node,
     WorkflowRun,
     WorkflowStepRecord,
     Workspace,
     WorkspaceMember,
 )
-from godfather_api.nodes import SessionDep, authenticate, node_view
+from godfather_api.nodes import SessionDep, authenticate, node_view, node_visibility
 from godfather_api.scheduler import job_event, workspace_access
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer(auto_error=False))])
@@ -225,6 +226,38 @@ def control_agent(
 def tools(request: Request, session: SessionDep) -> list[dict[str, object]]:
     authenticate(request, session, "human")
     return [tool.model_dump(mode="json") for tool in REGISTRY.values()]
+
+
+@router.get("/agent-options")
+def agent_options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
+    """Actual runtime catalog and owner-visible capability advertisements, no credentials."""
+    from godfather_api import inference
+
+    actor = authenticate(request, session, "human")
+    if not workspace_access(session, actor.owner_id, workspace_id):
+        raise HTTPException(404, "Workspace not found or permission denied")
+    workspace = session.get(Workspace, workspace_id)
+    assert workspace is not None
+    capabilities: set[str] = set()
+    for node in session.scalars(select(Node).where(node_visibility(session, actor.owner_id))):
+        view = node_view(session, node)
+        capabilities.update(view.primary_capabilities)
+        capabilities.update(view.secondary_capabilities)
+    return {
+        "capabilities": sorted(capabilities),
+        "models": inference.models(workspace_id, request, session, 200, 0),
+        "model_limit": 200,
+        "tools": [
+            tool.model_dump(mode="json")
+            for tool in REGISTRY.values()
+            if workspace.allowed_tools is None
+            or f"{tool.reference.name}@{tool.reference.version}" in workspace.allowed_tools
+        ],
+        "workflows": [
+            {"id": "text", "name": "Read-only model response", "output_schema": "text"},
+            {"id": "plan", "name": "Structured plan", "output_schema": "plan"},
+        ],
+    }
 
 
 @router.post("/workflow/jobs", response_model=JobView, status_code=201)

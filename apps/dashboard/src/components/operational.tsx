@@ -35,11 +35,15 @@ export function DataTable<T>({
   rows,
   columns,
   rowKey,
+  selectedKey,
+  onSelect,
 }: {
   caption: string;
   rows: T[];
   columns: { label: string; cell: (row: T) => ReactNode }[];
   rowKey: (row: T) => string;
+  selectedKey?: string;
+  onSelect?: (row: T) => void;
 }) {
   return (
     <div
@@ -61,7 +65,11 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={rowKey(row)}>
+            <tr
+              key={rowKey(row)}
+              aria-selected={onSelect ? selectedKey === rowKey(row) : undefined}
+              onClick={onSelect ? () => onSelect(row) : undefined}
+            >
               {columns.map((c) => (
                 <td key={c.label}>{c.cell(row)}</td>
               ))}

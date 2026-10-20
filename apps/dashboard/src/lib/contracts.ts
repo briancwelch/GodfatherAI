@@ -96,7 +96,16 @@ export interface AgentInfo {
     workflow: {
       id: string;
       version: number;
-      steps: { id: string; kind: string }[];
+      steps: {
+        id: string;
+        kind: string;
+        instruction?: string;
+        output_schema?: string;
+        input_step?: string | null;
+        tool?: { name: string; version: number } | null;
+        timeout_seconds?: number;
+        parameters?: Record<string, Json>;
+      }[];
     };
   };
 }
@@ -119,6 +128,7 @@ export interface EventPage {
   limit: number;
 }
 export interface Snapshot {
+  environment: "local" | "test" | "production";
   generated_at: string;
   actor_id: string;
   workspace_id: string | null;

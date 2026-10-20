@@ -70,6 +70,9 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
+    "agent-options",
+    "tools",
+    "models/install-options",
     "auth/me",
     "administration/(users|invitations|audit|node-credentials)",
     `administration/workspaces/${uuid}/members`,
@@ -80,6 +83,7 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "models/install",
     "agents",
     `agents/${uuid}/versions`,
     "administration/(invitations|workspaces|node-credentials)",

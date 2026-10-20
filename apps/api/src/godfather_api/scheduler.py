@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from godfather_contracts import ModelDeployment, NodeView
 from godfather_contracts.jobs import Requirements
+from godfather_contracts.model_management import INSTALL_RUNTIME, ModelInstallInput
 from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -43,6 +44,14 @@ def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bo
 
 def permitted(session: Session, job: Job, node: Node) -> bool:
     from godfather_api.authentication import permissions
+
+    if job.type == "model.install":
+        payload = ModelInstallInput.model_validate(job.input_refs)
+        if node.id != payload.node_id or node.owner_id != job.owner_id:
+            return False
+        runtimes = node.runtimes.get("runtimes", [])
+        if not isinstance(runtimes, list) or INSTALL_RUNTIME not in runtimes:
+            return False
 
     node_owner = session.get(User, node.owner_id)
     if (
@@ -98,7 +107,7 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
 
 def matches(requirements: Requirements, node: NodeView, reserved: list[Requirements]) -> bool:
     """Fail closed on unknown required resources, with conservative reservations."""
-    if requirements.model_selection is not None:
+    if requirements.model_selection is not None or INSTALL_RUNTIME in requirements.runtimes:
         if node.inference_protocol_version != 1:
             return False
     elif node.job_protocol_version != 1 or node.resources.source != "simulated":
@@ -340,7 +349,13 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             .where(
                 Job.status == "PENDING",
                 Job.type.in_(
-                    ("synthetic.echo", "synthetic.fail", "inference.text", "agent.workflow")
+                    (
+                        "synthetic.echo",
+                        "synthetic.fail",
+                        "inference.text",
+                        "agent.workflow",
+                        "model.install",
+                    )
                 ),
             )
             .order_by(Job.priority.desc(), Job.created_at, Job.id)

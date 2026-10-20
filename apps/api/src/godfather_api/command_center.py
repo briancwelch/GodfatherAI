@@ -355,6 +355,7 @@ def overview(
         else 0
     )
     return {
+        "environment": request.app.state.settings.environment,
         "generated_at": datetime.now(UTC).isoformat(),
         "actor_id": str(actor.owner_id),
         "workspace_id": str(selected.id) if selected else None,
@@ -489,6 +490,19 @@ def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict
         .limit(PAGE_SIZE)
     )
     return {
+        "jobs": [
+            jobs.view(session, job).model_dump(mode="json")
+            for job in session.scalars(
+                select(Job)
+                .join(Agent, Job.agent_id == Agent.id)
+                .where(
+                    Agent.agent_key == agent.agent_key,
+                    Agent.workspace_id == agent.workspace_id,
+                )
+                .order_by(Job.created_at.desc(), Job.id)
+                .limit(PAGE_SIZE)
+            )
+        ],
         "assignments": [
             {
                 "job_id": str(job_id),

@@ -21,6 +21,11 @@ This document governs the design and interaction of the browser-based Command Ce
 8. Security in the UI: clearly show scope, ownership, permissions, and consequences before sensitive actions. Enforce permissions in the backend, never only in the UI.
 
 ## Design system
+- Current authorized desktop direction: navy Core `#14283D` application bar, Ion
+  `#58D5DE` highlights, Ion Ink `#087F8C` actions and Chalk `#F4F8FC` workspace.
+  Use The Godfather branding, compact section tabs and grouped ribbon commands,
+  thin borders, dense tables and collapsible/resizable utility panels. Follow the
+  supplied desktop application references; avoid oversized dashboard cards.
 - Stack: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, consistent with `AGENTS.md`.
 - A restrained, professional infrastructure-control-panel aesthetic. Neutral surfaces with limited semantic colors for healthy, degraded, offline, running, blocked, and failed states.
 - Support dark and light themes; do not rely on color alone for meaning.

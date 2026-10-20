@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import {
+  ApplicationShell,
+  RibbonGroup,
+  UnavailableCommand,
+} from "./application-shell";
+import { AgentManagement } from "./agent-management";
+import { ModelInstaller } from "./model-installer";
 import { GoogleLogin } from "@/components/google-login";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +24,6 @@ import {
   localTime,
   retryEligible,
   short,
-  type AgentInfo,
   type EventPage,
   type JobDetail,
   type JobInfo,
@@ -82,12 +88,16 @@ export default function CommandCenter({
   section = "overview",
   detailId,
   authError,
+  initialWorkspace = "",
+  initialModel,
 }: {
   section?: Section;
   detailId?: string;
   authError?: string;
+  initialWorkspace?: string;
+  initialModel?: string;
 }) {
-  const [workspace, setWorkspace] = useState("");
+  const [workspace, setWorkspace] = useState(initialWorkspace);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [offset, setOffset] = useState(0);
@@ -108,245 +118,248 @@ export default function CommandCenter({
   const data = state.data;
   const refresh = () => setRevision((r) => r + 1);
   return (
-    <div className="command-layout">
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <aside className="command-sidebar">
-        <a className="brand" href="/">
-          THE GODFATHER<span>Command Center</span>
-        </a>
-        <p className="local-label">Trusted local development</p>
-        <nav aria-label="Main navigation">
-          {(Object.keys(labels) as Section[]).map((key) => (
-            <a
-              key={key}
-              aria-current={section === key ? "page" : undefined}
-              href={key === "overview" ? "/" : `/${key}`}
-            >
-              {labels[key]}
-            </a>
-          ))}
-          <a href="/administration">Account / Administration</a>
-        </nav>
-        <p className="sidebar-note">
-          PostgreSQL is authoritative.
-          <br />
-          Phase 07–08 · Local only
-        </p>
-      </aside>
-      <div className="command-body">
-        <header className="topbar">
-          <span>Infrastructure / {labels[section]}</span>
-          <div className="actions">
-            <label>
-              Theme
-              <select
-                aria-label="Theme"
-                defaultValue="system"
-                onChange={(e) => {
-                  document.documentElement.dataset.theme = e.target.value;
-                }}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            {identity.data && (
-              <span>
-                {identity.data.display_name} ? {identity.data.roles.join(", ")}
-              </span>
-            )}
-            {data && (
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  const result = await fetch("/api/auth/logout", {
-                    method: "POST",
-                  });
-                  if (!result.ok) {
-                    window.alert(
-                      "Logout not confirmed; retry when the API is available.",
+    <ApplicationShell
+      section={section}
+      data={data}
+      account={identity.data}
+      stale={!!state.error}
+      refresh={refresh}
+      ribbon={
+        section === "agents" ? undefined : (
+          <RibbonGroup label={labels[section]}>
+            {section === "jobs" && (
+              <button
+                className="action secondary"
+                disabled={!data}
+                onClick={() => {
+                  const panel =
+                    document.querySelector<HTMLDetailsElement>(
+                      "details.submission",
                     );
-                    return;
-                  }
-                  window.location.assign("/");
+                  if (panel) {
+                    panel.open = true;
+                    panel.scrollIntoView({ block: "center" });
+                    panel.querySelector<HTMLElement>("select")?.focus();
+                  } else window.location.assign("/jobs");
                 }}
               >
-                Sign out
-              </Button>
+                Submit job
+              </button>
             )}
+            {section === "nodes" && (
+              <a className="action secondary" href="/models">
+                Models
+              </a>
+            )}
+            {section === "models" && (
+              <button
+                className="action secondary"
+                disabled={!data?.workspace_id}
+                onClick={() =>
+                  document.getElementById("model-install-launch")?.click()
+                }
+              >
+                Add model
+              </button>
+            )}
+            {section === "overview" && (
+              <>
+                <a className="action secondary" href="/jobs">
+                  Jobs
+                </a>
+                <a className="action secondary" href="/nodes">
+                  Nodes
+                </a>
+              </>
+            )}
+            {section === "activity" && (
+              <a className="action secondary" href="#event-filters">
+                Filters
+              </a>
+            )}
+            {["jobs", "nodes", "models"].includes(section) && (
+              <UnavailableCommand
+                label="Inspect"
+                reason={
+                  detailId
+                    ? "Record inspector is already open below"
+                    : "Select a record using its name or ID in the table"
+                }
+              />
+            )}
+          </RibbonGroup>
+        )
+      }
+    >
+      <main id="main-content">
+        <div className="page-heading">
+          <div>
+            <p className="eyebrow">THE GODFATHER / CONTROL PLANE</p>
+            <h1>{labels[section]}</h1>
+            <p>Real backend state, durable work and recovery activity.</p>
           </div>
-        </header>
-        <main id="main-content">
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">THE GODFATHER / CONTROL PLANE</p>
-              <h1>{labels[section]}</h1>
-              <p>Real backend state, durable work and recovery activity.</p>
-            </div>
+          {data && (
+            <Button variant="outline" onClick={refresh}>
+              Refresh now
+            </Button>
+          )}
+        </div>
+        {!data && state.error === "401" ? (
+          <GoogleLogin error={authError} />
+        ) : (
+          <>
+            {state.error && (
+              <p role="alert" className="notice error">
+                {state.error === "401"
+                  ? "Session expired or revoked. Sign in again."
+                  : state.error === "403"
+                    ? "Permission denied."
+                    : "Refresh failed. Displayed data may be stale; no action confirmed."}
+              </p>
+            )}
+            {!data && !state.error && (
+              <p role="status" className="panel">
+                Loading authorized backend state…
+              </p>
+            )}
             {data && (
-              <Button variant="outline" onClick={refresh}>
-                Refresh now
-              </Button>
-            )}
-          </div>
-          {!data && state.error === "401" ? (
-            <GoogleLogin error={authError} />
-          ) : (
-            <>
-              {state.error && (
-                <p role="alert" className="notice error">
-                  {state.error === "401"
-                    ? "Session expired or revoked. Sign in again."
-                    : state.error === "403"
-                      ? "Permission denied."
-                      : "Refresh failed. Displayed data may be stale; no action confirmed."}
-                </p>
-              )}
-              {!data && !state.error && (
-                <p role="status" className="panel">
-                  Loading authorized backend state…
-                </p>
-              )}
-              {data && (
-                <>
-                  <section className="scope-bar">
-                    <label>
-                      Workspace
-                      <select
-                        value={workspace || data.workspace_id || ""}
-                        onChange={(e) => {
-                          setWorkspace(e.target.value);
-                          setOffset(0);
-                        }}
-                      >
-                        {data.workspaces.map((w) => (
-                          <option key={w.id} value={w.id}>
-                            {w.name}
-                          </option>
-                        ))}
-                        {!data.workspaces.length && (
-                          <option value="">No authorized workspace</option>
-                        )}
-                      </select>
-                    </label>
-                    <p role="status">
-                      {state.error ? "Stale data" : "Polling every 3 seconds"} ·
-                      Updated {localTime(data.generated_at)}
-                      <small>
-                        Jobs and agents: selected workspace. Nodes: platform
-                        health. Workload counts: authorized workspaces only.
-                      </small>
-                    </p>
-                  </section>
-                  {detailId ? (
-                    <Inspection
-                      kind={section}
-                      id={detailId}
-                      revision={revision}
-                      refresh={refresh}
-                    />
-                  ) : (
-                    <>
-                      {["nodes", "jobs", "agents"].includes(section) && (
-                        <div className="filters">
+              <>
+                <section className="scope-bar">
+                  <label>
+                    Workspace
+                    <select
+                      value={workspace || data.workspace_id || ""}
+                      onChange={(e) => {
+                        setWorkspace(e.target.value);
+                        setOffset(0);
+                      }}
+                    >
+                      {data.workspaces.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
+                        </option>
+                      ))}
+                      {!data.workspaces.length && (
+                        <option value="">No authorized workspace</option>
+                      )}
+                    </select>
+                  </label>
+                  <p role="status">
+                    {state.error ? "Stale data" : "Polling every 3 seconds"} ·
+                    Updated {localTime(data.generated_at)}
+                    <small>
+                      Jobs and agents: selected workspace. Nodes: platform
+                      health. Workload counts: authorized workspaces only.
+                    </small>
+                  </p>
+                </section>
+                {detailId ? (
+                  <Inspection
+                    kind={section}
+                    id={detailId}
+                    revision={revision}
+                    refresh={refresh}
+                  />
+                ) : (
+                  <>
+                    {["nodes", "jobs", "agents"].includes(section) && (
+                      <div className="filters">
+                        <label>
+                          Search {section}
+                          <input
+                            type="search"
+                            placeholder="Name, owner, platform or ID"
+                            value={search}
+                            onChange={(e) => {
+                              setSearch(e.target.value);
+                              setOffset(0);
+                            }}
+                          />
+                        </label>
+                        {section !== "agents" && (
                           <label>
-                            Search {section}
-                            <input
-                              type="search"
-                              placeholder="Name, owner, platform or ID"
-                              value={search}
+                            Status
+                            <select
+                              value={status}
                               onChange={(e) => {
-                                setSearch(e.target.value);
+                                setStatus(e.target.value);
                                 setOffset(0);
                               }}
-                            />
+                            >
+                              <option value="">All statuses</option>
+                              {(section === "nodes"
+                                ? [
+                                    "online",
+                                    "suspect",
+                                    "offline",
+                                    "draining",
+                                    "disabled",
+                                  ]
+                                : [
+                                    "PENDING",
+                                    "ASSIGNED",
+                                    "RUNNING",
+                                    "RETRY_WAIT",
+                                    "COMPLETED",
+                                    "FAILED",
+                                    "CANCELLED",
+                                  ]
+                              ).map((s) => (
+                                <option key={s}>{s}</option>
+                              ))}
+                            </select>
                           </label>
-                          {section !== "agents" && (
-                            <label>
-                              Status
-                              <select
-                                value={status}
-                                onChange={(e) => {
-                                  setStatus(e.target.value);
-                                  setOffset(0);
-                                }}
-                              >
-                                <option value="">All statuses</option>
-                                {(section === "nodes"
-                                  ? [
-                                      "online",
-                                      "suspect",
-                                      "offline",
-                                      "draining",
-                                      "disabled",
-                                    ]
-                                  : [
-                                      "PENDING",
-                                      "ASSIGNED",
-                                      "RUNNING",
-                                      "RETRY_WAIT",
-                                      "COMPLETED",
-                                      "FAILED",
-                                      "CANCELLED",
-                                    ]
-                                ).map((s) => (
-                                  <option key={s}>{s}</option>
-                                ))}
-                              </select>
-                            </label>
-                          )}
-                        </div>
-                      )}
-                      {section === "overview" && <Overview data={data} />}
-                      {section === "jobs" && (
-                        <>
-                          <SubmitJob data={data} />
-                          <JobTable rows={data.jobs} />
-                        </>
-                      )}
-                      {section === "nodes" && <NodeTable data={data} />}
-                      {section === "agents" && (
-                        <Agents data={data} refresh={refresh} />
-                      )}
-                      {section === "models" && (
-                        <Models
-                          data={data}
-                          offset={offset}
-                          setOffset={setOffset}
-                        />
-                      )}
-                      {section === "activity" && (
-                        <Activity
-                          workspace={data.workspace_id}
-                          revision={revision}
-                        />
-                      )}
-                      {(section === "jobs" ||
-                        section === "nodes" ||
-                        section === "agents") && (
-                        <Pager
-                          offset={offset}
-                          limit={data.limit}
-                          total={data.totals[section]}
-                          onChange={setOffset}
-                        />
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </main>
-        <footer>
-          Private local control plane · Unsaved files and GPU state are not
-          recoverable · BYOK is planning only.
-        </footer>
-      </div>
-    </div>
+                        )}
+                      </div>
+                    )}
+                    {section === "overview" && <Overview data={data} />}
+                    {section === "jobs" && (
+                      <>
+                        <SubmitJob data={data} />
+                        <JobTable rows={data.jobs} />
+                      </>
+                    )}
+                    {section === "nodes" && <NodeTable data={data} />}
+                    {section === "agents" && (
+                      <AgentManagement
+                        key={data.workspace_id}
+                        data={data}
+                        refresh={refresh}
+                        initialModel={initialModel}
+                      />
+                    )}
+                    {section === "models" && (
+                      <Models
+                        data={data}
+                        offset={offset}
+                        setOffset={setOffset}
+                      />
+                    )}
+                    {section === "activity" && (
+                      <Activity
+                        data={data}
+                        workspace={data.workspace_id}
+                        revision={revision}
+                      />
+                    )}
+                    {(section === "jobs" ||
+                      section === "nodes" ||
+                      section === "agents") && (
+                      <Pager
+                        offset={offset}
+                        limit={data.limit}
+                        total={data.totals[section]}
+                        onChange={setOffset}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </main>
+    </ApplicationShell>
   );
 }
 
@@ -733,9 +746,13 @@ function JobInspection({
         </dd>
         <dt>Progress</dt>
         <dd>
-          {detail.workflow
-            ? `${detail.workflow.current_step} committed steps; checkpoint v${detail.workflow.checkpoint_version}`
-            : "See execution history"}
+          {j.type === "model.install"
+            ? j.status === "COMPLETED"
+              ? "Model installed and verified in the worker inventory"
+              : `Current download layer: ${detail.events.items.find((e) => e.type === "job.progress")?.details.percent ?? "waiting for worker progress"}${detail.events.items.some((e) => e.type === "job.progress") ? "%" : ""}`
+            : detail.workflow
+              ? `${detail.workflow.current_step} committed steps; checkpoint v${detail.workflow.checkpoint_version}`
+              : "See execution history"}
         </dd>
         <dt>Recovery</dt>
         <dd>
@@ -1039,118 +1056,6 @@ function NodeInspection({
   );
 }
 
-function Agents({ data, refresh }: { data: Snapshot; refresh: () => void }) {
-  const [selected, setSelected] = useState<AgentInfo | null>(null);
-  const history = usePoll<{ events: EventPage; assignments: unknown[] }>(
-    selected ? `command-center/agents/${selected.id}` : null,
-    0,
-  );
-  return (
-    <>
-      <DataTable
-        caption="Registered immutable agent versions"
-        rows={data.agents}
-        rowKey={(a) => a.version_id}
-        columns={[
-          {
-            label: "Agent",
-            cell: (a) => (
-              <button className="text-button" onClick={() => setSelected(a)}>
-                {a.definition.name}
-              </button>
-            ),
-          },
-          {
-            label: "Version / state",
-            cell: (a) => (
-              <>
-                v{a.version}{" "}
-                <StatusBadge value={a.enabled ? "enabled" : "disabled"} />
-              </>
-            ),
-          },
-          {
-            label: "Model / capabilities",
-            cell: (a) => (
-              <JsonDetails
-                label="Requirements"
-                value={a.definition.requirements}
-              />
-            ),
-          },
-          {
-            label: "Tools",
-            cell: (a) =>
-              a.definition.allowed_tools
-                .map((t) => `${t.name}@${t.version}`)
-                .join(", ") || "None",
-          },
-          {
-            label: "Workflow",
-            cell: (a) =>
-              `${a.definition.workflow.steps.length} steps · v${a.definition.workflow.version}`,
-          },
-          {
-            label: "Control",
-            cell: (a) =>
-              data.workspaces.find((w) => w.id === data.workspace_id)
-                ?.can_manage ? (
-                <ConfirmAction
-                  label={a.enabled ? "Disable agent" : "Enable agent"}
-                  description="Change availability for this version. Disabling prevents new step starts. Cancel a job to stop current execution."
-                  onConfirm={async () => {
-                    await api(`agents/${a.id}/versions/${a.version}/control`, {
-                      action: a.enabled ? "disable" : "enable",
-                    });
-                    setSelected(null);
-                    refresh();
-                  }}
-                />
-              ) : (
-                "Workspace administration required"
-              ),
-          },
-        ]}
-      />
-      {selected && (
-        <section className="panel">
-          <h2>
-            {selected.definition.name} · v{selected.version}
-          </h2>
-          <p>{selected.definition.description}</p>
-          <p>
-            Owner {selected.owner_id} · Agent {selected.id}
-          </p>
-          <JsonDetails
-            label="Immutable definition and tool permissions"
-            value={selected.definition}
-          />
-          <h3>Workflow execution history</h3>
-          {history.error && <p role="alert">History unavailable.</p>}
-          {!history.data && !history.error && (
-            <p role="status">Loading workflow history…</p>
-          )}
-          {history.data && (
-            <>
-              <JsonDetails
-                label="Assigned model deployments and observed usage (latest 100 model steps)"
-                value={history.data.assignments}
-              />
-              <EventTimeline events={history.data.events.items} />
-            </>
-          )}
-          <button
-            className="action secondary"
-            onClick={() => setSelected(null)}
-          >
-            Close inspection
-          </button>
-        </section>
-      )}
-    </>
-  );
-}
-
 function Models({
   data,
   offset,
@@ -1160,8 +1065,15 @@ function Models({
   offset: number;
   setOffset: (n: number) => void;
 }) {
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const selected = data.models.find(
+    (m) =>
+      `${m.node_id}:${m.deployment.provider_id}:${m.deployment.identifier}` ===
+      selectedModel,
+  );
   return (
     <>
+      <ModelInstaller workspace={data.workspace_id} />
       <p className="muted">
         Permitted deployments for this workspace. Provider aliases contain no
         credentials. BYOK remains unimplemented.
@@ -1172,12 +1084,27 @@ function Models({
         rowKey={(m) =>
           `${m.node_id}:${m.deployment.provider_id}:${m.deployment.identifier}`
         }
+        selectedKey={selectedModel || undefined}
+        onSelect={(m) =>
+          setSelectedModel(
+            `${m.node_id}:${m.deployment.provider_id}:${m.deployment.identifier}`,
+          )
+        }
         columns={[
           {
             label: "Model / provider",
             cell: (m) => (
               <>
-                {m.deployment.identifier}
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    setSelectedModel(
+                      `${m.node_id}:${m.deployment.provider_id}:${m.deployment.identifier}`,
+                    )
+                  }
+                >
+                  {m.deployment.identifier}
+                </button>
                 <small>
                   {m.deployment.provider} / {m.deployment.provider_id}
                 </small>
@@ -1240,6 +1167,36 @@ function Models({
           },
         ]}
       />
+      {selected && (
+        <section className="panel">
+          <div className="actions">
+            <h2>{selected.deployment.identifier}</h2>
+            <button
+              className="action secondary"
+              onClick={() => setSelectedModel(null)}
+            >
+              Close inspection
+            </button>
+          </div>
+          <StatusBadge
+            value={selected.available ? "available" : "unavailable"}
+          />
+          <p>
+            Deployment host:{" "}
+            <a href={`/nodes/${selected.node_id}`}>{selected.node_id}</a>
+          </p>
+          <JsonDetails
+            label="Deployment and capabilities"
+            value={selected.deployment}
+          />
+          <a
+            className="action"
+            href={`/agents?workspace=${data.workspace_id}&model=${encodeURIComponent(`${selected.deployment.provider}:${selected.deployment.identifier}`)}`}
+          >
+            Create agent with this model
+          </a>
+        </section>
+      )}
       <div className="pager">
         <button
           className="action secondary"
@@ -1268,9 +1225,11 @@ function Models({
 }
 
 function Activity({
+  data,
   workspace,
   revision,
 }: {
+  data: Snapshot;
   workspace: string | null;
   revision: number;
 }) {
@@ -1283,7 +1242,7 @@ function Activity({
   });
   const state = usePoll<EventPage>(`command-center/events?${query}`, revision);
   return (
-    <section className="panel">
+    <section className="panel" id="event-filters">
       <h2>Events and audit history</h2>
       <form
         className="filters"
@@ -1303,10 +1262,38 @@ function Activity({
           (key) => (
             <label key={key}>
               {key.replaceAll("_", " ")}
-              <input
-                name={key}
-                placeholder={key === "event_type" ? "Exact event type" : "UUID"}
-              />
+              <select name={key}>
+                <option value="">All</option>
+                {(key === "node_id"
+                  ? data.nodes.map((n) => [n.node_id, n.name])
+                  : key === "job_id"
+                    ? data.jobs.map((j) => [j.id, `${j.type} · ${short(j.id)}`])
+                    : key === "agent_id"
+                      ? [
+                          ...new Map(
+                            data.agents.map((a) => [
+                              a.id,
+                              [a.id, a.definition.name],
+                            ]),
+                          ).values(),
+                        ]
+                      : key === "user_id"
+                        ? [
+                            ...new Set(
+                              data.events.items
+                                .map((e) => e.actor_id)
+                                .filter((v): v is string => !!v),
+                            ),
+                          ].map((id) => [id, short(id)])
+                        : [
+                            ...new Set(data.events.items.map((e) => e.type)),
+                          ].map((t) => [t, t])
+                ).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </label>
           ),
         )}

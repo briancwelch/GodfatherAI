@@ -66,7 +66,10 @@ const wait = async (predicate, timeout = 180000) => {
       await page.getByRole("button", { name: "Continue with Google" }).click();
       if (subject !== "outsider-sub") {
         try {
-          await page.getByRole("button", { name: "Refresh now" }).waitFor();
+          await page
+            .getByRole("button", { name: "Refresh", exact: true })
+            .first()
+            .waitFor();
         } catch (error) {
           await page.screenshot({
             path: path.join(folder, "login-failure.png"),
@@ -219,44 +222,125 @@ const wait = async (predicate, timeout = 180000) => {
     results.push(
       "actual worker telemetry and status persisted; other administrator cannot override node owner",
     );
-    const agent = await api(first.context, "agents", {
-      workspace_id: workspace.id,
-      definition: {
-        name: "Real local model integration",
-        enabled: true,
-        requirements: { model_selection: { identifier: model, stream: false } },
-        allowed_tools: [],
-        permissions: [],
-        timeout_seconds: 300,
-        workflow: {
-          id: require("node:crypto").randomUUID(),
-          version: 1,
-          steps: [
-            {
-              id: "response",
-              kind: "model",
-              instruction: "Respond briefly to the instruction.",
-              output_schema: "text",
-              timeout_seconds: 240,
-              parameters: { max_tokens: 2048 },
-            },
-          ],
-        },
-      },
-    });
-    await first.page.goto(`${origin}/jobs`);
-    await first.page.getByRole("button", { name: "Refresh now" }).waitFor();
+    await first.page.goto(`${origin}/agents`);
     await first.page.locator(".scope-bar select").selectOption(workspace.id);
-    await first.page.locator("details.submission > summary").click();
     await first.page
-      .getByLabel("Agent and pinned version")
-      .selectOption(agent.version_id);
+      .getByRole("button", { name: "Create agent", exact: true })
+      .click();
+    let editor = first.page.getByRole("dialog", {
+      name: "Create agent",
+      exact: true,
+    });
+    await editor
+      .getByLabel("Name", { exact: true })
+      .fill("Real local model integration");
+    await editor
+      .getByLabel("Description", { exact: true })
+      .fill("Created through the Command Center editor.");
+    await editor
+      .getByLabel("Model requirement", { exact: false })
+      .selectOption(`ollama:${model}`);
+    await editor
+      .getByRole("button", { name: "Create agent", exact: true })
+      .click();
+    await editor.waitFor({ state: "hidden" });
+    let snapshot = await api(
+      first.context,
+      `command-center?workspace_id=${workspace.id}&section=agents`,
+    );
+    let agent = snapshot.agents.find(
+      (a) => a.definition.name === "Real local model integration",
+    );
+    assert.ok(agent && agent.version === 1);
     await first.page
+      .getByRole("button", {
+        name: "Real local model integration",
+        exact: true,
+      })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Edit / New version", exact: true })
+      .click();
+    editor = first.page.getByRole("dialog", {
+      name: "Create immutable agent version",
+    });
+    await editor
+      .getByLabel("Description", { exact: true })
+      .fill("Version two, original preserved.");
+    await editor
+      .getByRole("button", { name: "Save new version", exact: true })
+      .click();
+    await editor.waitFor({ state: "hidden" });
+    const versions = await api(first.context, `agents/${agent.id}/versions`);
+    assert.equal(versions.length, 2);
+    assert.equal(
+      versions[0].definition.description,
+      "Created through the Command Center editor.",
+    );
+    agent = versions[1];
+    assert.equal(agent.version, 2);
+    await first.page
+      .getByRole("button", { name: "Disable agent", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Confirm disable agent", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Enable agent", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Confirm enable agent", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Run agent", exact: true })
+      .waitFor();
+    await first.page.screenshot({
+      path: path.join(folder, "agent-management-desktop.png"),
+      fullPage: true,
+    });
+    await first.page
+      .getByRole("button", { name: "Navigation", exact: true })
+      .click();
+    assert.equal(
+      await first.page
+        .getByLabel("Workspace navigation", { exact: true })
+        .count(),
+      0,
+    );
+    await first.page
+      .getByRole("button", { name: "Navigation", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Inspector", exact: true })
+      .click();
+    assert.equal(
+      await first.page
+        .getByRole("complementary", {
+          name: "Workspace inspector",
+          exact: true,
+        })
+        .count(),
+      1,
+    );
+    await first.page
+      .getByRole("button", { name: "Inspector", exact: true })
+      .click();
+    await first.page
+      .getByRole("button", { name: "Run agent", exact: true })
+      .click();
+    const runDialog = first.page.getByRole("dialog", {
+      name: "Run agent",
+      exact: true,
+    });
+    await runDialog
       .getByLabel("Instruction", { exact: true })
       .fill("Reply with one brief greeting.");
-    await first.page
-      .getByRole("button", { name: "Submit job", exact: true })
+    await runDialog
+      .getByRole("button", { name: "Submit run", exact: true })
       .click();
+    results.push(
+      "UI creates persisted agents, immutable versions, enable/disable, run submission and collapsible utility panels",
+    );
     await first.page.waitForURL(/\/jobs\/[a-f0-9-]{36}$/);
     const jobId = first.page.url().split("/").at(-1);
     let detail;
@@ -287,7 +371,10 @@ const wait = async (predicate, timeout = 180000) => {
       ).status(),
       404,
     );
-    await first.page.getByRole("button", { name: "Refresh now" }).click();
+    await first.page
+      .getByRole("button", { name: "Refresh", exact: true })
+      .first()
+      .click();
     await first.page.getByText("COMPLETED", { exact: true }).first().waitFor();
     await first.page.screenshot({
       path: path.join(folder, "completed-real-job.png"),
@@ -298,7 +385,10 @@ const wait = async (predicate, timeout = 180000) => {
     );
     for (const section of ["agents", "models", "activity"]) {
       await first.page.goto(`${origin}/${section}`);
-      await first.page.getByRole("button", { name: "Refresh now" }).waitFor();
+      await first.page
+        .getByRole("button", { name: "Refresh", exact: true })
+        .first()
+        .waitFor();
       await first.page.locator(".scope-bar select").selectOption(workspace.id);
       if (section === "agents")
         await first.page

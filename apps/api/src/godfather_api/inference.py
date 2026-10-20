@@ -11,16 +11,113 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
+from godfather_contracts.execution import Requirements
 from godfather_contracts.jobs import InferenceSubmission, JobView
+from godfather_contracts.model_management import (
+    INSTALL_RUNTIME,
+    MODEL_CATALOG,
+    PROVIDER_RUNTIME_PREFIX,
+    ModelInstallInput,
+    ModelInstallRequest,
+)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from godfather_api.jobs import authorized_job, current_attempt, submit
 from godfather_api.models import AccessCredential, Attempt, Job, Node, User, Workspace
 from godfather_api.nodes import SessionDep, authenticate, connection_at, node_view
-from godfather_api.scheduler import permitted, workspace_access
+from godfather_api.scheduler import job_event, permitted, workspace_access
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer(auto_error=False))])
+
+
+@router.get("/models/install-options")
+def install_options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
+    actor = authenticate(request, session, "human")
+    workspace_permission(session, workspace_id, actor.owner_id)
+    result = []
+    for node in session.scalars(
+        select(Node).where(Node.owner_id == actor.owner_id, Node.session_id.is_not(None))
+    ):
+        view = node_view(session, node)
+        providers = [
+            r.removeprefix(PROVIDER_RUNTIME_PREFIX)
+            for r in view.runtimes
+            if r.startswith(PROVIDER_RUNTIME_PREFIX)
+        ]
+        healthy = (
+            node.state == "online"
+            and connection_at(node.last_heartbeat_at, datetime.now(UTC), request.app.state.settings)
+            == "online"
+        )
+        result.append(
+            {
+                "node_id": str(node.id),
+                "name": node.name,
+                "os": node.os,
+                "available": healthy and INSTALL_RUNTIME in view.runtimes and bool(providers),
+                "providers": providers,
+                "reason": "Ready"
+                if healthy and INSTALL_RUNTIME in view.runtimes and providers
+                else "Owner must enable model downloads on an online worker",
+            }
+        )
+    return {"nodes": result, "catalog": MODEL_CATALOG}
+
+
+@router.post("/models/install", response_model=JobView, status_code=201)
+def install_model(payload: ModelInstallRequest, request: Request, session: SessionDep) -> JobView:
+    from godfather_api.jobs import view
+
+    actor = authenticate(request, session, "human")
+    workspace_permission(session, payload.workspace_id, actor.owner_id)
+    node = session.scalar(
+        select(Node)
+        .where(Node.id == payload.node_id, Node.owner_id == actor.owner_id)
+        .with_for_update()
+    )
+    if node is None:
+        raise HTTPException(404, "Owned worker not found")
+    if payload.identifier not in {m["identifier"] for m in MODEL_CATALOG}:
+        raise HTTPException(422, "Choose a supported model from the download catalog")
+    runtime = PROVIDER_RUNTIME_PREFIX + payload.provider_id
+    node_spec = node_view(session, node)
+    if INSTALL_RUNTIME not in node_spec.runtimes or runtime not in node_spec.runtimes:
+        raise HTTPException(409, "The node owner must opt in to model installation on this worker")
+    if any(
+        m.identifier == payload.identifier and m.provider_id == payload.provider_id
+        for m in node_spec.model_deployments
+    ):
+        raise HTTPException(
+            409, "This model is already installed; select it from the model directory"
+        )
+    if session.scalar(
+        select(Job.id).where(
+            Job.type == "model.install",
+            Job.status.in_(("PENDING", "ASSIGNED", "RUNNING", "RETRY_WAIT")),
+            Job.input_refs["node_id"].astext == str(node.id),
+            Job.input_refs["provider_id"].astext == payload.provider_id,
+            Job.input_refs["identifier"].astext == payload.identifier,
+        )
+    ):
+        raise HTTPException(409, "This model already has an active installation request")
+    job = Job(
+        owner_id=actor.owner_id,
+        workspace_id=payload.workspace_id,
+        type="model.install",
+        requirements=Requirements(runtimes=[INSTALL_RUNTIME, runtime]).model_dump(mode="json"),
+        input_refs=ModelInstallInput(
+            node_id=node.id, provider_id=payload.provider_id, identifier=payload.identifier
+        ).model_dump(mode="json"),
+        timeout_seconds=3600,
+        retry_limit=0,
+    )
+    if not permitted(session, job, node):
+        raise HTTPException(403, "Worker contribution or workspace access is unavailable")
+    session.add(job)
+    session.flush()
+    job_event(session, job, "submitted", datetime.now(UTC), actor_id=actor.owner_id)
+    return view(session, job)
 
 
 def workspace_permission(session: Session, workspace_id: UUID, actor_id: UUID) -> None:

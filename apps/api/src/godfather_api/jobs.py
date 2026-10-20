@@ -22,12 +22,17 @@ from godfather_contracts.jobs import (
     ReportResponse,
     SyntheticResult,
 )
+from godfather_contracts.model_management import (
+    INSTALL_RUNTIME,
+    ModelInstallInput,
+    ModelInstallResult,
+)
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from godfather_api import workflow_service
 from godfather_api.models import Attempt, Event, Job, Node, WorkflowRun, Workspace, WorkspaceMember
-from godfather_api.nodes import SessionDep, authenticate
+from godfather_api.nodes import SessionDep, authenticate, node_view
 from godfather_api.scheduler import (
     ACTIVE,
     TERMINAL,
@@ -358,6 +363,9 @@ def report(
     elif job.type == "agent.workflow":
         if node.runtimes.get("workflow_protocol_version") != 1:
             raise HTTPException(403, "Workflow execution requires explicit worker opt-in")
+    elif job.type == "model.install":
+        if INSTALL_RUNTIME not in node_view(session, node).runtimes:
+            raise HTTPException(403, "Node owner has not enabled model installation")
     elif (
         node.runtimes.get("job_protocol_version") != 1
         or node.resources.get("source") != "simulated"
@@ -438,6 +446,16 @@ def report(
             workflow_service.completed(
                 session, request.app.state.artifacts, job, attempt, payload.result
             )
+        elif job.type == "model.install":
+            expected = ModelInstallInput.model_validate(job.input_refs)
+            if (
+                not isinstance(payload.result, ModelInstallResult)
+                or payload.result.identifier != expected.identifier
+                or payload.result.provider_id != expected.provider_id
+            ):
+                raise HTTPException(
+                    422, "Installation result must match the approved model/provider"
+                )
         elif not isinstance(payload.result, SyntheticResult):
             raise HTTPException(422, "A synthetic result is required")
         if attempt.lease_expires_at <= datetime.now(UTC) or attempt.deadline_at <= datetime.now(
@@ -454,7 +472,7 @@ def report(
             raise HTTPException(422, "Running execution and a classified error are required")
         if (
             not inference
-            and job.type != "agent.workflow"
+            and job.type not in ("agent.workflow", "model.install")
             and payload.error_code not in ("transient_error", "permanent_error")
         ):
             raise HTTPException(422, "Synthetic failures require synthetic error codes")

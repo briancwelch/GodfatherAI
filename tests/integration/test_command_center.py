@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from godfather_api.models import Job
+from godfather_api.models import Job, Workspace
 from godfather_api.provision import provision
 
 from tests.integration.test_jobs import Harness, headers
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.integration
 def test_agent_history_shows_real_deployments_and_preserves_workspace_scope(h: Harness) -> None:
     enable(h)
     agent = create(h)
-    submit(h, agent)
+    job = submit(h, agent)
     h.tick()
     assignment = h.poll()
     assert assignment is not None
@@ -26,6 +26,8 @@ def test_agent_history_shows_real_deployments_and_preserves_workspace_scope(h: H
     response = h.client.get(path, headers=headers(h.admin))
     assert response.status_code == 200, response.text
     assignments = response.json()["assignments"]
+    assert response.json()["jobs"][0]["id"] == job["id"]
+    assert response.json()["jobs"][0]["status"] == "COMPLETED"
     assert len(assignments) == 2
     assert all(a["deployment"]["identifier"] == "fixture" for a in assignments)
     assert all(a["usage"]["output_tokens"] is not None for a in assignments)
@@ -52,12 +54,36 @@ def test_summary_counts_pagination_and_real_telemetry(h: Harness) -> None:
     )
     assert response.status_code == 200, response.text
     data = response.json()
+    assert data["environment"] == "test"
     assert data["job_counts"] == {"PENDING": 103}
     assert data["totals"]["jobs"] == 103 and len(data["jobs"]) == 3
     assert data["node_counts"] == {"online": 2}
     assert data["nodes"][0]["resources"]["source"] == "simulated"
     assert data["agent_counts"]["enabled_versions"] == 1
     assert "token" not in data and "credentials" not in data
+
+
+def test_agent_catalog_uses_actual_advertisements_and_workspace_tool_policy(h: Harness) -> None:
+    enable(h)
+    path = f"/api/v1/agent-options?workspace_id={h.workspace_id}"
+    response = h.client.get(path, headers=headers(h.admin))
+    assert response.status_code == 200, response.text
+    catalog = response.json()
+    assert "coding" in catalog["capabilities"]
+    assert catalog["tools"][0]["reference"] == {"name": "plan.describe", "version": 1}
+    assert catalog["models"][0]["deployment"]["identifier"] == "fixture"
+    assert {item["id"] for item in catalog["workflows"]} == {"text", "plan"}
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None
+        workspace.allowed_tools = []
+        workspace.allowed_models = []
+    restricted = h.client.get(path, headers=headers(h.admin)).json()
+    assert restricted["tools"] == [] and restricted["models"] == []
+    outsider = provision(h.database, "admin", email="catalog-outsider@example.invalid")
+    assert h.client.get(path, headers=headers(outsider)).status_code == 404
+    assert h.client.get(path, headers=headers(h.workers[0])).status_code == 401
+    assert h.client.get(path).status_code == 401
 
 
 def test_command_center_requires_real_credentials_and_never_leaks_private_workspaces(

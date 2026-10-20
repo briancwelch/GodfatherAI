@@ -16,15 +16,16 @@ from godfather_agent_runtime.tools import ToolError
 from godfather_agent_runtime.tools import definition as tool_definition
 from godfather_contracts import Heartbeat, Registration, ToolReference
 from godfather_contracts.jobs import JobPoll, PollResponse
+from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
 from godfather_model_gateway import ProviderConfig
-from pydantic import ValidationError
-
 from godfather_worker.agents import execute_agent
 from godfather_worker.client import WorkerClient, retryable
 from godfather_worker.discovery import discover, discover_resources
 from godfather_worker.inference import discover_models, execute_inference
 from godfather_worker.jobs import execute
+from godfather_worker.model_management import execute_installation
 from godfather_worker.simulated import profile
+from pydantic import ValidationError
 
 logger = logging.getLogger("godfather.worker")
 
@@ -47,6 +48,11 @@ def main() -> int:
     parser.add_argument("--concurrency", type=int)
     parser.add_argument("--execute-synthetic", action="store_true")
     parser.add_argument("--execute-workflows", action="store_true")
+    parser.add_argument(
+        "--allow-model-installation",
+        action="store_true",
+        help="Owner opt-in: accept approved local Ollama catalog downloads",
+    )
     parser.add_argument(
         "--allow-tool", action="append", default=[], help="Owner grant: TOOL_NAME@VERSION"
     )
@@ -77,6 +83,10 @@ def main() -> int:
         ):
             raise ValueError("Checkpoint pauses require an explicitly simulated workflow worker")
         configs: list[ProviderConfig] = []
+        if args.allow_model_installation and (not args.inference_config or args.simulate):
+            raise ValueError(
+                "Model installation requires a physical worker and local inference configuration"
+            )
         if args.inference_config:
             raw_configs = json.loads(args.inference_config.read_text(encoding="utf-8"))
             if not isinstance(raw_configs, list) or not 1 <= len(raw_configs) <= 8:
@@ -125,6 +135,21 @@ def main() -> int:
             values["workflow_protocol_version"] = 1
             values["worker_tools"] = tools
             values["tool_permissions"] = args.allow_tool_permission
+        if args.allow_model_installation:
+            aliases = [c.id for c in configs if c.provider == "ollama"]
+            if not aliases or any(len(alias) > 64 for alias in aliases):
+                raise ValueError(
+                    "Model installation requires an Ollama provider alias of up to 64 characters"
+                )
+            values["runtimes"] = list(
+                dict.fromkeys(
+                    [
+                        *values["runtimes"],
+                        INSTALL_RUNTIME,
+                        *(PROVIDER_RUNTIME_PREFIX + alias for alias in aliases),
+                    ]
+                )
+            )
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
@@ -188,6 +213,24 @@ def main() -> int:
                                     configs,
                                     args.pause_after_checkpoint,
                                 )
+                            )
+                        elif (
+                            polled.assignment.job.type == "model.install"
+                            and args.allow_model_installation
+                        ):
+                            asyncio.run(
+                                execute_installation(
+                                    client,
+                                    node_id,
+                                    registration,
+                                    polled.assignment,
+                                    stop,
+                                    result.heartbeat_interval_seconds,
+                                    configs,
+                                )
+                            )
+                            refresh_at = (
+                                0  # Advertise verified installation before taking another job.
                             )
                         elif polled.assignment.job.type == "inference.text" and configs:
                             asyncio.run(
