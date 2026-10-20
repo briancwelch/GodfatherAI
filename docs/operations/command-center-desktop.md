@@ -72,6 +72,9 @@ environment; they do not establish real Google account acceptance in production.
   revocation and a 390px dark layout. Only Google network responses were mocked
   inside that isolated test.
 - Live HTTPS, shell, anonymous API denial and actual Google OAuth redirect with
-  the production callback/PKCE passed. Final authenticated production creation/run
-  acceptance awaits the owner's normal browser session; browser-control startup
-  was unavailable. No production session or operational record was fabricated.
+  the production callback/PKCE passed. The owner created Test Agent v1 and ran it
+  successfully from their normal authenticated production browser session.
+  Job `f9446ad9-ea86-4e6a-8d16-5f5909d4f756` completed its `response` step with
+  checkpoint version 1 and a durable final-output artifact. The owner confirmed
+  completion and supplied the returned output: `100 × 100 = 10,000`.
+  Production job state independently showed `COMPLETED` with Carbon online.
