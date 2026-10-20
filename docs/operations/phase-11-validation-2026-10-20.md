@@ -53,6 +53,8 @@ The historical four-process/scheduler/inference/workflow CI probes use test-only
 bearer credentials. CI now runs those probes with an explicit Compose override
 against `godfather_test`, after the normal Google-authenticated API restart gate.
 The normal local and production configuration does not enable legacy login.
+Inference/workflow probes explicitly authorize their exact fixture model and the
+predefined `plan.describe@1` tool through the owner workspace-policy API.
 
 The browser harness mocks **Google HTTP responses only**, using actual Authlib
 verification, sessions, invitations and RBAC. It verifies private connection

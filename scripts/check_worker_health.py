@@ -18,12 +18,28 @@ from urllib.error import URLError
 from urllib.request import Request
 from uuid import uuid4
 
+from godfather_contracts import Contract
 from godfather_worker.client import WorkerClient
 
 from scripts.check_api_restart import compose, require_status
 from scripts.dev import ROOT
 
 PROFILES = ("LV-01", "LV-02", "LA-01", "LA-02")
+
+
+class FixtureWorkspacePolicy(Contract):
+    allowed_models: list[str]
+    allowed_tools: list[str]
+
+
+def authorize_fixture_workspace(
+    client: WorkerClient, workspace_id: str, model: str, tools: tuple[str, ...] = ()
+) -> None:
+    """Explicit owner authorization for the fixture's exact model and predefined tools."""
+    client.post_document(
+        f"/api/v1/administration/workspaces/{workspace_id}/policy",
+        FixtureWorkspacePolicy(allowed_models=[model], allowed_tools=list(tools)),
+    )
 
 
 def save_credential(folder: Path, name: str, kind: str, *options: str) -> dict[str, str]:

@@ -30,7 +30,7 @@ from godfather_worker.client import WorkerClient
 
 from scripts.check_api_restart import compose, require_status
 from scripts.check_model_inference import FixtureProvider, available
-from scripts.check_worker_health import save_credential, stop, wait_for
+from scripts.check_worker_health import authorize_fixture_workspace, save_credential, stop, wait_for
 from scripts.dev import ROOT
 from scripts.workflow_demo import demonstration_definition
 
@@ -140,6 +140,9 @@ def main() -> int:
         )
         admin_client = WorkerClient("http://127.0.0.1:8000", admin["token"])
         worker_client = WorkerClient("http://127.0.0.1:8000", worker["token"])
+        authorize_fixture_workspace(
+            admin_client, str(workspace_id), identifier, ("plan.describe@1",)
+        )
 
         def get(route: str) -> object:
             assert admin_client is not None

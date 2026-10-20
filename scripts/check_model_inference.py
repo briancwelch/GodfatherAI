@@ -22,7 +22,7 @@ from godfather_model_gateway.providers import create_provider
 from godfather_worker.client import WorkerClient
 
 from scripts.check_api_restart import compose, require_status
-from scripts.check_worker_health import save_credential, stop, wait_for
+from scripts.check_worker_health import authorize_fixture_workspace, save_credential, stop, wait_for
 from scripts.dev import ROOT
 
 
@@ -166,6 +166,7 @@ def main() -> int:
             )
         )["workspace_id"]
         client = WorkerClient("http://127.0.0.1:8000", admin["token"])
+        authorize_fixture_workspace(client, workspace_id, identifier)
 
         def get(path: str) -> object:
             assert client is not None
