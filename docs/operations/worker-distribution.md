@@ -1,5 +1,14 @@
 # Separate worker distribution and enrollment plan
 
+**macOS update:** The [Mac candidate](../../packages/worker/macos/README.md) now has
+local desktop, Keychain and owner-approved browser pairing source, an additive
+enrollment migration and native `.app`/DMG build automation. Native builds,
+Developer ID signing/notarization, physical acceptance and production deployment
+remain pending. [ADR 0010](../decisions/0010-macos-worker-browser-pairing.md) supersedes
+the manual-secret Mac enrollment proposal below. The rest of this document records
+the earlier cross-platform distribution plan; Windows/Linux native installers and
+secure-store adapters remain future work.
+
 This document covers standalone packaging and the planned native installers and
 one-time enrollment. Native installers and one-time enrollment are not implemented.
 The coordinator bundle does not install a

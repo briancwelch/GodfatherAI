@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
@@ -38,10 +39,18 @@ def emit(event: str, **fields: object) -> None:
     )
 
 
-def main() -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    credential: dict[str, str] | None = None,
+    stop_event: threading.Event | None = None,
+    observer: Callable[..., None] | None = None,
+    worker_client: WorkerClient | None = None,
+) -> int:
+    notify = observer or emit
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8000")
-    parser.add_argument("--credential-file", required=True, type=Path)
+    parser.add_argument("--credential-file", required=credential is None, type=Path)
     parser.add_argument("--simulate", choices=("LV-01", "LV-02", "LA-01", "LA-02"))
     parser.add_argument("--primary", action="append", default=[])
     parser.add_argument("--secondary", action="append", default=[])
@@ -69,7 +78,7 @@ def main() -> int:
     parser.add_argument("--step-seconds", type=float, default=0)
     parser.add_argument("--allow-owner", type=str, action="append", default=[])
     parser.add_argument("--allow-workspace", type=str, action="append", default=[])
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         if args.execute_synthetic and not args.simulate:
             raise ValueError("Synthetic execution requires a simulated profile")
@@ -101,14 +110,14 @@ def main() -> int:
                 raise ValueError("Phase 06 workflow providers must remain local")
         if not 0 <= args.step_seconds <= 30:
             raise ValueError("Synthetic step duration must be between 0 and 30 seconds")
-        credentials = json.loads(args.credential_file.read_text(encoding="utf-8"))
+        credentials = credential or json.loads(args.credential_file.read_text(encoding="utf-8"))
         if (
             not isinstance(credentials, dict)
             or credentials.get("kind") != "worker"
             or not isinstance(credentials.get("token"), str)
         ):
             raise ValueError("A node-specific worker credential is required")
-        client = WorkerClient(args.url, credentials["token"])
+        client = worker_client or WorkerClient(args.url, credentials["token"])
         advertisement = profile(args.simulate) if args.simulate else discover()
         values = advertisement.model_dump()
         if args.primary:
@@ -155,9 +164,9 @@ def main() -> int:
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
     except (OSError, KeyError, ValueError, TypeError, ToolError):
-        emit("worker.configuration_invalid")
+        notify("worker.configuration_invalid")
         return 1
-    stop = threading.Event()
+    stop = stop_event or threading.Event()
     registered = False
     node_id = None
     delay = 1
@@ -176,7 +185,7 @@ def main() -> int:
                     result = client.post("/api/v1/workers/register", registration)
                     node_id = result.node_id
                     registered = True
-                    emit(
+                    notify(
                         "worker.registered",
                         node_id=str(node_id),
                         source=registration.resources.source,
@@ -188,7 +197,7 @@ def main() -> int:
                         f"/api/v1/workers/{node_id}/heartbeat",
                         Heartbeat(session_id=registration.session_id, resources=resources),
                     )
-                    emit("worker.heartbeat", node_id=str(node_id), state=result.state)
+                    notify("worker.heartbeat", node_id=str(node_id), state=result.state)
                 delay = 1
                 if args.execute_synthetic or configs:
                     assert node_id is not None
@@ -199,6 +208,7 @@ def main() -> int:
                         )
                     )
                     if polled.assignment is not None:
+                        notify("worker.attempt_started", job_id=str(polled.assignment.job.id))
                         if (
                             polled.assignment.job.type == "agent.workflow"
                             and args.execute_workflows
@@ -255,7 +265,7 @@ def main() -> int:
                                 args.step_seconds,
                                 result.heartbeat_interval_seconds,
                             )
-                        emit(
+                        notify(
                             "worker.attempt_finished",
                             job_id=str(polled.assignment.job.id),
                         )
@@ -264,31 +274,36 @@ def main() -> int:
                 else:
                     stop.wait(result.heartbeat_interval_seconds)
             except HTTPError as error:
+                if worker_client is not None and error.code == 409 and not registered:
+                    notify("worker.session_busy")
+                    stop.wait(delay)
+                    delay = min(delay * 2, 30)
+                    continue
                 if (
                     (args.execute_synthetic or configs)
                     and error.code == 409
                     and "/jobs/" in error.url
                 ):
-                    emit("worker.stale_attempt_discarded")
+                    notify("worker.stale_attempt_discarded")
                     stop.wait(1)
                     continue
                 if not retryable(error):
-                    emit("worker.request_refused", status_code=error.code)
+                    notify("worker.request_refused", status_code=error.code)
                     return 1
-                emit("worker.coordinator_unavailable", status_code=error.code)
+                notify("worker.coordinator_unavailable", status_code=error.code)
                 registered = False
                 stop.wait(delay)
                 delay = min(delay * 2, 30)
             except (URLError, OSError, TimeoutError):
-                emit("worker.coordinator_unavailable")
+                notify("worker.coordinator_unavailable")
                 registered = False
                 stop.wait(delay)
                 delay = min(delay * 2, 30)
             except (ValidationError, ValueError):
-                emit("worker.invalid_coordinator_response")
+                notify("worker.invalid_coordinator_response")
                 return 1
     except KeyboardInterrupt:
-        emit("worker.stopped", node_id=str(node_id))
+        notify("worker.stopped", node_id=str(node_id))
     return 0
 
 

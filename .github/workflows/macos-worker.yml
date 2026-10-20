@@ -1,0 +1,88 @@
+name: Build macOS worker candidates
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Worker source branch, tag, or commit (main still contains Phase 01)
+        required: true
+        default: phase-09-google-oidc
+        type: string
+      version:
+        description: Candidate version, for example 0.1.0-rc.6 (blank uses a unique dev version)
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.arch }} unsigned development candidate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            machine: arm64
+          - runner: macos-15-intel
+            arch: x64
+            machine: x86_64
+    env:
+      HOMEBREW_NO_ANALYTICS: "1"
+      UV_PYTHON_DOWNLOADS: never
+      EXPECTED_MACHINE: ${{ matrix.machine }}
+      REQUESTED_VERSION: ${{ inputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: "0.13.1"
+          enable-cache: false
+      - name: Install native Python and Tk build tools
+        run: |
+          test "$(uname -m)" = "$EXPECTED_MACHINE"
+          brew install python@3.14 python-tk@3.14
+          build_python="$(brew --prefix python@3.14)/bin/python3.14"
+          echo "GODFATHER_BUILD_PYTHON=$build_python" >> "$GITHUB_ENV"
+          "$build_python" -c 'import os, platform, tkinter; assert platform.machine() == os.environ["EXPECTED_MACHINE"]; r = tkinter.Tk(); r.withdraw(); r.update(); r.destroy()'
+          xcrun --find clang
+      - name: Install locked project dependencies
+        run: uv sync --locked --all-packages --python "$GODFATHER_BUILD_PYTHON"
+      - name: Validate candidate version and record source
+        run: |
+          candidate="${REQUESTED_VERSION:-0.1.0-dev.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}}"
+          uv run --no-sync python -c 'import sys; from scripts.release import version; version(sys.argv[1])' "$candidate"
+          echo "CANDIDATE_VERSION=$candidate" >> "$GITHUB_ENV"
+          echo "### Unsigned development candidate: $candidate ($EXPECTED_MACHINE)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "No Developer ID signing, notarization, or production Gatekeeper acceptance. Enrollment deployment remains separate." >> "$GITHUB_STEP_SUMMARY"
+      - name: Worker protocol, desktop and packaging unit checks
+        run: |
+          uv run --no-sync ruff check scripts/build_macos_worker.py scripts/check_macos_worker.py tests/test_macos_worker_package.py
+          uv run --no-sync pytest tests/test_worker.py tests/test_desktop_worker.py tests/test_macos_worker_package.py
+      - name: Build standalone app and DMG using existing packaging
+        run: uv run --no-sync python -m scripts.build_macos_worker --version "$CANDIDATE_VERSION"
+      - name: Verify DMG, checksum, native app startup and bundled libraries
+        run: uv run --no-sync python -m scripts.check_macos_worker --version "$CANDIDATE_VERSION" --architecture "$EXPECTED_MACHINE"
+      - name: Upload verified DMG and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-unsigned-development-candidate
+          path: |
+            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg
+            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.sha256
+            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.manifest.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

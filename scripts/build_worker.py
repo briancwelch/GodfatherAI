@@ -50,7 +50,9 @@ def build(release: str) -> Path:
             },
         )
 
-    execute(uv, "venv", "--python", "3.14", str(environment))
+    execute(
+        uv, "venv", "--python", os.environ.get("GODFATHER_BUILD_PYTHON", "3.14"), str(environment)
+    )
     requirements = workspace / "requirements.txt"
     execute(
         uv,
