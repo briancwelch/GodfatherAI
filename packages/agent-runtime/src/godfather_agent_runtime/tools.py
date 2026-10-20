@@ -48,7 +48,9 @@ def validate_agent(agent: AgentDefinition) -> None:
         if tool.side_effect != "read_only" or tool.retry_safety != "idempotent":
             raise ToolError("Phase 06 supports only read-only idempotent tools")
     for permission in agent.permissions:
-        if permission not in {p for t in REGISTRY.values() for p in t.permissions}:
+        if permission not in {p for t in REGISTRY.values() for p in t.permissions} | {
+            "coding.workspace"
+        }:
             raise ToolError("Unsupported execution permission")
 
 

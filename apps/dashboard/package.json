@@ -16,6 +16,10 @@
     "next": "16.4.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "rehype-highlight": "7.0.2",
+    "rehype-sanitize": "6.0.0",
+    "remark-gfm": "4.0.1",
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {

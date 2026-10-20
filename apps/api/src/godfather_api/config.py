@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     )
 
     environment: Literal["local", "test", "production"] = "local"
+    release_version: str | None = Field(default=None, max_length=100)
+    release_revision: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
+    release_built_at: str | None = Field(default=None, max_length=100)
     database_host: str = Field(default="postgres", min_length=1)
     database_port: int = Field(default=5432, ge=1, le=65535)
     database_name: str = Field(default="godfather", pattern=r"^[a-z][a-z0-9_]{0,62}$")

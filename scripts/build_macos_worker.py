@@ -99,6 +99,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         "setuptools",
         "--hidden-import",
         "fcntl",
+        "--hidden-import",
+        "keyring.backends.macOS",
     ]
     if identity:
         arguments += ["--codesign-identity", identity]

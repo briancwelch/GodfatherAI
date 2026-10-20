@@ -65,10 +65,31 @@ def check(folder: Path) -> None:
         assert (actual["Os"], actual["Architecture"]) == ("linux", "amd64")
     api_image = manifest["images"]["api"]["tag"]
     dashboard_image = manifest["images"]["dashboard"]["tag"]
-    audit = """
+    if "build_started_utc" in manifest:
+        image_config = json.loads(docker("image", "inspect", api_image))[0]["Config"]
+        metadata = dict(value.split("=", 1) for value in image_config["Env"] if "=" in value)
+        assert metadata["GODFATHER_RELEASE_VERSION"] == manifest["release"]
+        assert metadata["GODFATHER_RELEASE_REVISION"] == manifest["source_revision"]
+        assert metadata["GODFATHER_RELEASE_BUILT_AT"] == manifest["build_started_utc"]
+    expected_head = (
+        manifest.get("migration_head")
+        or docker(
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            api_image,
+            "python",
+            "-c",
+            "from godfather_api.migrations import migration_head; print(migration_head())",
+        )
+        .decode()
+        .strip()
+    )
+    audit = f"""
 import importlib.util, pathlib, shutil
 from godfather_api.migrations import migration_head
-assert migration_head() == '0007_founder_bootstrap'
+assert migration_head() == {expected_head!r}
 for module in ('pytest', 'ruff', 'mypy', 'godfather_worker'):
     assert importlib.util.find_spec(module) is None, module
 for tool in ('git', 'uv'):
@@ -202,7 +223,7 @@ console.log('Dashboard standalone content passed');
             "FROM administrator_bootstrap; "
             "SELECT count(*) FROM users; SELECT count(*) FROM google_identities;",
         )
-        assert bootstrap.strip().splitlines() == [b"0007_founder_bootstrap", b"1|t|t", b"0", b"0"]
+        assert bootstrap.strip().splitlines() == [expected_head.encode(), b"1|t|t", b"0", b"0"]
         compose(
             "up",
             "-d",

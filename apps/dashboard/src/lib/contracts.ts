@@ -43,6 +43,7 @@ export interface NodeInfo {
   model_deployments: Deployment[];
 }
 export interface Deployment {
+  connection_id?: string | null;
   identifier: string;
   provider: string;
   provider_id: string;
@@ -55,6 +56,7 @@ export interface Deployment {
   estimated_vram_bytes: number | null;
 }
 export interface ModelInfo {
+  grant_id?: string | null;
   node_id: string;
   owner_id: string;
   state: string;
@@ -128,6 +130,11 @@ export interface EventPage {
   limit: number;
 }
 export interface Snapshot {
+  release?: {
+    version: string | null;
+    revision: string | null;
+    built_at: string | null;
+  };
   environment: "local" | "test" | "production";
   generated_at: string;
   actor_id: string;
@@ -170,6 +177,7 @@ export interface Snapshot {
   } | null;
 }
 export interface AttemptInfo {
+  started_at?: string | null;
   id: string;
   number: number;
   node_id: string;
@@ -236,6 +244,10 @@ export function localTime(value: string | null): string {
 export function retryEligible(detail: JobDetail): boolean {
   const last = detail.attempts.at(-1);
   return (
+    !(
+      detail.job.requirements?.model_selection as
+        Record<string, Json> | undefined
+    )?.connection_id &&
     detail.job.status === "FAILED" &&
     detail.job.attempt_count < 11 &&
     !detail.job.cancel_requested_at &&

@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from godfather_api.migrations import migration_head
+
 from scripts.dev import ROOT
 
 UPSTREAM = ("postgres", "redis", "caddy")
@@ -84,6 +86,7 @@ def assemble(
     release: str,
     images: dict[str, dict[str, Any]],
     revision: str,
+    built_at: str | None = None,
 ) -> None:
     """Allowlist package contents; never copy the checkout or operator environment."""
     source = ROOT / "infrastructure/release"
@@ -122,10 +125,12 @@ def assemble(
         "release": release,
         "created_utc": datetime.now(UTC).isoformat(),
         "source_revision": revision,
+        "migration_head": migration_head(),
+        "build_started_utc": built_at or datetime.now(UTC).isoformat(),
         "source_dirty": False,
         "image_sources": image_sources(),
         "platform": "linux/amd64",
-        "acceptance": "local release candidate; real Google and remote Phase 10 gates pending",
+        "acceptance": "candidate; live upgrade acceptance is recorded separately",
         "images": images,
     }
     (folder / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -146,6 +151,7 @@ def build(release: str) -> Path:
     sources = image_sources()
     folder.mkdir(parents=True)
     images: dict[str, dict[str, Any]] = {}
+    built_at = datetime.now(UTC).isoformat()
     for name in ("api", "dashboard"):
         tag = f"godfather/{name}:{release}"
         command = [
@@ -162,6 +168,12 @@ def build(release: str) -> Path:
         ]
         if name == "api":
             command += [
+                "--build-arg",
+                f"RELEASE_VERSION={release}",
+                "--build-arg",
+                f"RELEASE_REVISION={revision}",
+                "--build-arg",
+                f"RELEASE_BUILT_AT={built_at}",
                 "--target",
                 "production",
                 "--build-arg",
@@ -193,7 +205,7 @@ def build(release: str) -> Path:
     )
     if source_revision() != revision:
         raise RuntimeError("Git revision changed during build; release refused")
-    assemble(folder, release, images, revision)
+    assemble(folder, release, images, revision, built_at)
     if source_revision() != revision:
         raise RuntimeError("Git revision changed during assembly; release refused")
     with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:

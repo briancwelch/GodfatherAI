@@ -6,7 +6,6 @@ import threading
 from contextlib import suppress
 from datetime import UTC, datetime
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from godfather_agent_runtime import WorkflowError, execute_workflow
@@ -18,6 +17,7 @@ from godfather_contracts.agents import (
     WorkflowReport,
     WorkflowState,
 )
+from godfather_contracts.coding import CodingRepository
 from godfather_contracts.inference import InferenceUsage
 from godfather_contracts.jobs import Assignment, JobReport, ReportResponse
 from godfather_model_gateway import GatewayError, Provider, ProviderConfig
@@ -25,6 +25,7 @@ from godfather_model_gateway.providers import create_provider
 
 from godfather_worker.client import WorkerClient
 from godfather_worker.inference import maintain_execution
+from godfather_worker.paid_inference import MeteredProvider
 
 
 class ArtifactRead(Contract):
@@ -45,6 +46,7 @@ async def execute_agent(
     configs: list[ProviderConfig],
     pause_after_checkpoint: int | None = None,
     provider_override: Provider | None = None,
+    repositories: list[CodingRepository] | None = None,
 ) -> None:
     bundle, deployment, payload = assignment.workflow, assignment.deployment, assignment.job.input
     if bundle is None or deployment is None or not isinstance(payload, WorkflowInput):
@@ -77,11 +79,15 @@ async def execute_agent(
     if config is None:
         await report("fail", error_code="model_unavailable")
         return
-    # Phase 06 authorizes local workflows; BYOK/paid routing remains a design only.
-    if urlsplit(config.url).hostname not in ("localhost", "127.0.0.1", "::1"):
+    # Compatible workflows remain local; native paid providers use the metered wrapper below.
+    if config.provider == "openai_compatible" and not config.url.startswith(
+        ("http://127.0.0.1", "http://localhost", "http://[::1]")
+    ):
         await report("fail", error_code="workflow_validation")
         return
     provider = provider_override or create_provider(config)
+    if config.provider in ("openai", "anthropic"):
+        provider = MeteredProvider(provider, client, node_id, registration, assignment)
 
     async def read_artifact(ref: ArtifactReference) -> object:
         body = ArtifactRead.model_validate({**identity, "artifact": ref})
@@ -125,6 +131,20 @@ async def execute_agent(
         return state
 
     async def run() -> None:
+        from godfather_contracts.agents import WorkflowStep
+
+        from godfather_worker.coding import execute as execute_coding
+
+        async def coding(step: WorkflowStep) -> tuple[StepOutput, object]:
+            config = next((r for r in repositories or [] if r.id == payload.repository_id), None)
+            if (
+                config is None
+                or assignment.job.owner_id not in config.allowed_user_ids
+                or assignment.job.workspace_id not in config.allowed_workspace_ids
+            ):
+                raise WorkflowError("tool_permission")
+            return await execute_coding(config, payload, step, provider, deployment)
+
         async with asyncio.timeout(
             max(0.001, (assignment.deadline_at - datetime.now(UTC)).total_seconds())
         ):
@@ -138,6 +158,7 @@ async def execute_agent(
                 registration.os,
                 read_artifact,
                 transition,
+                coding=coding,
             )
             await report("complete", result=result)
 

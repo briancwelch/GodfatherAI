@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current task: local macOS worker application, browser enrollment and native installer preparation.** The operator reports the production Command Center and first Windows inference worker operational; see the recorded [first-worker evidence](docs/operations/first-production-worker-2026-10-20.md). The Mac candidate reuses Google OIDC and worker protocol v1. Native ARM64 and Intel candidate builds are recorded in the [Actions build report](docs/operations/macos-worker-actions.md); Apple signing and physical recipient acceptance remain pending. It is not ready for ordinary distribution. No production deployment, infrastructure change, invitation or publication is authorized by this task. See the [Mac user guide](packages/worker/macos/README.md), [native build and troubleshooting guide](packages/worker/macos/TROUBLESHOOTING.md), [administrator guide](packages/worker/macos/ADMINISTRATOR.md), and [worker distribution plan](docs/operations/worker-distribution.md). BYOK remains planning only.
+**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Routine deployment to the existing environment is authorized by this assignment, but production SSH is currently blocked by automatic approval review. No paid API calls are authorized. The operator reports the existing Command Center and first Windows worker operational; see [first-worker evidence](docs/operations/first-production-worker-2026-10-20.md). Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
 
 ## Start here
 
@@ -85,4 +85,4 @@ PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, lea
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Historical phase reports retain their original acceptance boundaries. Current authorization covers local macOS worker and enrollment preparation only. Stop before production deployment or installer publication; frontier billing remains planning only.
+Historical phase reports retain their original acceptance boundaries. The current Phase 11 assignment supersedes earlier BYOK planning-only limits; live spending, new infrastructure, DNS/Google Cloud changes and unrelated account access remain outside its authorization.

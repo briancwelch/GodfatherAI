@@ -28,6 +28,7 @@ from godfather_api.jobs import router as jobs_router
 from godfather_api.logging import configure_logging, correlation_id
 from godfather_api.nodes import router as nodes_router
 from godfather_api.nodes import sweep_health
+from godfather_api.provider_connections import router as provider_connections_router
 from godfather_api.scheduler import scheduler_tick
 
 logger = logging.getLogger("godfather.api")
@@ -86,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/api/v1/openapi.json",
     )
+    app.include_router(provider_connections_router)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:

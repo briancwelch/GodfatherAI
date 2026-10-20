@@ -37,7 +37,15 @@ interface Options {
   tools: Tool[];
   workflows: { id: string; name: string; output_schema: string }[];
   model_limit: number;
+  repositories: {
+    id: string;
+    name: string;
+    node_name: string;
+    available: boolean;
+  }[];
 }
+const modelKey = (m: ModelInfo) =>
+  `${m.deployment.provider}:${m.deployment.identifier}${m.deployment.connection_id ? `:${m.deployment.connection_id}` : ""}`;
 const key = (tool: { name: string; version: number }) =>
   `${tool.name}@${tool.version}`;
 const subscribeRibbon = () => () => {};
@@ -350,11 +358,11 @@ function AgentEditor({
   const firstStep = initial?.definition.workflow.steps[0];
   const simpleWorkflow =
     !initial ||
-    (firstStep?.kind === "model" &&
-      ["text", "plan"].includes(firstStep.output_schema || "") &&
+    (["model", "coding"].includes(firstStep?.kind || "") &&
+      ["text", "plan", "coding"].includes(firstStep?.output_schema || "") &&
       initial.definition.workflow.steps
         .slice(1)
-        .every((s) => s.kind === "tool" && s.input_step === firstStep.id));
+        .every((s) => s.kind === "tool" && s.input_step === firstStep?.id));
   const [workflow, setWorkflow] = useState(
     simpleWorkflow ? firstStep?.output_schema || "text" : "custom",
   );
@@ -362,40 +370,39 @@ function AgentEditor({
     dialog.current?.showModal();
   }, []);
   const models = [
-    ...new Map(
-      options.models.map((m) => [
-        `${m.deployment.provider}:${m.deployment.identifier}`,
-        m,
-      ]),
-    ).values(),
+    ...new Map(options.models.map((m) => [modelKey(m), m])).values(),
   ];
   const existingSelection = initial?.definition.requirements.model_selection as
     Record<string, Json> | undefined;
   const existingModel = existingSelection?.identifier
-    ? `${existingSelection.provider || ""}:${existingSelection.identifier}`
+    ? `${existingSelection.provider || ""}:${existingSelection.identifier}${existingSelection.connection_id ? `:${existingSelection.connection_id}` : ""}`
     : "";
+  const [modelChoice, setModelChoice] = useState(
+    existingModel || initialModel || (models[0] ? modelKey(models[0]) : ""),
+  );
+  const paid = !!(
+    models.find((m) => modelKey(m) === modelChoice)?.deployment.connection_id ||
+    (modelChoice === existingModel && existingSelection?.connection_id)
+  );
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError("");
     const form = new FormData(e.currentTarget);
     try {
-      const chosen = models.find(
-        (m) =>
-          `${m.deployment.provider}:${m.deployment.identifier}` ===
-          form.get("model"),
-      );
+      const chosen = models.find((m) => modelKey(m) === form.get("model"));
       const tools = options.tools.filter((t) =>
         form.getAll("tools").includes(key(t.reference)),
       );
       const permissions = [...new Set(tools.flatMap((t) => t.permissions))];
+      if (workflow === "coding") permissions.push("coding.workspace");
       let steps: Record<string, unknown>[];
       if (workflow === "custom") steps = JSON.parse(String(form.get("steps")));
       else {
         steps = [
           {
             id: "response",
-            kind: "model",
+            kind: workflow === "coding" ? "coding" : "model",
             instruction: String(form.get("instruction")),
             output_schema: workflow,
             timeout_seconds: Number(form.get("step_timeout")),
@@ -420,16 +427,38 @@ function AgentEditor({
         requirements: {
           ...(initial?.definition.requirements || {}),
           capabilities: form.getAll("capabilities"),
+          runtimes: workflow === "coding" ? ["coding-sandbox-v1"] : [],
           model_selection: chosen
             ? {
                 ...existingSelection,
                 identifier: chosen.deployment.identifier,
                 provider: chosen.deployment.provider,
+                connection_id: chosen.deployment.connection_id || null,
+                paid_consent:
+                  !!chosen.deployment.connection_id &&
+                  form.get("paid") === "on",
+                grant_id: form.get("grant") || chosen.grant_id || null,
+                fallback_models:
+                  chosen.deployment.provider === "ollama"
+                    ? String(form.get("fallbacks") || "")
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                    : [],
+                required_operations:
+                  chosen.deployment.connection_id &&
+                  ["plan", "coding"].includes(workflow)
+                    ? ["structured_output"]
+                    : [],
               }
             : existingSelection,
         },
         allowed_tools: tools.map((t) => t.reference),
         permissions,
+        retry: {
+          limit: workflow === "coding" || paid ? 0 : 1,
+          backoff_seconds: 1,
+        },
         workflow: {
           id: initial?.definition.workflow.id || crypto.randomUUID(),
           version: (initial?.definition.workflow.version || 0) + 1,
@@ -519,41 +548,72 @@ function AgentEditor({
             <select
               name="model"
               aria-label="Model requirement"
-              defaultValue={
-                existingModel ||
-                initialModel ||
-                (models[0]
-                  ? `${models[0].deployment.provider}:${models[0].deployment.identifier}`
-                  : "")
-              }
+              value={modelChoice}
+              onChange={(e) => setModelChoice(e.target.value)}
               required={!existingSelection}
             >
               {!models.length && !existingSelection && (
                 <option value="">No permitted models advertised</option>
               )}
               {existingSelection &&
-                !models.some(
-                  (m) =>
-                    `${m.deployment.provider}:${m.deployment.identifier}` ===
-                    existingModel,
-                ) && (
+                !models.some((m) => modelKey(m) === existingModel) && (
                   <option value={existingModel}>
                     Preserve existing model requirement
                   </option>
                 )}
               {models.map((m) => (
-                <option
-                  key={`${m.deployment.provider}:${m.deployment.identifier}`}
-                  value={`${m.deployment.provider}:${m.deployment.identifier}`}
-                >
+                <option key={modelKey(m)} value={modelKey(m)}>
                   {m.deployment.identifier} · {m.deployment.provider}
                   {m.available ? "" : " · unavailable"}
+                  {m.deployment.connection_id
+                    ? ` · paid connection ${m.deployment.connection_id.slice(0, 8)}`
+                    : " · local"}
                 </option>
               ))}
             </select>
             <small>
               First {options.model_limit} permitted advertisements. Execution
               waits for a compatible worker.
+            </small>
+          </label>
+          {paid && (
+            <>
+              <label className="check-label">
+                <input type="checkbox" name="paid" required /> Allow this agent
+                to request paid API inference and send task data to the selected
+                provider. Each run requires confirmation.
+              </label>
+              <label>
+                Owner-issued spending grant (for a shared connection)
+                <input
+                  name="grant"
+                  defaultValue={String(existingSelection?.grant_id || "")}
+                />
+              </label>
+              <p>
+                Usage is charged to the selected connection owner, within their
+                grants and safeguards.{" "}
+                <a href="/providers">
+                  Inspect provider policies and estimated costs
+                </a>
+                .
+              </p>
+            </>
+          )}
+          <label>
+            Approved local fallback models (comma separated)
+            <input
+              name="fallbacks"
+              disabled={paid}
+              defaultValue={
+                Array.isArray(existingSelection?.fallback_models)
+                  ? existingSelection.fallback_models.join(", ")
+                  : ""
+              }
+            />
+            <small>
+              Only exact Ollama models allowed by this workspace. Paid fallback
+              remains unavailable.
             </small>
           </label>
           <label>
@@ -748,7 +808,15 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
               workspace_id: agent.workspace_id,
               agent_id: agent.id,
               agent_version: agent.version,
-              input: { instruction: form.get("instruction") },
+              input: {
+                instruction: form.get("instruction"),
+                repository_id: form.get("repository_id") || null,
+                search_terms: String(form.get("code_search") || "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              },
+              paid_consent: form.get("paid_consent") === "on",
               priority: Number(form.get("priority")),
             });
             window.location.assign(`/jobs/${job.id}`);
@@ -767,6 +835,19 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
           Submit to the existing scheduler. A compatible authorized workflow
           worker must be available.
         </p>
+        {agent.definition.workflow.steps.some((s) => s.kind === "coding") && (
+          <RepositorySelection workspace={agent.workspace_id} />
+        )}
+        {!!(
+          agent.definition.requirements.model_selection as Record<string, Json>
+        )?.connection_id && (
+          <label className="check-label">
+            <input type="checkbox" name="paid_consent" required /> I authorize
+            paid API inference on this connection and sending this task to the
+            selected provider. Spending safeguards and estimates are shown in
+            Provider Connections.
+          </label>
+        )}
         <label>
           Instruction
           <textarea
@@ -804,5 +885,59 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
         </div>
       </form>
     </dialog>
+  );
+}
+
+export function RepositorySelection({ workspace }: { workspace: string }) {
+  const [repositories, setRepositories] = useState<
+    { id: string; name: string; node_name: string; available: boolean }[]
+  >([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void control<typeof repositories>(
+      `coding/repositories?workspace_id=${workspace}`,
+    )
+      .then((rows) => {
+        if (active) setRepositories(rows);
+      })
+      .catch(() => {
+        if (active) setError("Repository access unavailable");
+      });
+    return () => {
+      active = false;
+    };
+  }, [workspace]);
+  return (
+    <>
+      <label>
+        Owner-approved repository
+        <select name="repository_id" required>
+          <option value="">
+            {error ||
+              (repositories.length
+                ? "Select a repository"
+                : "No permitted coding repositories advertised")}
+          </option>
+          {repositories.map((r) => (
+            <option key={`${r.id}:${r.node_name}`} value={r.id}>
+              {r.name} · {r.node_name}
+              {r.available ? "" : " · offline"}
+            </option>
+          ))}
+        </select>
+        <small>
+          Only committed, approved files enter a disposable workspace. Network
+          access is disabled. Push and deployment are unavailable.
+        </small>
+      </label>
+      <label>
+        Code search terms (optional, comma separated)
+        <input name="code_search" maxLength={1024} />
+        <small>
+          Literal matches in approved committed files are supplied to the agent.
+        </small>
+      </label>
+    </>
   );
 }

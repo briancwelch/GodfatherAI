@@ -275,6 +275,10 @@ class OpenAICompatibleProvider(HTTPProvider):
 
 
 def create_provider(config: ProviderConfig) -> Provider:
+    if config.provider in ("openai", "anthropic"):
+        from godfather_model_gateway.frontier import AnthropicProvider, OpenAIProvider
+
+        return OpenAIProvider(config) if config.provider == "openai" else AnthropicProvider(config)
     if config.provider == "ollama":
         return OllamaProvider(config)
     return OpenAICompatibleProvider(config)

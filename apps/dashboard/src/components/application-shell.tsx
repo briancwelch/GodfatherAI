@@ -16,6 +16,7 @@ export const navigation = {
   nodes: "Nodes",
   agents: "Agents",
   models: "Models",
+  providers: "Provider Connections",
   activity: "Activity / Audit",
   administration: "Administration",
 };
@@ -243,6 +244,18 @@ export function ApplicationShell({
         )}
       </div>
       <footer className="application-status" role="status">
+        <span
+          title={
+            data?.release?.built_at
+              ? `Built ${new Date(data.release.built_at).toLocaleString()}`
+              : "Build timestamp unavailable"
+          }
+        >
+          {data?.release?.version
+            ? `${data.release.version} · ${data.release.revision?.slice(0, 8) || "commit unavailable"}`
+            : "Release metadata unavailable"}
+          {data?.environment ? ` · ${data.environment}` : ""}
+        </span>
         <span>
           {stale
             ? "Connection interrupted · displayed data may be stale"

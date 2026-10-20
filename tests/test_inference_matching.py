@@ -89,3 +89,22 @@ def test_capability_selection_can_choose_a_smaller_compatible_deployment() -> No
     assert matches(req, node, [])
     selected = deployment_for(req, node, [])
     assert selected is not None and selected.identifier == "smaller"
+
+
+def test_local_fallback_is_explicit_and_never_changes_provider() -> None:
+    from pydantic import ValidationError
+
+    node = model_node("windows")
+    node.model_deployments.append(
+        node.model_deployments[0].model_copy(update={"identifier": "backup"})
+    )
+    request = Requirements(
+        model_selection=ModelSelection(
+            identifier="fixture", provider="ollama", fallback_models=["backup"]
+        )
+    )
+    assert deployment_for(request, node, []).identifier == "fixture"  # type: ignore[union-attr]
+    node.model_deployments[0].available = False
+    assert deployment_for(request, node, []).identifier == "backup"  # type: ignore[union-attr]
+    with pytest.raises(ValidationError):
+        ModelSelection(identifier="fixture", provider="openai", fallback_models=["backup"])

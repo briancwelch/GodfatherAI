@@ -18,6 +18,7 @@ from godfather_contracts.agents import (
     WorkflowState,
     WorkflowSubmission,
 )
+from godfather_contracts.coding import CODING_RUNTIME, REPOSITORY_PREFIX
 from godfather_contracts.execution import AttemptIdentity
 from godfather_contracts.jobs import JobView
 from sqlalchemy import select
@@ -247,6 +248,7 @@ def agent_options(workspace_id: UUID, request: Request, session: SessionDep) -> 
         "capabilities": sorted(capabilities),
         "models": inference.models(workspace_id, request, session, 200, 0),
         "model_limit": 200,
+        "repositories": coding_repositories(workspace_id, request, session),
         "tools": [
             tool.model_dump(mode="json")
             for tool in REGISTRY.values()
@@ -256,8 +258,34 @@ def agent_options(workspace_id: UUID, request: Request, session: SessionDep) -> 
         "workflows": [
             {"id": "text", "name": "Read-only model response", "output_schema": "text"},
             {"id": "plan", "name": "Structured plan", "output_schema": "plan"},
+            {"id": "coding", "name": "Isolated coding task", "output_schema": "coding"},
         ],
     }
+
+
+@router.get("/coding/repositories")
+def coding_repositories(
+    workspace_id: UUID, request: Request, session: SessionDep
+) -> list[dict[str, object]]:
+    actor = authenticate(request, session, "human")
+    if not workspace_access(session, actor.owner_id, workspace_id):
+        raise HTTPException(404, "Workspace not found")
+    result = []
+    for node in session.scalars(select(Node).where(node_visibility(session, actor.owner_id))):
+        for repo in node_view(session, node).coding_repositories:
+            if (
+                actor.owner_id in repo.allowed_user_ids
+                and workspace_id in repo.allowed_workspace_ids
+            ):
+                result.append(
+                    {
+                        "id": str(repo.id),
+                        "name": repo.name,
+                        "node_name": node.name,
+                        "available": node.state == "online",
+                    }
+                )
+    return result
 
 
 @router.post("/workflow/jobs", response_model=JobView, status_code=201)
@@ -267,11 +295,38 @@ def submit_workflow(payload: WorkflowSubmission, request: Request, session: Sess
     if agent.workspace_id != payload.workspace_id:
         raise HTTPException(404, "Agent does not belong to this workspace")
     spec = service.agent_view(agent).definition
+    if (
+        spec.requirements.model_selection
+        and spec.requirements.model_selection.connection_id
+        and not payload.paid_consent
+    ):
+        raise HTTPException(
+            422, "Confirm paid inference and sending this task to the selected provider"
+        )
     if not agent.enabled:
         raise HTTPException(409, "Agent version is disabled")
     requirements = spec.requirements.model_copy(
         update={"tools": spec.allowed_tools, "tool_permissions": spec.permissions}
     )
+    coding = any(s.kind == "coding" for s in spec.workflow.steps)
+    if not coding and (payload.input.repository_id or payload.input.search_terms):
+        raise HTTPException(422, "Repository access and code search require a coding workflow")
+    if coding:
+        if payload.input.repository_id is None:
+            raise HTTPException(422, "An owner-approved repository is required")
+        requirements = requirements.model_copy(
+            update={
+                "runtimes": list(
+                    dict.fromkeys(
+                        [
+                            *requirements.runtimes,
+                            CODING_RUNTIME,
+                            REPOSITORY_PREFIX + str(payload.input.repository_id),
+                        ]
+                    )
+                )
+            }
+        )
     job = Job(
         owner_id=actor.owner_id,
         workspace_id=payload.workspace_id,
@@ -374,14 +429,35 @@ def result(job_id: UUID, request: Request, session: SessionDep) -> dict[str, obj
     job = workflow_job(session, job_id, actor.owner_id)
     attempt = current_attempt(session, job)
     final: object = None
+    output_error: str | None = None
     if job.status == "COMPLETED":
         ref = ArtifactReference.model_validate(job.result_refs["final_output"])
         final = service.load_artifact(session, request.app.state.artifacts, job, ref)
+    elif job.cancel_requested_at is None:
+        committed = session.scalar(
+            select(WorkflowStepRecord)
+            .where(WorkflowStepRecord.job_id == job.id, WorkflowStepRecord.status == "COMPLETED")
+            .order_by(WorkflowStepRecord.finished_at.desc())
+            .limit(1)
+        )
+        if committed is not None and committed.output_artifact_id is not None:
+            row = session.get(Artifact, committed.output_artifact_id)
+            if row is not None:
+                try:
+                    final = service.load_artifact(
+                        session, request.app.state.artifacts, job, service.reference(row)
+                    )
+                except HTTPException as error:
+                    if error.status_code != 503:
+                        raise
+                    output_error = "Committed output is unavailable or failed integrity validation"
     return {
         "job_id": str(job.id),
         "status": job.status,
         "result": job.result_refs or None,
         "output": final,
+        "output_error": output_error,
+        "partial": final is not None and job.status != "COMPLETED",
         "error": attempt.error if attempt else None,
     }
 

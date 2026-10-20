@@ -19,6 +19,7 @@ from godfather_contracts.inference import (
     StreamUpdate,
 )
 from godfather_contracts.model_management import ModelInstallInput, ModelInstallResult
+from godfather_contracts.providers import ConnectionCheck
 
 JobState = Literal[
     "PENDING", "ASSIGNED", "RUNNING", "RETRY_WAIT", "COMPLETED", "FAILED", "CANCELLED"
@@ -54,6 +55,11 @@ class JobSubmission(Contract):
                 raise ValueError("Inference input and model selection are required")
             if self.input.stream != self.requirements.model_selection.stream:
                 raise ValueError("Input and model selection stream modes must agree")
+            operations = self.requirements.model_selection.required_operations
+            if self.input.tools and "tools" not in operations:
+                operations.append("tools")
+            if self.input.output_schema and "structured_output" not in operations:
+                operations.append("structured_output")
         elif not isinstance(self.input, SyntheticInput) or self.requirements.model_selection:
             raise ValueError("Synthetic jobs require synthetic input without model selection")
         return self
@@ -112,6 +118,14 @@ class Assignment(Contract):
 
 class PollResponse(Contract):
     assignment: Assignment | None = None
+    provider_checks: list[ConnectionCheck] = Field(default_factory=list, max_length=8)
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if not self.provider_checks:
+            data.pop("provider_checks", None)
+        return data
 
 
 class JobReport(AttemptIdentity):

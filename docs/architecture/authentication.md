@@ -156,14 +156,17 @@ on this path; job/attempt/lease/fencing validation is unchanged. A deterministic
 concurrency regression pauses a worker while it holds the node and proves that
 cancellation and its durable event can commit before that worker continues.
 
-Google login does not authorize provider billing. The [BYOK plan](byok-plan.md)
-remains planning-only. Its authorization contract is owner UUID + opaque provider
+Google login does not authorize provider billing. The separately authorized
+[Phase 11 extension](../operations/phase-11.md) implements independent worker-local
+provider credentials and metadata-only connection grants. Its authorization
+contract is owner UUID + opaque provider
 connection ID + private/approval-required/budget-limited policy + permitted user,
 workspace, model, payer and usage attribution. A paid invocation will require an
 owner-authorized grant covering billable use and data egress; budgets are safeguards,
-not guaranteed billing caps. Keys remain worker-local. No key upload/sharing,
-provider billing, cost ledger, paid fallback or sensitive-tool approval execution is
-implemented. Unsupported operations stay unavailable; local failure never enables
+not guaranteed billing caps. Keys remain worker-local. The historical Phase 09
+implementation did not include paid provider routing or a cost ledger. Phase 11 adds explicit paid routes
+and a separate reservation/usage ledger, without changing Google OIDC. Unsupported
+operations stay unavailable; local failure never enables
 paid inference. Node tool grants continue to protect the existing read-only runtime.
 
 ## Remaining public-deployment limits

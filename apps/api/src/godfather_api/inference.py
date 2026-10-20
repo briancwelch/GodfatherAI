@@ -163,6 +163,26 @@ def models(
             and connection_at(node.last_heartbeat_at, now, request.app.state.settings) == "online"
         )
         for deployment in view.model_deployments:
+            billing_selection = None
+            if deployment.connection_id is not None:
+                from godfather_contracts import ModelSelection
+
+                from godfather_api.provider_connections import selection_visible
+
+                billing_selection = selection_visible(
+                    session,
+                    ModelSelection(
+                        identifier=deployment.identifier,
+                        provider=deployment.provider,
+                        connection_id=deployment.connection_id,
+                        paid_consent=True,
+                    ),
+                    actor.owner_id,
+                    workspace_id,
+                    node,
+                )
+                if billing_selection is None:
+                    continue
             if (
                 workspace.allowed_models is not None
                 and deployment.identifier not in workspace.allowed_models
@@ -179,6 +199,9 @@ def models(
                     and deployment.available
                     and view.inference_protocol_version == 1,
                     "deployment": deployment.model_dump(mode="json"),
+                    "grant_id": str(billing_selection.grant_id)
+                    if billing_selection and billing_selection.grant_id
+                    else None,
                 }
             )
     return result[offset : offset + limit]
@@ -211,7 +234,7 @@ def inference_job(session: Session, job_id: UUID, actor_id: UUID) -> Job:
     return job
 
 
-def snapshot(session: Session, job: Job) -> dict[str, object]:
+def snapshot(session: Session, job: Job, *, include_partial: bool = False) -> dict[str, object]:
     attempt = current_attempt(session, job)
     now = datetime.now(UTC)
     valid = attempt is not None and (
@@ -233,6 +256,14 @@ def snapshot(session: Session, job: Job) -> dict[str, object]:
         "valid": valid,
         "sequence": data.get("sequence", 0),
         "text": data.get("text", ""),
+        "partial_text": attempt.result.get("text", "")
+        if (
+            include_partial
+            and attempt
+            and job.status == "FAILED"
+            and job.cancel_requested_at is None
+        )
+        else "",
         "result": job.result_refs if job.status == "COMPLETED" else None,
         "error": attempt.error if attempt else None,
         "metadata": {

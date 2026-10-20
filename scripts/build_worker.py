@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 from scripts.dev import ROOT
-from scripts.release import sha256, version
+from scripts.release import sha256, source_revision, version
 
 PYINSTALLER = "6.22.3"
 
@@ -31,6 +31,7 @@ def build(release: str) -> Path:
     archive = Path(str(destination) + ".zip")
     if destination.exists() or archive.exists():
         raise RuntimeError("Worker output already exists; use a new release version")
+    revision = source_revision()
     uv = shutil.which("uv")
     if uv is None:
         raise RuntimeError("Build prerequisite: uv (not required on installed worker hosts)")
@@ -97,6 +98,12 @@ def build(release: str) -> Path:
         "-m",
         "PyInstaller",
         "--onedir",
+        "--hidden-import",
+        {
+            "Windows": "keyring.backends.Windows",
+            "Linux": "keyring.backends.SecretService",
+            "Darwin": "keyring.backends.macOS",
+        }[platform.system()],
         "--name",
         "godfather-worker",
         "--clean",
@@ -127,6 +134,7 @@ def build(release: str) -> Path:
             {
                 "version": release,
                 "target": native,
+                "source_revision": revision,
                 "pyinstaller": PYINSTALLER,
                 "status": "unsigned candidate; installer and single-use enrollment pending",
                 "validation": "native --help only; no clean-host/service/inference acceptance",

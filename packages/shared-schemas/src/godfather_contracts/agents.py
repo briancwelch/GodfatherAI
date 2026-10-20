@@ -1,12 +1,19 @@
 """Portable sequential workflow and artifact/checkpoint contracts v1."""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from godfather_contracts import Contract, Label, ModelDeployment, ToolReference
+from godfather_contracts.coding import CODING_RUNTIME, CodingOutput
 from godfather_contracts.execution import AttemptIdentity, Requirements, RetryPolicy
 from godfather_contracts.inference import InferenceParameters, InferenceUsage
 
@@ -28,14 +35,14 @@ class PlanSummary(Contract):
     outline: str = Field(min_length=1, max_length=8192)
 
 
-StepOutput = Plan | TextOutput | PlanSummary
+StepOutput = Plan | TextOutput | PlanSummary | CodingOutput
 
 
 class WorkflowStep(Contract):
     id: Label
-    kind: Literal["model", "tool"]
+    kind: Literal["model", "tool", "coding"]
     instruction: str = Field(default="", max_length=4096)
-    output_schema: Literal["plan", "text", "plan_summary"]
+    output_schema: Literal["plan", "text", "plan_summary", "coding"]
     input_step: Label | None = None
     tool: ToolReference | None = None
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
@@ -43,6 +50,15 @@ class WorkflowStep(Contract):
 
     @model_validator(mode="after")
     def supported_operation(self) -> "WorkflowStep":
+        if self.kind == "coding":
+            if (
+                self.tool
+                or self.output_schema != "coding"
+                or not self.instruction
+                or self.input_step
+            ):
+                raise ValueError("Coding requires its bounded isolated-workspace output contract")
+            return self
         if self.kind == "model":
             if not self.instruction or self.tool or self.output_schema not in ("plan", "text"):
                 raise ValueError("Model steps require an instruction and a supported output schema")
@@ -86,8 +102,27 @@ class AgentDefinition(Contract):
 
     @model_validator(mode="after")
     def portable_requirements(self) -> "AgentDefinition":
+        if any(s.kind == "coding" for s in self.workflow.steps) and (
+            len(self.workflow.steps) != 1
+            or self.retry.limit != 0
+            or CODING_RUNTIME not in self.requirements.runtimes
+            or "coding.workspace" not in self.permissions
+        ):
+            raise ValueError("Coding requires one isolated step, explicit permission and no replay")
+        if (
+            self.requirements.model_selection
+            and self.requirements.model_selection.connection_id
+            and self.retry.limit
+        ):
+            raise ValueError("Paid workflows cannot retry automatically")
         if self.requirements.model_selection is None:
             raise ValueError("A model selection is required")
+        if (
+            self.requirements.model_selection.connection_id
+            and any(s.output_schema in ("plan", "coding") for s in self.workflow.steps)
+            and "structured_output" not in self.requirements.model_selection.required_operations
+        ):
+            self.requirements.model_selection.required_operations.append("structured_output")
         if self.requirements.tools or self.requirements.tool_permissions:
             raise ValueError("Use the agent allowed_tools and permissions fields for tool policy")
         if any(
@@ -126,6 +161,19 @@ class AgentView(Contract):
 
 class WorkflowInput(Contract):
     instruction: str = Field(min_length=1, max_length=4096)
+    repository_id: UUID | None = None
+    search_terms: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
+        default_factory=list, max_length=8
+    )
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.repository_id is None:
+            data.pop("repository_id", None)
+        if not self.search_terms:
+            data.pop("search_terms", None)
+        return data
 
 
 class WorkflowSubmission(Contract):
@@ -134,6 +182,7 @@ class WorkflowSubmission(Contract):
     workspace_id: UUID
     input: WorkflowInput
     priority: int = Field(default=0, ge=-100, le=100)
+    paid_consent: bool = False
 
 
 class ArtifactReference(Contract):
@@ -145,7 +194,7 @@ class ArtifactReference(Contract):
 
 class ModelReference(Contract):
     provider_id: Label
-    provider: Literal["ollama", "openai_compatible"]
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
     identifier: Label
     digest: str | None = Field(default=None, max_length=200)
 

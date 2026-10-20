@@ -356,6 +356,11 @@ def overview(
     )
     return {
         "environment": request.app.state.settings.environment,
+        "release": {
+            "version": request.app.state.settings.release_version,
+            "revision": request.app.state.settings.release_revision,
+            "built_at": request.app.state.settings.release_built_at,
+        },
         "generated_at": datetime.now(UTC).isoformat(),
         "actor_id": str(actor.owner_id),
         "workspace_id": str(selected.id) if selected else None,
@@ -432,7 +437,9 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
         "steps": agents.steps(job_id, request, session) if run else [],
         "events": events(request, session, job_id=job_id),
         "output": agents.result(job_id, request, session)
-        if run and job.status == "COMPLETED"
+        if run
+        else inference.snapshot(session, job, include_partial=True)
+        if job.type == "inference.text"
         else None,
     }
 

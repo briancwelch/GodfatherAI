@@ -100,6 +100,19 @@ def submit(payload: JobSubmission, request: Request, session: SessionDep) -> Job
         raise HTTPException(403, "Synthetic jobs are restricted to isolated tests")
     if not workspace_access(session, actor.owner_id, payload.workspace_id):
         raise HTTPException(404, "Workspace not found or permission denied")
+    selection = payload.requirements.model_selection
+    if (
+        selection
+        and selection.provider in ("openai", "anthropic")
+        and (not selection.connection_id or not selection.paid_consent)
+    ):
+        raise HTTPException(
+            422, "Explicit provider connection and paid data-egress consent are required"
+        )
+    if selection and selection.connection_id and payload.retry.limit:
+        raise HTTPException(
+            422, "Automatic paid retries are disabled pending billing reconciliation"
+        )
     job = Job(
         owner_id=actor.owner_id,
         workspace_id=payload.workspace_id,
@@ -190,6 +203,12 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
     ):
         raise HTTPException(403, "Only the job owner or workspace administrator may retry")
     previous = current_attempt(session, job)
+    selection = view(session, job).requirements.model_selection
+    if selection and selection.connection_id:
+        raise HTTPException(
+            409,
+            "Paid attempts require billing reconciliation; submit a separately authorized new job",
+        )
     if (
         job.status != "FAILED"
         or previous is None
@@ -291,7 +310,25 @@ def poll(node_id: UUID, payload: JobPoll, request: Request, session: SessionDep)
         .with_for_update()
     )
     if job is None:
-        return PollResponse()
+        from godfather_contracts.providers import ConnectionCheck
+
+        from godfather_api.models import ProviderConnection
+
+        checks = []
+        if "provider-connections-v1" in node_view(session, node).runtimes:
+            checks = [
+                ConnectionCheck(connection_id=c.id, test_id=c.test_id)
+                for c in session.scalars(
+                    select(ProviderConnection)
+                    .where(
+                        ProviderConnection.node_id == node.id,
+                        ProviderConnection.revoked.is_(False),
+                        ProviderConnection.test_id.is_not(None),
+                    )
+                    .limit(8)
+                )
+            ]
+        return PollResponse(provider_checks=checks)
     attempt = current_attempt(session, job)
     now = datetime.now(UTC)
     if (

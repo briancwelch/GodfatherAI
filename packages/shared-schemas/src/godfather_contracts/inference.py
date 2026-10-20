@@ -1,10 +1,10 @@
 """Bounded portable text inference contract v1, independent of provider APIs."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
-from godfather_contracts import Contract, ModelDeployment
+from godfather_contracts import Contract, Label, ModelDeployment
 
 MAX_TEXT = 32768
 MAX_UPDATES = 512
@@ -27,11 +27,41 @@ class InferenceParameters(Contract):
     seed: int | None = Field(default=None, ge=0, le=2**31 - 1)
 
 
+class FunctionTool(Contract):
+    name: Label
+    description: str = Field(max_length=2000)
+    parameters: dict[str, object]
+
+
+class ToolCall(Contract):
+    id: str = Field(min_length=1, max_length=200)
+    name: Label
+    arguments: str = Field(max_length=MAX_TEXT)
+
+
 class InferenceInput(Contract):
     prompt: str = Field(min_length=1, max_length=MAX_TEXT)
     system: str | None = Field(default=None, max_length=8192)
     stream: bool = True
     parameters: InferenceParameters = Field(default_factory=InferenceParameters)
+    tools: list[FunctionTool] = Field(default_factory=list, max_length=16)
+    output_schema: dict[str, object] | None = None
+
+    @model_validator(mode="after")
+    def bounded_schema(self) -> "InferenceInput":
+        import json
+
+        if len(json.dumps([self.output_schema, [t.model_dump() for t in self.tools]])) > 32768:
+            raise ValueError("Schema and tools exceed the portable request bound")
+        return self
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for name in ("tools", "output_schema"):
+            if not getattr(self, name):
+                data.pop(name, None)
+        return data
 
 
 class InferenceUsage(Contract):
@@ -50,6 +80,14 @@ class InferenceResult(Contract):
     deployment: ModelDeployment
     usage: InferenceUsage
     finish_reason: Literal["stop", "length", "other"] = "stop"
+    tool_calls: list[ToolCall] = Field(default_factory=list, max_length=16)
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if not self.tool_calls:
+            data.pop("tool_calls", None)
+        return data
 
 
 class StreamUpdate(Contract):

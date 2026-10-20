@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import sys
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -13,9 +14,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from godfather_agent_runtime import WorkflowError
 from godfather_agent_runtime.tools import ToolError
 from godfather_agent_runtime.tools import definition as tool_definition
 from godfather_contracts import Heartbeat, Registration, ToolReference
+from godfather_contracts.coding import CODING_RUNTIME, REPOSITORY_PREFIX, CodingRepository
 from godfather_contracts.jobs import JobPoll, PollResponse
 from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
 from godfather_model_gateway import ProviderConfig
@@ -47,6 +50,11 @@ def main(
     observer: Callable[..., None] | None = None,
     worker_client: WorkerClient | None = None,
 ) -> int:
+    arguments = list(argv) if argv is not None else sys.argv[1:]
+    if arguments and arguments[0] == "provider":
+        from godfather_worker.provider_credentials import main as provider_main
+
+        return provider_main(arguments[1:])
     notify = observer or emit
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="http://127.0.0.1:8000")
@@ -76,6 +84,11 @@ def main(
         help="Opt in to text inference with worker-owned provider JSON settings",
     )
     parser.add_argument("--step-seconds", type=float, default=0)
+    parser.add_argument(
+        "--coding-config",
+        type=Path,
+        help="Owner-approved repository, container image and test command configuration",
+    )
     parser.add_argument("--allow-owner", type=str, action="append", default=[])
     parser.add_argument("--allow-workspace", type=str, action="append", default=[])
     args = parser.parse_args(argv)
@@ -93,6 +106,45 @@ def main(
         ):
             raise ValueError("Checkpoint pauses require an explicitly simulated workflow worker")
         configs: list[ProviderConfig] = []
+        repositories: list[CodingRepository] = []
+        if args.coding_config:
+            if not args.execute_workflows or args.simulate:
+                raise ValueError("Coding requires a physical opted-in workflow worker")
+            repositories = [
+                CodingRepository.model_validate(c)
+                for c in json.loads(args.coding_config.read_text(encoding="utf-8"))
+            ]
+            if not 1 <= len(repositories) <= 8 or len({c.id for c in repositories}) != len(
+                repositories
+            ):
+                raise ValueError("Configure one to eight distinct coding repositories")
+            from godfather_worker.coding import command, local_engine
+
+            git_code, _ = asyncio.run(command(["git", "--version"], repositories[0].path))
+            if git_code:
+                raise ValueError("Coding requires an existing Git installation")
+
+            for repository in repositories:
+                endpoint = asyncio.run(local_engine(repository.path))
+                code, output = asyncio.run(
+                    command(
+                        [
+                            "docker",
+                            "--host",
+                            endpoint,
+                            "image",
+                            "inspect",
+                            "--format",
+                            "{{.Os}}",
+                            repository.image,
+                        ],
+                        repository.path,
+                    )
+                )
+                if code or output.strip() != "linux":
+                    raise ValueError(
+                        "Coding requires an existing pinned Linux image; no automatic downloads"
+                    )
         if args.allow_model_installation and (not args.inference_config or args.simulate):
             raise ValueError(
                 "Model installation requires a physical worker and local inference configuration"
@@ -105,7 +157,9 @@ def main(
             if len({c.id for c in configs}) != len(configs):
                 raise ValueError("Provider aliases must be unique")
             if args.execute_workflows and any(
-                urlsplit(c.url).hostname not in ("localhost", "127.0.0.1", "::1") for c in configs
+                c.provider == "openai_compatible"
+                and urlsplit(c.url).hostname not in ("localhost", "127.0.0.1", "::1")
+                for c in configs
             ):
                 raise ValueError("Phase 06 workflow providers must remain local")
         if not 0 <= args.step_seconds <= 30:
@@ -135,6 +189,8 @@ def main(
             values["concurrency_limit"] = 1
             values["inference_protocol_version"] = 1
             values["model_deployments"] = asyncio.run(discover_models(configs))
+            if any(c.provider in ("openai", "anthropic") for c in configs):
+                values["runtimes"] = [*values["runtimes"], "provider-connections-v1"]
         if args.execute_workflows:
             tools = []
             for grant in args.allow_tool:
@@ -145,6 +201,23 @@ def main(
             values["workflow_protocol_version"] = 1
             values["worker_tools"] = tools
             values["tool_permissions"] = args.allow_tool_permission
+        if repositories:
+            if "coding.workspace" not in args.allow_tool_permission:
+                raise ValueError("The owner must explicitly grant coding.workspace")
+            values["runtimes"] = [
+                *values["runtimes"],
+                CODING_RUNTIME,
+                *(REPOSITORY_PREFIX + str(r.id) for r in repositories),
+            ]
+            values["coding_repositories"] = [
+                {
+                    "id": r.id,
+                    "name": r.name,
+                    "allowed_user_ids": r.allowed_user_ids,
+                    "allowed_workspace_ids": r.allowed_workspace_ids,
+                }
+                for r in repositories
+            ]
         if args.allow_model_installation:
             aliases = [c.id for c in configs if c.provider == "ollama"]
             if not aliases or any(len(alias) > 64 for alias in aliases):
@@ -163,7 +236,7 @@ def main(
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
-    except (OSError, KeyError, ValueError, TypeError, ToolError):
+    except (OSError, KeyError, ValueError, TypeError, ToolError, WorkflowError):
         notify("worker.configuration_invalid")
         return 1
     stop = stop_event or threading.Event()
@@ -207,6 +280,15 @@ def main(
                             JobPoll(session_id=registration.session_id),
                         )
                     )
+                    if polled.provider_checks:
+                        from godfather_worker.provider_checks import check_connections
+
+                        asyncio.run(
+                            check_connections(
+                                client, node_id, registration, polled.provider_checks, configs
+                            )
+                        )
+                        refresh_at = 0
                     if polled.assignment is not None:
                         notify("worker.attempt_started", job_id=str(polled.assignment.job.id))
                         if (
@@ -223,6 +305,7 @@ def main(
                                     result.heartbeat_interval_seconds,
                                     configs,
                                     args.pause_after_checkpoint,
+                                    repositories=repositories,
                                 )
                             )
                         elif (

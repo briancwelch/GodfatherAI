@@ -17,10 +17,16 @@ from godfather_model_gateway.providers import create_provider
 
 from godfather_worker.client import WorkerClient
 from godfather_worker.discovery import discover_resources
+from godfather_worker.paid_inference import MeteredProvider
+from godfather_worker.provider_credentials import load as load_provider_credential
 
 
 async def discover_models(configs: list[ProviderConfig]) -> list[ModelDeployment]:
     async def discover_one(config: ProviderConfig) -> list[ModelDeployment]:
+        try:
+            load_provider_credential(config)
+        except OSError:
+            return []
         provider = create_provider(config)
         try:
             # Startup/refresh must not block heartbeats for a provider's inference timeout.
@@ -118,6 +124,8 @@ async def execute_inference(
         await report("fail", error_code="model_unavailable")
         return
     provider = provider_override or create_provider(config)
+    if config.provider in ("openai", "anthropic"):
+        provider = MeteredProvider(provider, client, node_id, registration, assignment)
     pending = ""
     sequence = 0
     last_flush = 0.0

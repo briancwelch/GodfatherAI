@@ -44,6 +44,10 @@ def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bo
 
 def permitted(session: Session, job: Job, node: Node) -> bool:
     from godfather_api.authentication import permissions
+    from godfather_api.provider_connections import allowed
+
+    if not allowed(session, job, node):
+        return False
 
     if job.type == "model.install":
         payload = ModelInstallInput.model_validate(job.input_refs)
@@ -75,6 +79,10 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
     if workspace.allowed_models is not None:
         selection = requirements.model_selection
         if selection is not None and selection.identifier not in workspace.allowed_models:
+            return False
+        if selection is not None and not set(selection.fallback_models) <= set(
+            workspace.allowed_models
+        ):
             return False
         if not set(requirements.models) <= set(workspace.allowed_models):
             return False
@@ -189,16 +197,30 @@ def deployment_for(
     selection = requirements.model_selection
     if selection is None:
         return None
-    for model in sorted(node.model_deployments, key=lambda m: (m.provider_id, m.identifier)):
+    order = [selection.identifier, *selection.fallback_models]
+    for model in sorted(
+        node.model_deployments,
+        key=lambda m: (
+            order.index(m.identifier) if m.identifier in order else len(order),
+            m.provider_id,
+            m.identifier,
+        ),
+    ):
         capabilities = set(model.verified_capabilities)
         if selection.allow_declared_capabilities:
             capabilities.update(model.declared_capabilities)
         if (
             model.available
-            and (selection.identifier is None or selection.identifier == model.identifier)
+            and model.connection_id == selection.connection_id
+            and (
+                model.provider not in ("openai", "anthropic")
+                or (selection.paid_consent and selection.connection_id is not None)
+            )
+            and (selection.identifier is None or model.identifier in order)
             and (selection.provider is None or selection.provider == model.provider)
             and set(selection.capabilities) <= capabilities
             and "chat" in model.operations
+            and set(selection.required_operations) <= set(model.operations)
             and (not selection.stream or "stream" in model.operations)
             and (
                 selection.context_window is None
@@ -242,6 +264,9 @@ def finish_failure(
 ) -> None:
     from godfather_api.workflow_service import end_attempt
 
+    selection = Requirements.model_validate(job.requirements).model_selection
+    if selection and selection.connection_id:
+        retryable = False
     end_attempt(session, job, attempt, code, retryable and job.attempt_count <= job.retry_limit)
     attempt.status, attempt.finished_at = "FAILED", now
     if job.type == "agent.workflow" and code in ("lease_expired", "timeout"):
@@ -426,8 +451,25 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             ]
             if not candidates:
                 continue
+
+            def model_rank(
+                candidate: Node, selected_requirements: Requirements = requirements
+            ) -> int:
+                selection = selected_requirements.model_selection
+                if selection is None or not selection.fallback_models:
+                    return 0
+                selected_model = deployment_for(
+                    selected_requirements, views[candidate.id], reservations[candidate.id]
+                )
+                if selected_model is None:
+                    return 99
+                return [selection.identifier, *selection.fallback_models].index(
+                    selected_model.identifier
+                )
+
             candidates.sort(
                 key=lambda n: (
+                    model_rank(n),
                     0 if n.scheduling_policy == "preferred" and n.owner_id == job.owner_id else 1,
                     -len(set(requirements.capabilities) & set(views[n.id].primary_capabilities)),
                     len(reservations[n.id]),

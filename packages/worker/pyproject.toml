@@ -3,10 +3,17 @@ name = "godfather-worker"
 version = "0.1.0"
 description = "Outbound-only registration and health worker; no task execution"
 requires-python = ">=3.12"
-dependencies = ["godfather-contracts", "godfather-model-gateway", "godfather-agent-runtime", "psutil>=7.2,<8"]
+dependencies = [
+    "godfather-contracts",
+    "godfather-model-gateway",
+    "godfather-agent-runtime",
+    "psutil>=7.2,<8",
+    "keyring>=25,<26",
+]
 
 [project.scripts]
 godfather-worker = "godfather_worker.cli:main"
+godfather-worker-provider = "godfather_worker.provider_credentials:main"
 
 [tool.uv.sources]
 godfather-agent-runtime = { workspace = true }

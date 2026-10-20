@@ -24,6 +24,71 @@ const server = require("../apps/dashboard/src/lib/control-server.ts");
 const login = require("../apps/dashboard/src/components/google-login.tsx");
 const administration = require("../apps/dashboard/src/components/administration.tsx");
 const shell = require("../apps/dashboard/src/components/application-shell.tsx");
+const results = require("../apps/dashboard/src/components/job-result.tsx");
+
+test("job results sanitize Markdown, disable tracking images and highlight code", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(results.SafeMarkdown, {
+      text: '# Answer\n<script>alert(1)</script>\n[unsafe](javascript:alert(1))\n![pixel](https://attacker.invalid/track)\n\n```python\nprint("hello")\n```',
+    }),
+  );
+  assert.match(html, /<h1>Answer<\/h1>/);
+  assert.ok(
+    !html.includes("<script>") &&
+      !html.includes('href="javascript:') &&
+      !html.includes('src="https://attacker'),
+  );
+  assert.match(html, /hljs/);
+  assert.match(html, /Copy/);
+});
+
+test("persisted answer is primary and partial output is never labeled completed", () => {
+  const detail = {
+    job: {
+      id: "fixture",
+      type: "inference.text",
+      status: "RUNNING",
+      result: null,
+    },
+    output: {
+      valid: true,
+      text: "Partial answer",
+      metadata: {
+        deployment: { identifier: "fixture-model" },
+        usage: { duration_seconds: 2 },
+      },
+    },
+    attempts: [],
+    workflow: null,
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail }),
+  );
+  assert.match(html, /Partial answer/);
+  assert.match(html, /job has not completed/);
+  assert.match(html, /fixture-model/);
+  assert.match(html, /Download partial output/);
+  assert.ok(!html.includes("Authoritative result"));
+});
+
+test("provider management bridge has no secret upload endpoint", () => {
+  assert.equal(server.allowedPath("provider-connections", "POST"), true);
+  assert.equal(
+    server.allowedPath(
+      "provider-connections/00000000-0000-0000-0000-000000000000/policy",
+      "POST",
+    ),
+    true,
+  );
+  assert.equal(server.allowedPath("provider-connections/keys", "POST"), false);
+  assert.equal(
+    server.allowedPath(
+      "workers/00000000-0000-0000-0000-000000000000/provider-checks",
+      "POST",
+    ),
+    false,
+  );
+});
 
 test("desktop shell uses backend environment and accessible section navigation", () => {
   const html = renderToStaticMarkup(

@@ -71,8 +71,11 @@ const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
     "agent-options",
+    "coding/repositories",
     "tools",
     "models/install-options",
+    "provider-connections",
+    `provider-connections/${uuid}/(usage|grants)`,
     "auth/me",
     "administration/(users|invitations|audit|node-credentials)",
     `administration/workspaces/${uuid}/members`,
@@ -84,6 +87,9 @@ export function allowedPath(path: string, method: string): boolean {
   ];
   const writes = [
     "models/install",
+    "provider-connections",
+    `provider-connections/${uuid}/(policy|control|test|grants)`,
+    `provider-connections/${uuid}/grants/${uuid}/revoke`,
     "administration/worker-enrollments",
     "administration/worker-enrollments/revoke",
     "agents",
@@ -137,6 +143,21 @@ export async function proxy(request: NextRequest, segments: string[]) {
       request.method,
       body || undefined,
     );
+    if (
+      response.ok &&
+      request.method === "GET" &&
+      request.nextUrl.searchParams.get("download") === "1" &&
+      new RegExp(`^workflow/jobs/${uuid}/artifacts/${uuid}$`).test(path)
+    ) {
+      return new NextResponse(await response.text(), {
+        headers: {
+          "Cache-Control": "no-store",
+          "Content-Type": "application/json",
+          "Content-Disposition": `attachment; filename="artifact-${segments.at(-1)}.json"`,
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     const data: unknown = await response.json();
     return NextResponse.json(data, {
       status: response.status,

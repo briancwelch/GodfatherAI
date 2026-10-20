@@ -14,6 +14,7 @@ from godfather_contracts.agents import (
     WorkflowInput,
     WorkflowResult,
     WorkflowState,
+    WorkflowStep,
 )
 from godfather_contracts.inference import InferenceInput
 from godfather_model_gateway import Provider, StructuredRequest, generate
@@ -55,6 +56,7 @@ async def execute_workflow(
     os: str,
     read_artifact: Callable[[ArtifactReference], Awaitable[object]],
     report: Callable[[str, str, int, StepOutput | None, object | None], Awaitable[WorkflowState]],
+    coding: Callable[[WorkflowStep], Awaitable[tuple[StepOutput, object]]] | None = None,
 ) -> WorkflowResult:
     """Only completed checkpoint prefixes are skipped. Model output never chooses tools."""
     agent = assignment.agent.definition
@@ -69,8 +71,13 @@ async def execute_workflow(
             if step.input_step is not None:
                 context = await read_artifact(state.context[step.input_step])
             usage = None
+            output: StepOutput
             async with asyncio.timeout(step.timeout_seconds):
-                if step.kind == "model":
+                if step.kind == "coding":
+                    if coding is None or "coding.workspace" not in worker_permissions:
+                        raise WorkflowError("tool_permission")
+                    output, usage = await coding(step)
+                elif step.kind == "model":
                     prompt = step.instruction + "\nUser instruction:\n" + instruction.instruction
                     if context is not None:
                         prompt += "\nValidated prior step data:\n" + json.dumps(
@@ -98,11 +105,14 @@ async def execute_workflow(
                             prompt=prompt,
                             stream=False,
                             parameters=step.parameters,
+                            output_schema=Plan.model_json_schema()
+                            if step.output_schema == "plan"
+                            else None,
                         ),
                         step.timeout_seconds,
                         ignore,
                     )
-                    output: StepOutput = (
+                    output = (
                         Plan.model_validate_json(result.text)
                         if step.output_schema == "plan"
                         else TextOutput(text=result.text)

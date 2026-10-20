@@ -396,6 +396,7 @@ def security_audit(
             Event.type.like("security.%"),
             Event.type.like("node.%"),
             Event.type.like("agent.%"),
+            Event.type.like("provider.%"),
             Event.type.in_(("job.cancellation_requested", "job.manual_retry_requested")),
         ),
         or_(Event.workspace_id.is_(None), Event.workspace_id.in_(visible)),

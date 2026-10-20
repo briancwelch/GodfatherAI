@@ -6,9 +6,10 @@ import {
   RibbonGroup,
   UnavailableCommand,
 } from "./application-shell";
-import { AgentManagement } from "./agent-management";
+import { AgentManagement, RepositorySelection } from "./agent-management";
 import { ModelInstaller } from "./model-installer";
 import { GoogleLogin } from "@/components/google-login";
+import { JobResult } from "./job-result";
 import { Button } from "@/components/ui/button";
 import {
   ConfirmAction,
@@ -588,6 +589,10 @@ function Overview({ data }: { data: Snapshot }) {
 function SubmitJob({ data }: { data: Snapshot }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [agentId, setAgentId] = useState(
+    data.agents.find((a) => a.enabled)?.version_id || "",
+  );
+  const selectedAgent = data.agents.find((a) => a.version_id === agentId);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -599,7 +604,15 @@ function SubmitJob({ data }: { data: Snapshot }) {
         workspace_id: data.workspace_id,
         agent_id: a?.id,
         agent_version: a?.version,
-        input: { instruction: f.get("instruction") },
+        input: {
+          instruction: f.get("instruction"),
+          repository_id: f.get("repository_id") || null,
+          search_terms: String(f.get("code_search") || "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+        paid_consent: f.get("paid_consent") === "on",
         priority: Number(f.get("priority")),
       });
       window.location.assign(`/jobs/${job.id}`);
@@ -615,10 +628,15 @@ function SubmitJob({ data }: { data: Snapshot }) {
     <details className="panel submission">
       <summary>Submit a job</summary>
       <form onSubmit={submit}>
-        <p>Recoverable read-only workflow</p>
+        <p>Execute a pinned workflow on an authorized worker.</p>
         <label>
           Agent and pinned version
-          <select name="agent" required>
+          <select
+            name="agent"
+            required
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+          >
             {data.agents
               .filter((a) => a.enabled)
               .map((a) => (
@@ -628,6 +646,24 @@ function SubmitJob({ data }: { data: Snapshot }) {
               ))}
           </select>
         </label>
+        {selectedAgent?.definition.workflow.steps.some(
+          (s) => s.kind === "coding",
+        ) &&
+          data.workspace_id && (
+            <RepositorySelection workspace={data.workspace_id} />
+          )}
+        {!!(
+          selectedAgent?.definition.requirements.model_selection as Record<
+            string,
+            unknown
+          >
+        )?.connection_id && (
+          <label className="check-label">
+            <input type="checkbox" name="paid_consent" required /> I authorize
+            paid inference and sending this task to the selected API provider.
+            Connection owner grants and spending safeguards apply.
+          </label>
+        )}
         <label>
           Instruction
           <textarea name="instruction" required maxLength={4096} rows={3} />
@@ -646,8 +682,8 @@ function SubmitJob({ data }: { data: Snapshot }) {
           </label>
           <p className="muted">
             Workflow resources, models, allowed tools, retries and timeout come
-            from the pinned definition. No shell or repository access is
-            granted.
+            from the pinned definition. Coding requires a separately approved
+            repository and isolated worker environment.
           </p>
         </details>
         {error && <p role="alert">{error}</p>}
@@ -720,51 +756,54 @@ function JobInspection({
       <h2>Job {short(j.id)}</h2>
       <div className="state-strip">
         <StatusBadge value={j.status} />
-        {detail.workflow && <StatusBadge value={detail.workflow.status} />}
-        <span>
-          Attempt {j.attempt_count} · Fence {j.fencing_token}
-        </span>
+        {detail.workflow && detail.workflow.status !== j.status && (
+          <StatusBadge value={detail.workflow.status} />
+        )}
       </div>
-      <dl>
-        <dt>Job ID</dt>
-        <dd>{j.id}</dd>
-        <dt>Requester / workspace</dt>
-        <dd>
-          {j.owner_id} / {j.workspace_id}
-        </dd>
-        <dt>Assigned worker</dt>
-        <dd>
-          {j.assigned_node_id ? (
-            <a href={`/nodes/${j.assigned_node_id}`}>{j.assigned_node_id}</a>
-          ) : (
-            "Unassigned"
-          )}
-        </dd>
-        <dt>Workload / priority</dt>
-        <dd>
-          {j.type} / {j.priority}
-        </dd>
-        <dt>Progress</dt>
-        <dd>
-          {j.type === "model.install"
-            ? j.status === "COMPLETED"
-              ? "Model installed and verified in the worker inventory"
-              : `Current download layer: ${detail.events.items.find((e) => e.type === "job.progress")?.details.percent ?? "waiting for worker progress"}${detail.events.items.some((e) => e.type === "job.progress") ? "%" : ""}`
-            : detail.workflow
-              ? `${detail.workflow.current_step} committed steps; checkpoint v${detail.workflow.checkpoint_version}`
-              : "See execution history"}
-        </dd>
-        <dt>Recovery</dt>
-        <dd>
-          {detail.workflow?.status === "REVIEW_REQUIRED"
-            ? `Requires manual review: ${detail.workflow.recovery_error}`
-            : j.status === "PENDING"
-              ? "Waiting for a compatible authorized node"
-              : j.status === "RETRY_WAIT"
-                ? `Retry at ${localTime(j.next_run_at)}`
-                : "See linked attempts below"}
-        </dd>
-      </dl>
+      <JobResult detail={detail} />
+      <details>
+        <summary>Job information</summary>
+        <dl>
+          <dt>Job ID</dt>
+          <dd>{j.id}</dd>
+          <dt>Requester / workspace</dt>
+          <dd>
+            {j.owner_id} / {j.workspace_id}
+          </dd>
+          <dt>Assigned worker</dt>
+          <dd>
+            {j.assigned_node_id ? (
+              <a href={`/nodes/${j.assigned_node_id}`}>{j.assigned_node_id}</a>
+            ) : (
+              "Unassigned"
+            )}
+          </dd>
+          <dt>Workload / priority</dt>
+          <dd>
+            {j.type} / {j.priority}
+          </dd>
+          <dt>Progress</dt>
+          <dd>
+            {j.type === "model.install"
+              ? j.status === "COMPLETED"
+                ? "Model installed and verified in the worker inventory"
+                : `Current download layer: ${detail.events.items.find((e) => e.type === "job.progress")?.details.percent ?? "waiting for worker progress"}${detail.events.items.some((e) => e.type === "job.progress") ? "%" : ""}`
+              : detail.workflow
+                ? `${detail.workflow.current_step} committed steps; checkpoint v${detail.workflow.checkpoint_version}`
+                : "See execution history"}
+          </dd>
+          <dt>Recovery</dt>
+          <dd>
+            {detail.workflow?.status === "REVIEW_REQUIRED"
+              ? `Requires manual review: ${detail.workflow.recovery_error}`
+              : j.status === "PENDING"
+                ? "Waiting for a compatible authorized node"
+                : j.status === "RETRY_WAIT"
+                  ? `Retry at ${localTime(j.next_run_at)}`
+                  : "See linked attempts below"}
+          </dd>
+        </dl>
+      </details>
       <div className="actions">
         {detail.can_control &&
           !["FAILED", "CANCELLED", "COMPLETED"].includes(j.status) &&
@@ -789,160 +828,165 @@ function JobInspection({
           />
         )}
       </div>
-      <JsonDetails
-        label="Execution requirements and retry policy"
-        value={{ requirements: j.requirements, retry: j.retry }}
-      />
-      <h3>Execution attempts</h3>
-      <DataTable
-        caption="Original and recovery attempts"
-        rows={detail.attempts}
-        rowKey={(a) => a.id}
-        columns={[
-          {
-            label: "Attempt",
-            cell: (a) => (
-              <>
-                {a.number} · {short(a.id)}
-                <small>Fence {a.fencing_token}</small>
-              </>
-            ),
-          },
-          {
-            label: "Worker",
-            cell: (a) => <a href={`/nodes/${a.node_id}`}>{short(a.node_id)}</a>,
-          },
-          {
-            label: "Status",
-            cell: (a) => (
-              <>
-                <StatusBadge value={a.status} />
-                <small>{String(a.error.code || "")}</small>
-              </>
-            ),
-          },
-          {
-            label: "Recovery origin",
-            cell: (a) =>
-              a.recovered_from_attempt_id ? (
+      <details className="technical-details">
+        <summary>Technical Details</summary>
+        <JsonDetails
+          label="Execution requirements and retry policy"
+          value={{ requirements: j.requirements, retry: j.retry }}
+        />
+        <h3>Execution attempts</h3>
+        <DataTable
+          caption="Original and recovery attempts"
+          rows={detail.attempts}
+          rowKey={(a) => a.id}
+          columns={[
+            {
+              label: "Attempt",
+              cell: (a) => (
                 <>
-                  <span>From {short(a.recovered_from_attempt_id)}</span>
-                  <small>
-                    {a.resumed_checkpoint_version
-                      ? `Resumed checkpoint v${a.resumed_checkpoint_version}`
-                      : "Restarted from beginning"}
-                  </small>
+                  {a.number} · {short(a.id)}
+                  <small>Fence {a.fencing_token}</small>
                 </>
-              ) : (
-                "Original execution"
               ),
-          },
-          {
-            label: "Timing",
-            cell: (a) => (
-              <>
-                {localTime(a.created_at)}
-                <small>Finished: {localTime(a.finished_at)}</small>
-              </>
-            ),
-          },
-        ]}
-      />
-      {!!detail.steps.length && (
-        <>
-          <h3>Workflow steps</h3>
-          <DataTable
-            caption="Durable workflow progress"
-            rows={detail.steps}
-            rowKey={(s) => s.id}
-            columns={[
-              { label: "Step", cell: (s) => s.step_id },
-              {
-                label: "Status",
-                cell: (s) => <StatusBadge value={s.status} />,
-              },
-              { label: "Attempt", cell: (s) => short(s.attempt_id) },
-              {
-                label: "Artifact",
-                cell: (s) => s.output_artifact_id || "Uncommitted",
-              },
-              {
-                label: "Usage",
-                cell: (s) => (
-                  <JsonDetails label="Inspect metadata" value={s.metadata} />
-                ),
-              },
-            ]}
-          />
-        </>
-      )}
-      {!!detail.checkpoints.length && (
-        <>
-          <h3>Durable checkpoints</h3>
-          <DataTable
-            caption="Integrity-checked checkpoint references"
-            rows={detail.checkpoints}
-            rowKey={(c) => c.id}
-            columns={[
-              { label: "Version", cell: (c) => `v${c.version}` },
-              { label: "Original attempt", cell: (c) => short(c.attempt_id) },
-              {
-                label: "Artifact",
-                cell: (c) => (
+            },
+            {
+              label: "Worker",
+              cell: (a) => (
+                <a href={`/nodes/${a.node_id}`}>{short(a.node_id)}</a>
+              ),
+            },
+            {
+              label: "Status",
+              cell: (a) => (
+                <>
+                  <StatusBadge value={a.status} />
+                  <small>{String(a.error.code || "")}</small>
+                </>
+              ),
+            },
+            {
+              label: "Recovery origin",
+              cell: (a) =>
+                a.recovered_from_attempt_id ? (
                   <>
-                    <code>{c.artifact.id}</code>
-                    <small title={c.artifact.checksum}>
-                      SHA-256 {short(c.artifact.checksum)} ·{" "}
-                      {c.artifact.size_bytes} bytes
+                    <span>From {short(a.recovered_from_attempt_id)}</span>
+                    <small>
+                      {a.resumed_checkpoint_version
+                        ? `Resumed checkpoint v${a.resumed_checkpoint_version}`
+                        : "Restarted from beginning"}
                     </small>
                   </>
+                ) : (
+                  "Original execution"
                 ),
-              },
-              {
-                label: "Inspect",
-                cell: (c) => (
-                  <button
-                    className="action secondary"
-                    onClick={async () => {
-                      try {
-                        setError("");
-                        setArtifact(
-                          await api(
-                            `workflow/jobs/${j.id}/artifacts/${c.artifact.id}`,
-                          ),
-                        );
-                      } catch {
-                        setError(
-                          "Artifact unavailable, corrupt or permission denied.",
-                        );
-                      }
-                    }}
-                  >
-                    View checkpoint v{c.version}
-                  </button>
-                ),
-              },
-            ]}
-          />
-        </>
-      )}
-      {error && <p role="alert">{error}</p>}
-      {artifact !== undefined && (
-        <JsonDetails label="Checkpoint artifact content" value={artifact} />
-      )}
-      <h3>Result and errors</h3>
-      <JsonDetails
-        label="Authoritative result"
-        value={
-          detail.output || j.result || detail.attempts.at(-1)?.error || null
-        }
-      />
-      <h3>Failover and lifecycle history</h3>
-      <p className="muted">
-        Latest {detail.events.items.length} of {detail.events.total} events,
-        newest first. Activity provides paged filters.
-      </p>
-      <EventTimeline events={detail.events.items} />
+            },
+            {
+              label: "Timing",
+              cell: (a) => (
+                <>
+                  {localTime(a.created_at)}
+                  <small>Finished: {localTime(a.finished_at)}</small>
+                </>
+              ),
+            },
+          ]}
+        />
+        {!!detail.steps.length && (
+          <>
+            <h3>Workflow steps</h3>
+            <DataTable
+              caption="Durable workflow progress"
+              rows={detail.steps}
+              rowKey={(s) => s.id}
+              columns={[
+                { label: "Step", cell: (s) => s.step_id },
+                {
+                  label: "Status",
+                  cell: (s) => <StatusBadge value={s.status} />,
+                },
+                { label: "Attempt", cell: (s) => short(s.attempt_id) },
+                {
+                  label: "Artifact",
+                  cell: (s) => s.output_artifact_id || "Uncommitted",
+                },
+                {
+                  label: "Usage",
+                  cell: (s) => (
+                    <JsonDetails label="Inspect metadata" value={s.metadata} />
+                  ),
+                },
+              ]}
+            />
+          </>
+        )}
+        {!!detail.checkpoints.length && (
+          <>
+            <h3>Durable checkpoints</h3>
+            <DataTable
+              caption="Integrity-checked checkpoint references"
+              rows={detail.checkpoints}
+              rowKey={(c) => c.id}
+              columns={[
+                { label: "Version", cell: (c) => `v${c.version}` },
+                { label: "Original attempt", cell: (c) => short(c.attempt_id) },
+                {
+                  label: "Artifact",
+                  cell: (c) => (
+                    <>
+                      <code>{c.artifact.id}</code>
+                      <small title={c.artifact.checksum}>
+                        SHA-256 {short(c.artifact.checksum)} ·{" "}
+                        {c.artifact.size_bytes} bytes
+                      </small>
+                    </>
+                  ),
+                },
+                {
+                  label: "Inspect",
+                  cell: (c) => (
+                    <button
+                      className="action secondary"
+                      onClick={async () => {
+                        try {
+                          setError("");
+                          setArtifact(
+                            await api(
+                              `workflow/jobs/${j.id}/artifacts/${c.artifact.id}`,
+                            ),
+                          );
+                        } catch {
+                          setError(
+                            "Artifact unavailable, corrupt or permission denied.",
+                          );
+                        }
+                      }}
+                    >
+                      View checkpoint v{c.version}
+                    </button>
+                  ),
+                },
+              ]}
+            />
+          </>
+        )}
+        {error && <p role="alert">{error}</p>}
+        {artifact !== undefined && (
+          <JsonDetails label="Checkpoint artifact content" value={artifact} />
+        )}
+        <h3>Result and errors</h3>
+        <JsonDetails
+          label="Authoritative result"
+          value={
+            detail.output || j.result || detail.attempts.at(-1)?.error || null
+          }
+        />
+        <h3>Failover and lifecycle history</h3>
+        <p className="muted">
+          Latest {detail.events.items.length} of {detail.events.total} events,
+          newest first. Activity provides paged filters.
+        </p>
+        <EventTimeline events={detail.events.items} />
+      </details>
     </>
   );
 }
@@ -1076,7 +1120,8 @@ function Models({
       <ModelInstaller workspace={data.workspace_id} />
       <p className="muted">
         Permitted deployments for this workspace. Provider aliases contain no
-        credentials. BYOK remains unimplemented.
+        credentials. Manage paid providers separately in{" "}
+        <a href="/providers">Provider Connections</a>.
       </p>
       <DataTable
         caption="Model deployments"
@@ -1191,7 +1236,7 @@ function Models({
           />
           <a
             className="action"
-            href={`/agents?workspace=${data.workspace_id}&model=${encodeURIComponent(`${selected.deployment.provider}:${selected.deployment.identifier}`)}`}
+            href={`/agents?workspace=${data.workspace_id}&model=${encodeURIComponent(`${selected.deployment.provider}:${selected.deployment.identifier}${selected.deployment.connection_id ? `:${selected.deployment.connection_id}` : ""}`)}`}
           >
             Create agent with this model
           </a>

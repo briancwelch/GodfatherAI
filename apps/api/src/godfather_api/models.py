@@ -66,6 +66,50 @@ class GoogleIdentity(Entity, Base):
     subject: Mapped[str] = mapped_column(String(255), unique=True)
 
 
+class ProviderConnection(Entity, Owned, Base):
+    __tablename__ = "provider_connections"
+    node_id: Mapped[UUID] = mapped_column(ForeignKey("nodes.id", ondelete="RESTRICT"))
+    provider: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(100))
+    policy: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    test_id: Mapped[UUID | None]
+    test_result: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+
+
+class ProviderConnectionGrant(Entity, Base):
+    __tablename__ = "provider_connection_grants"
+    connection_id: Mapped[UUID] = mapped_column(
+        ForeignKey("provider_connections.id", ondelete="RESTRICT"), index=True
+    )
+    owner_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    scope: Mapped[dict[str, object]] = mapped_column(JSONB)
+    revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
+class ProviderInvocation(Entity, Base):
+    __tablename__ = "provider_invocations"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "call_key", name="uq_provider_invocation_call"),
+    )
+    connection_id: Mapped[UUID] = mapped_column(
+        ForeignKey("provider_connections.id", ondelete="RESTRICT"), index=True
+    )
+    grant_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("provider_connection_grants.id", ondelete="RESTRICT")
+    )
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id", ondelete="RESTRICT"), index=True)
+    attempt_id: Mapped[UUID] = mapped_column(ForeignKey("attempts.id", ondelete="RESTRICT"))
+    payer_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    submitter_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    call_key: Mapped[str] = mapped_column(String(100))
+    reserved_microusd: Mapped[int] = mapped_column(BigInteger)
+    settled_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    price: Mapped[dict[str, object]] = mapped_column(JSONB)
+    usage: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    status: Mapped[str] = mapped_column(String(32), server_default="reserved")
+
+
 class AdministratorBootstrap(Base):
     """Durable singleton: once closed, environment changes cannot rearm bootstrap."""
 

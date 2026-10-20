@@ -72,7 +72,7 @@ def test_agent_catalog_uses_actual_advertisements_and_workspace_tool_policy(h: H
     assert "coding" in catalog["capabilities"]
     assert catalog["tools"][0]["reference"] == {"name": "plan.describe", "version": 1}
     assert catalog["models"][0]["deployment"]["identifier"] == "fixture"
-    assert {item["id"] for item in catalog["workflows"]} == {"text", "plan"}
+    assert {item["id"] for item in catalog["workflows"]} == {"text", "plan", "coding"}
     with h.database.sessions.begin() as session:
         workspace = session.get(Workspace, h.workspace_id)
         assert workspace is not None

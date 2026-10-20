@@ -1,12 +1,14 @@
 """Provider contracts and bounded inference; cancellation closes the HTTP stream."""
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import aclosing
 from time import perf_counter
 from typing import Literal, Protocol
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from godfather_contracts import Contract, Label, ModelDeployment
 from godfather_contracts.inference import (
@@ -15,13 +17,25 @@ from godfather_contracts.inference import (
     InferenceResult,
     InferenceUsage,
     ProviderErrorCode,
+    ToolCall,
 )
-from pydantic import Field, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, model_validator
+
+
+class NativeModel(Contract):
+    identifier: Label
+    context_window: int = Field(ge=1, le=2**40)
+    max_output_tokens: int = Field(ge=1, le=2**30)
+    tools: bool = False
+    structured_output: bool = False
 
 
 class ProviderConfig(Contract):
     id: Label
-    provider: Literal["ollama", "openai_compatible"]
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
+    connection_id: UUID | None = None
+    model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
+    _api_key: SecretStr | None = PrivateAttr(default=None)
     url: str = Field(default="http://127.0.0.1:11434", max_length=2048, repr=False)
     api_key_env: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
     timeout_seconds: float = Field(default=120, ge=0.1, le=3600, allow_inf_nan=False)
@@ -32,6 +46,19 @@ class ProviderConfig(Contract):
 
     @model_validator(mode="after")
     def secure_endpoint(self) -> "ProviderConfig":
+        if self.provider in ("openai", "anthropic"):
+            if self.connection_id is None or self.api_key_env:
+                raise ValueError(
+                    "Native providers require a separate node-local credential connection"
+                )
+            endpoint = (
+                "https://api.openai.com/v1"
+                if self.provider == "openai"
+                else "https://api.anthropic.com/v1"
+            )
+            if self.url not in ("http://127.0.0.1:11434", endpoint):
+                raise ValueError("Native providers require the official HTTPS API endpoint")
+            self.url = endpoint
         parsed = urlsplit(self.url)
         if (
             parsed.scheme not in ("http", "https")
@@ -44,6 +71,11 @@ class ProviderConfig(Contract):
         ):
             raise ValueError("Invalid provider endpoint")
         loopback = parsed.hostname in ("127.0.0.1", "localhost", "::1")
+        if self.provider == "openai_compatible" and parsed.hostname in (
+            "api.openai.com",
+            "api.anthropic.com",
+        ):
+            raise ValueError("Use the native provider with its independent credential connection")
         if self.provider == "ollama" and not loopback:
             raise ValueError("Ollama endpoints must remain worker-local loopback")
         if parsed.scheme == "http" and not loopback:
@@ -53,12 +85,24 @@ class ProviderConfig(Contract):
         return self
 
     def headers(self) -> dict[str, str]:
+        if self.provider in ("openai", "anthropic"):
+            if self._api_key is None:
+                raise GatewayError("provider_auth")
+            value = self._api_key.get_secret_value()
+            if not value.strip() or "\r" in value or "\n" in value:
+                raise GatewayError("provider_auth")
+            if self.provider == "anthropic":
+                return {"x-api-key": value, "anthropic-version": "2023-06-01"}
+            return {"Authorization": "Bearer " + value}
         if self.api_key_env is None:
             return {}
         key = os.getenv(self.api_key_env)
         if not key or not key.strip() or "\n" in key or "\r" in key:
             raise GatewayError("provider_auth")
         return {"Authorization": "Bearer " + key}
+
+    def set_api_key(self, key: str) -> None:
+        self._api_key = SecretStr(key)
 
 
 class GatewayError(Exception):
@@ -83,6 +127,8 @@ class Chunk(Contract):
     output_tokens: int | None = Field(default=None, ge=0, le=2**40)
     generation_seconds: float | None = Field(default=None, gt=0, le=86400, allow_inf_nan=False)
     finish_reason: Literal["stop", "length", "other"] = "stop"
+    tool_calls: list[ToolCall] = Field(default_factory=list, max_length=16)
+    cost_reconciliation_required: bool = False
 
 
 class Provider(Protocol):
@@ -135,6 +181,16 @@ async def generate(
     except TimeoutError:
         raise GatewayError("provider_timeout") from None
     elapsed = perf_counter() - start
+    if len(text) + sum(len(c.arguments) for c in final.tool_calls) > MAX_TEXT:
+        raise GatewayError("output_limit")
+    for call in final.tool_calls:
+        if call.name not in {tool.name for tool in request.tools}:
+            raise GatewayError("invalid_response")
+        try:
+            if not isinstance(json.loads(call.arguments), dict):
+                raise ValueError
+        except ValueError:
+            raise GatewayError("invalid_response") from None
     rate = None
     rate_source: Literal["provider_reported", "worker_estimate", "unavailable"] = "unavailable"
     if usage_out is not None:
@@ -158,4 +214,5 @@ async def generate(
             rate_source=rate_source,
         ),
         finish_reason=final.finish_reason,
+        tool_calls=final.tool_calls,
     )

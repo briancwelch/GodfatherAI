@@ -26,6 +26,7 @@ from godfather_contracts.agents import (
     WorkflowResult,
     WorkflowState,
 )
+from godfather_contracts.coding import CODING_RUNTIME, CodingOutput
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -296,6 +297,14 @@ def end_attempt(
     )
     status = "CANCELLED" if code == "cancelled" else "INTERRUPTED" if retrying else "FAILED"
     run.status = status
+    agent = session.get(Agent, job.agent_id)
+    if (
+        code not in ("cancelled",)
+        and agent is not None
+        and any(s.kind == "coding" for s in agent_view(agent).definition.workflow.steps)
+    ):
+        run.status = "REVIEW_REQUIRED"
+        run.recovery_error = "coding_interruption_requires_review"
     if attempt is not None:
         for record in session.scalars(
             select(WorkflowStepRecord).where(
@@ -378,6 +387,19 @@ def transition(
         raise HTTPException(409, "Only the next uncommitted step may transition")
     if step.kind == "tool":
         validate_tool_policy(spec, node, step.tool)
+    if step.kind == "coding":
+        repository_id = job.input_refs.get("repository_id")
+        if (
+            CODING_RUNTIME not in node.runtimes
+            or "coding.workspace" not in node.tool_permissions
+            or not any(
+                str(r.id) == repository_id
+                and job.owner_id in r.allowed_user_ids
+                and job.workspace_id in r.allowed_workspace_ids
+                for r in node.coding_repositories
+            )
+        ):
+            raise HTTPException(403, "Coding repository or worker permission was withdrawn")
     record = session.scalar(
         select(WorkflowStepRecord).where(
             WorkflowStepRecord.job_id == job.id,
@@ -401,7 +423,9 @@ def transition(
                 input_refs=inputs,
                 metadata_refs={
                     "kind": step.kind,
-                    "model": attempt.result.get("deployment") if step.kind == "model" else None,
+                    "model": attempt.result.get("deployment")
+                    if step.kind in ("model", "coding")
+                    else None,
                     "tool": step.tool.model_dump(mode="json") if step.tool else None,
                 },
             )
@@ -430,12 +454,16 @@ def transition(
             output = Plan.model_validate(payload.output.model_dump())
         elif step.output_schema == "text":
             output = TextOutput.model_validate(payload.output.model_dump())
+        elif step.output_schema == "coding":
+            output = CodingOutput.model_validate(payload.output.model_dump())
+            if str(output.repository_id) != job.input_refs.get("repository_id"):
+                raise ValueError("Coding output must match the approved repository")
         else:
             output = PlanSummary.model_validate(payload.output.model_dump())
             source = load_artifact(session, store, job, state.context[str(step.input_step)])
             if output != describe(Plan.model_validate(source)):
                 raise ValueError("Tool output differs from its declared deterministic contract")
-        if (step.kind == "model") != (payload.usage is not None):
+        if (step.kind in ("model", "coding")) != (payload.usage is not None):
             raise ValueError("Only model steps require usage metadata")
     except (ValidationError, ValueError):
         raise HTTPException(422, "Step output does not satisfy the declared schema") from None

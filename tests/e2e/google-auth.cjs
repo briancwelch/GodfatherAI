@@ -191,7 +191,11 @@ const wait = async (predicate, timeout = 180000) => {
     );
     fs.writeFileSync(
       path.join(folder, "ready.json"),
-      JSON.stringify({ workspace_id: workspace.id, node_id: worker.node_id }),
+      JSON.stringify({
+        workspace_id: workspace.id,
+        node_id: worker.node_id,
+        repository_id: require("node:crypto").randomUUID(),
+      }),
     );
     await wait(async () => {
       const snapshot = await api(first.context, "command-center");
@@ -395,6 +399,137 @@ const wait = async (predicate, timeout = 180000) => {
     results.push(
       "real installed local model through actual Windows worker; workflow/checkpoint/artifact/result persisted and shared by explicit membership",
     );
+    await first.page.reload();
+    await first.page.getByRole("region", { name: "Task result" }).waitFor();
+    assert.ok(
+      await first.page
+        .getByRole("button", { name: "Copy result", exact: true })
+        .count(),
+    );
+    assert.equal(
+      await first.page
+        .locator("details.technical-details")
+        .getAttribute("open"),
+      null,
+    );
+    await first.page.screenshot({
+      path: path.join(folder, "readable-results.png"),
+      fullPage: true,
+    });
+    await first.page.goto(`${origin}/providers`);
+    await first.page
+      .getByLabel("Name", { exact: true })
+      .fill("Independent fixture API connection");
+    await first.page
+      .getByRole("button", { name: "Create private connection", exact: true })
+      .click();
+    await first.page
+      .getByRole("heading", {
+        name: "Independent fixture API connection",
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(await first.page.locator('input[type="password"]').count(), 0);
+    assert.ok((await api(second.context, "provider-connections")).length === 0);
+    await first.page.screenshot({
+      path: path.join(folder, "provider-connections.png"),
+      fullPage: true,
+    });
+    assert.equal((await api(first.context, "auth/me")).id, account.id);
+    results.push(
+      "Provider metadata stays separate from Google login; API key entry remains worker-local; other administrator sees no private connections",
+    );
+    if (process.argv[4] === "coding") {
+      const context = JSON.parse(
+        fs.readFileSync(path.join(folder, "ready.json")),
+      );
+      const coding = await api(first.context, "agents", {
+        workspace_id: workspace.id,
+        definition: {
+          name: "Real isolated coding acceptance",
+          description: "Disposable synthetic addition fixture only",
+          enabled: true,
+          requirements: {
+            runtimes: ["coding-sandbox-v1"],
+            model_selection: {
+              provider: "ollama",
+              identifier: model,
+              stream: false,
+            },
+          },
+          permissions: ["coding.workspace"],
+          allowed_tools: [],
+          retry: { limit: 0 },
+          timeout_seconds: 600,
+          workflow: {
+            id: require("node:crypto").randomUUID(),
+            version: 1,
+            steps: [
+              {
+                id: "coding",
+                kind: "coding",
+                output_schema: "coding",
+                instruction:
+                  "Correct the addition bug in calc.py. Leave tests unchanged. Return compact JSON with summary and edits only. /no_think",
+                timeout_seconds: 360,
+                parameters: { max_tokens: 4096 },
+              },
+            ],
+          },
+        },
+      });
+      const codingJob = await api(first.context, "workflow/jobs", {
+        workspace_id: workspace.id,
+        agent_id: coding.id,
+        agent_version: 1,
+        input: {
+          instruction: "Fix add(2,3) to return 5. Change only calc.py.",
+          repository_id: context.repository_id,
+          search_terms: ["add"],
+        },
+      });
+      let codingDetail;
+      await wait(async () => {
+        codingDetail = await api(
+          first.context,
+          `command-center/jobs/${codingJob.id}`,
+        );
+        if (codingDetail.job.status === "FAILED")
+          throw new Error(JSON.stringify(codingDetail.attempts));
+        return codingDetail.job.status === "COMPLETED";
+      }, 360000);
+      const deliverable = codingDetail.output.output;
+      assert.equal(deliverable.tests[0].exit_code, 0);
+      assert.ok(deliverable.diff.includes("return a + b"));
+      assert.deepEqual(deliverable.files_changed, ["calc.py"]);
+      assert.ok(
+        deliverable.search_matches.some(
+          (m) => m.path === "calc.py" && m.text.includes("def add"),
+        ),
+      );
+      await first.page.goto(`${origin}/jobs/${codingJob.id}`);
+      await first.page
+        .getByRole("heading", { name: "File changes", exact: true })
+        .waitFor();
+      const download = await first.context.request.get(
+        `${origin}/api/control/workflow/jobs/${codingJob.id}/artifacts/${codingDetail.job.result.final_output.id}?download=1`,
+      );
+      assert.equal(download.status(), 200);
+      assert.ok(
+        download.headers()["content-disposition"].startsWith("attachment;"),
+      );
+      const denied = await contributor.context.request.get(
+        `${origin}/api/control/workflow/jobs/${codingJob.id}/artifacts/${codingDetail.job.result.final_output.id}?download=1`,
+      );
+      assert.equal(denied.status(), 404);
+      await first.page.screenshot({
+        path: path.join(folder, "real-coding-result.png"),
+        fullPage: true,
+      });
+      results.push(
+        "Real local model edits an approved disposable Git snapshot; actual networkless container tests pass; diff and report persist; artifact downloads enforce workspace access",
+      );
+    }
     for (const section of ["agents", "models", "activity"]) {
       await first.page.goto(`${origin}/${section}`);
       await first.page

@@ -226,6 +226,21 @@ def human_node_view(session: Session, node: Node, actor_id: UUID) -> NodeView:
                 w for w in view.allowed_workspace_ids if workspace_access(session, actor_id, w)
             ],
             "allowed_job_owner_ids": [u for u in view.allowed_job_owner_ids if u == actor_id],
+            "coding_repositories": [
+                r.model_copy(
+                    update={
+                        "allowed_user_ids": [actor_id],
+                        "allowed_workspace_ids": [
+                            w
+                            for w in r.allowed_workspace_ids
+                            if workspace_access(session, actor_id, w)
+                        ],
+                    }
+                )
+                for r in view.coding_repositories
+                if actor_id in r.allowed_user_ids
+            ],
+            "model_deployments": [m for m in view.model_deployments if m.connection_id is None],
         }
     )
 
@@ -307,6 +322,7 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
             "toolchains",
             "sandbox_modes",
             "discovery_warnings",
+            "coding_repositories",
         },
     )
     node.scheduling_policy, node.concurrency_limit = (

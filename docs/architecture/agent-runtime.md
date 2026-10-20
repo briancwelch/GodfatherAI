@@ -1,5 +1,10 @@
 # Agent runtime and durable workflows
 
+Phase 11 adds one bounded coding step using an owner-approved repository snapshot
+and worker-local container isolation. It reuses this runtime, checkpoints and
+artifact store. See the [Phase 11 runbook](../operations/phase-11.md) for current
+permissions and interruption behavior.
+
 ## Current Phase 07–08 extension
 
 [ADR 0007](../decisions/0007-cross-node-recovery-and-local-command-center.md)

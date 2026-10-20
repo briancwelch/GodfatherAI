@@ -31,6 +31,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, help="Exact already-installed local Ollama model")
     parser.add_argument(
+        "--coding-image",
+        help="Optional existing immutable Linux image ID for real coding acceptance; never pulls",
+    )
+    parser.add_argument(
         "--worker-executable", type=Path, help="Optional standalone worker to verify"
     )
     args = parser.parse_args()
@@ -70,6 +74,7 @@ def main() -> int:
             ]
             for source, destination in (
                 ("apps/api/src", "apps/api/src"),
+                ("packages", "packages"),
                 ("tests", "tests"),
                 ("infrastructure/migrations", "infrastructure/migrations"),
             ):
@@ -127,7 +132,13 @@ def main() -> int:
             wait_for("isolated Next.js dashboard ready", lambda: ready("http://127.0.0.1:3010"))
             browser_log = stack.enter_context((folder / "browser.log").open("w", encoding="utf-8"))
             browser = subprocess.Popen(
-                [node, "tests/e2e/google-auth.cjs", str(folder), args.model],
+                [
+                    node,
+                    "tests/e2e/google-auth.cjs",
+                    str(folder),
+                    args.model,
+                    "coding" if args.coding_image else "",
+                ],
                 cwd=ROOT,
                 stdout=browser_log,
                 stderr=browser_log,
@@ -141,6 +152,29 @@ def main() -> int:
             if browser.poll() is not None:
                 raise RuntimeError("Browser authentication failed; inspect ignored browser.log")
             provider_path = folder / "providers.json"
+            coding_arguments: list[str] = []
+            if args.coding_image:
+                from uuid import UUID
+
+                from tests.test_coding import repository
+
+                context = json.loads((folder / "ready.json").read_text())
+                credential = json.loads((folder / "worker.json").read_text())
+                repo = repository(folder, args.coding_image).model_copy(
+                    update={
+                        "id": UUID(context["repository_id"]),
+                        "allowed_user_ids": [UUID(credential["owner_id"])],
+                        "allowed_workspace_ids": [UUID(context["workspace_id"])],
+                    }
+                )
+                coding_path = folder / "coding.json"
+                coding_path.write_text(json.dumps([repo.model_dump(mode="json")]), encoding="utf-8")
+                coding_arguments = [
+                    "--coding-config",
+                    str(coding_path),
+                    "--allow-tool-permission",
+                    "coding.workspace",
+                ]
             provider_path.write_text(
                 json.dumps(
                     [{"id": "local", "provider": "ollama", "url": "http://127.0.0.1:11434"}]
@@ -166,6 +200,7 @@ def main() -> int:
                     "--allow-model-installation",
                     "--primary",
                     "research",
+                    *coding_arguments,
                 ],
                 cwd=ROOT,
                 stdout=worker_log,
