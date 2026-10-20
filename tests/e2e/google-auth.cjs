@@ -269,14 +269,12 @@ const wait = async (predicate, timeout = 180000) => {
     });
     console.log(
       "Agent dialog states",
-      await first.page
-        .locator("dialog")
-        .evaluateAll((items) =>
-          items.map((item) => ({
-            label: item.getAttribute("aria-label"),
-            open: item.open,
-          })),
-        ),
+      await first.page.locator("dialog").evaluateAll((items) =>
+        items.map((item) => ({
+          label: item.getAttribute("aria-label"),
+          open: item.open,
+        })),
+      ),
     );
     await editor
       .getByLabel("Description", { exact: true })
@@ -446,6 +444,7 @@ const wait = async (predicate, timeout = 180000) => {
       }
       if (section === "activity")
         await first.page
+          .locator(".timeline")
           .getByText("job.submitted", { exact: true })
           .first()
           .waitFor();
