@@ -1,0 +1,12 @@
+# Regression probes only. Never use this override with a real application database.
+services:
+  api:
+    environment:
+      GODFATHER_ENVIRONMENT: test
+      GODFATHER_DATABASE_NAME: godfather_test
+      GODFATHER_TEST_LEGACY_CREDENTIALS: "true"
+      GODFATHER_ARTIFACT_DIRECTORY: /var/lib/godfather/artifacts/legacy-smoke
+  migrate:
+    environment:
+      GODFATHER_ENVIRONMENT: test
+      GODFATHER_DATABASE_NAME: godfather_test

@@ -49,6 +49,11 @@ GitHub CI additionally exposed two pre-existing references to the optional Windo
 actual subprocess feature with a zero fallback. Strict mypy was rerun successfully
 for `linux`, `darwin` and `win32` targets before rebuilding the final candidate.
 
+The historical four-process/scheduler/inference/workflow CI probes use test-only
+bearer credentials. CI now runs those probes with an explicit Compose override
+against `godfather_test`, after the normal Google-authenticated API restart gate.
+The normal local and production configuration does not enable legacy login.
+
 The browser harness mocks **Google HTTP responses only**, using actual Authlib
 verification, sessions, invitations and RBAC. It verifies private connection
 visibility, workspace artifact denial, real job/result persistence, agent management,

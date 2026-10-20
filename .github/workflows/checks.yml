@@ -98,6 +98,14 @@ jobs:
         with:
           version: "0.13.1"
       - run: uv sync --locked --all-packages
+      - name: Isolate historical process probes from Google-authenticated application data
+        shell: bash
+        env:
+          COMPOSE_FILE: compose.yaml:infrastructure/docker/legacy-smoke-test.compose.yaml
+        run: |
+          docker compose --profile tools run --rm migrate
+          docker compose up --force-recreate --wait --wait-timeout 120 api
+          echo "COMPOSE_FILE=$COMPOSE_FILE" >> "$GITHUB_ENV"
       - name: Four worker processes, independent health, and node persistence
         run: uv run --locked --all-packages python -m scripts.check_worker_health
       - name: Durable scheduler, 100 jobs, two workers, restarts and lease expiry
