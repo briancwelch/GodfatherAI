@@ -67,8 +67,7 @@ const wait = async (predicate, timeout = 180000) => {
       if (subject !== "outsider-sub") {
         try {
           await page
-            .getByRole("button", { name: "Refresh", exact: true })
-            .first()
+            .getByRole("button", { name: "Sign out", exact: true })
             .waitFor();
         } catch (error) {
           await page.screenshot({
