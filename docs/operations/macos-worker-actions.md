@@ -48,7 +48,7 @@ Replace VERSION with the actual version; Intel uses `macos-x64`.
 ## Build checks and boundaries
 
 The workflow installs uv 0.13.1 and native Homebrew Python 3.14 with Tk support
-on each ephemeral runner. `uv sync --locked --package godfather-worker` checks the
+on each ephemeral runner. `uv sync --locked --package godfather-worker --group dev` checks the
 application lockfile and installs the worker plus development test tools, without
 unrelated coordinator/API dependencies. The existing builder exports the worker closure
 and installs build-only PyInstaller 6.22.3 in its isolated environment. Build hook
