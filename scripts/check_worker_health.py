@@ -127,7 +127,7 @@ def main() -> int:
                     stdout=log,
                     stderr=log,
                     text=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                    creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
                 )
             wait_for(
                 "all four worker processes registered ONLINE",

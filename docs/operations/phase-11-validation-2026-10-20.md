@@ -44,6 +44,11 @@ The three skips in the coordinator test image are deliberate: it contains no Git
 or Docker daemon access. Those worker-side tests were separately executed on the
 native Windows host. Counts describe separate runs, not disjoint tests to add up.
 
+GitHub CI additionally exposed two pre-existing references to the optional Windows
+`CREATE_NO_WINDOW` constant in worker discovery/health tooling. They now detect the
+actual subprocess feature with a zero fallback. Strict mypy was rerun successfully
+for `linux`, `darwin` and `win32` targets before rebuilding the final candidate.
+
 The browser harness mocks **Google HTTP responses only**, using actual Authlib
 verification, sessions, invitations and RBAC. It verifies private connection
 visibility, workspace artifact denial, real job/result persistence, agent management,

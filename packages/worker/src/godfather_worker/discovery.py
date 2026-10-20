@@ -29,7 +29,7 @@ def run(*command: str) -> str:
             encoding="utf-8",
             errors="replace",
             env={**os.environ, "OLLAMA_HOST": "127.0.0.1:11434"},
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
         )
         return result.stdout[:262144] if result.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
