@@ -50,3 +50,28 @@ Acceptance covers creation, immutable versions, enable/disable, actual model
 execution, progress/results, workspace denial, node-owner restrictions and session
 revocation. Automated provider fixtures are restricted to the disposable test
 environment; they do not establish real Google account acceptance in production.
+
+## Deployment and executed checks — 2026-10-20
+
+- Coordinator `0.1.0-rc.7` deployed to the existing Droplet at
+  `https://app.the-godfather.ai`; API/dashboard containers are healthy.
+- Source revision `f0b7519`; archive SHA-256
+  `98b383a314939fe2cf7b3127e216863b0e676eb9bd4e92da218855e6f2b2235b`.
+- Paired backup: `/opt/the-godfather/state/backups/20261020T211924-62563`.
+  PostgreSQL/Redis containers, volumes and production environment were preserved.
+  Schema remains `0007_founder_bootstrap`; no migration was needed. Identity,
+  workspace, node and existing job/result fingerprints matched after deployment.
+- Carbon reconnected under its original identity with worker `0.1.0-rc.3`, workflow
+  v1 and model-installation opt-in. Its credentials/provider files and prior binary
+  were retained. No model was downloaded during this assignment.
+- Passed: 331 clean-source Python/PostgreSQL tests, nine frontend component tests,
+  Ruff, mypy, TypeScript, ESLint, production builds and disposable release
+  image/migration/backup/restore checks. Browser acceptance used the packaged
+  Windows worker and real installed `qwen3:8b`, covering agent creation/versioning,
+  enable/disable, execution/results/checkpoint, model selectors, isolation,
+  revocation and a 390px dark layout. Only Google network responses were mocked
+  inside that isolated test.
+- Live HTTPS, shell, anonymous API denial and actual Google OAuth redirect with
+  the production callback/PKCE passed. Final authenticated production creation/run
+  acceptance awaits the owner's normal browser session; browser-control startup
+  was unavailable. No production session or operational record was fabricated.
