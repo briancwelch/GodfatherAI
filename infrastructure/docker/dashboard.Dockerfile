@@ -17,6 +17,7 @@ ENV NODE_ENV=production \
     PORT=3000
 COPY --from=build --chown=node:node /app/apps/dashboard/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/dashboard/.next/static ./apps/dashboard/.next/static
+COPY --from=build /app/apps/dashboard/FONT-AWESOME-LICENSE.txt ./FONT-AWESOME-LICENSE.txt
 USER node
 EXPOSE 3000
 CMD ["node", "apps/dashboard/server.js"]

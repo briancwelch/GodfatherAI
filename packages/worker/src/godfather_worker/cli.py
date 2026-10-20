@@ -18,6 +18,8 @@ from godfather_contracts import Heartbeat, Registration, ToolReference
 from godfather_contracts.jobs import JobPoll, PollResponse
 from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
 from godfather_model_gateway import ProviderConfig
+from pydantic import ValidationError
+
 from godfather_worker.agents import execute_agent
 from godfather_worker.client import WorkerClient, retryable
 from godfather_worker.discovery import discover, discover_resources
@@ -25,7 +27,6 @@ from godfather_worker.inference import discover_models, execute_inference
 from godfather_worker.jobs import execute
 from godfather_worker.model_management import execute_installation
 from godfather_worker.simulated import profile
-from pydantic import ValidationError
 
 logger = logging.getLogger("godfather.worker")
 
