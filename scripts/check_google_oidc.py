@@ -163,6 +163,7 @@ def main() -> int:
                     "--inference-config",
                     str(provider_path),
                     "--execute-workflows",
+                    "--allow-model-installation",
                     "--primary",
                     "research",
                 ],

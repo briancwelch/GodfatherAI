@@ -396,6 +396,7 @@ const wait = async (predicate, timeout = 180000) => {
             name: "Real local model integration",
             exact: true,
           })
+          .first()
           .waitFor();
       if (section === "models")
         await first.page
@@ -403,6 +404,32 @@ const wait = async (predicate, timeout = 180000) => {
           .filter({ hasText: model })
           .first()
           .waitFor();
+      if (section === "models") {
+        await first.page
+          .getByRole("button", { name: "Add model", exact: true })
+          .click();
+        const installer = first.page.getByRole("dialog", {
+          name: "Install a model on an owned worker",
+        });
+        await installer
+          .getByLabel("Owned worker", { exact: true })
+          .selectOption(worker.node_id);
+        await installer
+          .getByLabel("Ollama runtime", { exact: true })
+          .selectOption("local");
+        assert.equal(await installer.locator('input[type="radio"]').count(), 3);
+        await installer.locator('input[value="qwen3:0.6b"]').check();
+        await first.page.screenshot({
+          path: path.join(folder, "model-selection-installer.png"),
+          fullPage: true,
+        });
+        await installer
+          .getByRole("button", { name: "Cancel", exact: true })
+          .click();
+        results.push(
+          "model installer selects owned worker/runtime/catalog without JSON; no model downloaded by this test",
+        );
+      }
       if (section === "activity")
         await first.page
           .getByText("job.submitted", { exact: true })
