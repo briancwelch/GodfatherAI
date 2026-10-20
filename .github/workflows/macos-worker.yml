@@ -58,7 +58,7 @@ jobs:
           "$build_python" -c 'import os, platform, tkinter; assert platform.machine() == os.environ["EXPECTED_MACHINE"]; r = tkinter.Tk(); r.withdraw(); r.update(); r.destroy()'
           xcrun --find clang
       - name: Install locked worker and test dependencies
-        run: uv sync --locked --package godfather-worker --python "$GODFATHER_BUILD_PYTHON"
+        run: uv sync --locked --package godfather-worker --group dev --python "$GODFATHER_BUILD_PYTHON"
       - name: Validate candidate version and record source
         run: |
           candidate="${REQUESTED_VERSION:-0.1.0-dev.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}}"
