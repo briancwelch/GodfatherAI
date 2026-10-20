@@ -263,6 +263,21 @@ const wait = async (predicate, timeout = 180000) => {
     editor = first.page.getByRole("dialog", {
       name: "Create immutable agent version",
     });
+    await first.page.screenshot({
+      path: path.join(folder, "editor-open.png"),
+      fullPage: true,
+    });
+    console.log(
+      "Agent dialog states",
+      await first.page
+        .locator("dialog")
+        .evaluateAll((items) =>
+          items.map((item) => ({
+            label: item.getAttribute("aria-label"),
+            open: item.open,
+          })),
+        ),
+    );
     await editor
       .getByLabel("Description", { exact: true })
       .fill("Version two, original preserved.");
