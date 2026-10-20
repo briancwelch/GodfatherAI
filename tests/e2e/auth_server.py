@@ -24,7 +24,6 @@ def main() -> None:
         web_origin="http://127.0.0.1:3010",
         google_client_id="test-google-client",
         google_client_secret="test-secret",
-        google_bootstrap_subject="first-sub",
         google_bootstrap_email="first@example.invalid",
     )
     if (

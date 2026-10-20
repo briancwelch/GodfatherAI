@@ -1,20 +1,25 @@
 """Actual PostgreSQL/FastAPI authentication; only Google's network is mocked."""
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
 import pytest
+from alembic import command
 from fastapi.testclient import TestClient
 from godfather_api import authentication
 from godfather_api.app import create_app
 from godfather_api.config import Settings
 from godfather_api.database import Database
+from godfather_api.migrations import migration_config
 from godfather_api.models import (
     AccessCredential,
+    AdministratorBootstrap,
     Event,
     GoogleIdentity,
     HumanSession,
@@ -26,7 +31,8 @@ from godfather_api.models import (
     Workspace,
 )
 from godfather_api.nodes import token_digest
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.engine import Engine
 
 from tests.integration.test_nodes import database as database
 from tests.integration.test_nodes import registration
@@ -46,7 +52,6 @@ class AuthHarness:
             test_legacy_credentials=False,
             google_client_id="test-google-client",
             google_client_secret="test-secret",
-            google_bootstrap_subject="first-sub",
             google_bootstrap_email="first@example.invalid",
         )
         self.client = self.browser()
@@ -56,13 +61,13 @@ class AuthHarness:
     def browser(self) -> TestClient:
         return self.stack.enter_context(TestClient(create_app(self.settings)))
 
-    def login(
+    def begin_login(
         self,
         client: TestClient,
         subject: str = "first-sub",
         email: str = "first@example.invalid",
         invitation: str | None = None,
-    ) -> Any:
+    ) -> dict[str, str]:
         response = client.post(
             "/api/v1/auth/start",
             json={"invitation": invitation},
@@ -84,9 +89,20 @@ class AuthHarness:
             "name": "Verified " + subject,
             "nonce": query["nonce"][0],
         }
+        self.provider.challenges[code] = query["code_challenge"][0]
+        return {"state": query["state"][0], "code": code}
+
+    def login(
+        self,
+        client: TestClient,
+        subject: str = "first-sub",
+        email: str = "first@example.invalid",
+        invitation: str | None = None,
+    ) -> Any:
+        parameters = self.begin_login(client, subject, email, invitation)
         return client.get(
             "/api/v1/auth/callback",
-            params={"state": query["state"][0], "code": code},
+            params=parameters,
             follow_redirects=False,
         )
 
@@ -122,6 +138,9 @@ def test_google_bootstrap_opaque_cookie_logout_and_audit(auth: AuthHarness) -> N
     with auth.database.sessions() as session:
         identity = session.scalar(select(GoogleIdentity))
         assert identity is not None and identity.subject == "first-sub"
+        bootstrap = session.get(AdministratorBootstrap, 1)
+        assert bootstrap is not None and bootstrap.closed_at is not None
+        assert bootstrap.founder_user_id == identity.user_id
         row = session.scalar(select(HumanSession))
         assert row is not None and row.token_hash != auth.client.cookies.get("godfather_session")
         text = str([e.details for e in session.scalars(select(Event))])
@@ -141,7 +160,226 @@ def test_oidc_invalid_tokens_are_rejected_by_library(auth: AuthHarness, mode: st
     assert auth.client.get("/api/v1/auth/me").status_code == 401
     with auth.database.sessions() as session:
         assert session.scalar(select(User)) is None
+        bootstrap = session.get(AdministratorBootstrap, 1)
+        assert bootstrap is not None and bootstrap.closed_at is None
         assert "security.login_failed" in session.scalars(select(Event.type)).all()
+
+
+def test_founder_bootstrap_needs_no_preconfigured_subject(auth: AuthHarness) -> None:
+    assert auth.settings.google_bootstrap_subject == ""
+    response = auth.login(auth.client, "google-issued-stable-sub", "FIRST@EXAMPLE.INVALID")
+    assert response.headers["location"] == auth.settings.web_origin + "/"
+    with auth.database.sessions() as session:
+        user = session.scalar(select(User))
+        identity = session.scalar(select(GoogleIdentity))
+        bootstrap = session.get(AdministratorBootstrap, 1)
+        assert user is not None and user.roles == ["platform_admin"]
+        assert identity is not None and identity.subject == "google-issued-stable-sub"
+        assert bootstrap is not None and bootstrap.founder_user_id == user.id
+        assert bootstrap.closed_at is not None
+
+
+@pytest.mark.parametrize(
+    "email",
+    ["outsider@example.invalid", "first+tag@example.invalid", "first@example.invalid.attacker"],
+)
+def test_unauthorized_first_visitor_cannot_bootstrap_or_consume_allowlist(
+    auth: AuthHarness, email: str
+) -> None:
+    response = auth.login(auth.browser(), "outsider-sub", email)
+    assert response.headers["location"].endswith("?auth=denied")
+    with auth.database.sessions() as session:
+        assert session.scalar(select(User)) is None
+        bootstrap = session.get(AdministratorBootstrap, 1)
+        assert bootstrap is not None and bootstrap.closed_at is None
+    assert auth.login(auth.client).headers["location"] == auth.settings.web_origin + "/"
+
+
+@pytest.mark.parametrize("verified", [False, None, "true"])
+def test_founder_requires_boolean_verified_email(auth: AuthHarness, verified: object) -> None:
+    parameters = auth.begin_login(auth.client)
+    auth.provider.codes[parameters["code"]]["email_verified"] = verified
+    response = auth.client.get("/api/v1/auth/callback", params=parameters, follow_redirects=False)
+    assert response.headers["location"].endswith("?auth=denied")
+    with auth.database.sessions() as session:
+        assert session.scalar(select(User)) is None
+        bootstrap = session.get(AdministratorBootstrap, 1)
+        assert bootstrap is not None and bootstrap.closed_at is None
+
+
+def test_unconfigured_founder_allowlist_never_selects_first_visitor(auth: AuthHarness) -> None:
+    auth.settings.google_bootstrap_email = ""
+    assert auth.login(auth.client).headers["location"].endswith("?auth=denied")
+    assert auth.client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_optional_legacy_subject_pin_is_preserved(auth: AuthHarness) -> None:
+    auth.settings.google_bootstrap_subject = "previously-pinned-sub"
+    assert auth.login(auth.client).headers["location"].endswith("?auth=denied")
+    assert (
+        auth.login(auth.client, "previously-pinned-sub").headers["location"]
+        == auth.settings.web_origin + "/"
+    )
+
+
+def test_bootstrap_stays_closed_across_new_api_instances_and_configuration_changes(
+    auth: AuthHarness,
+) -> None:
+    auth.login(auth.client)
+    user_id = auth.client.get("/api/v1/auth/me").json()["id"]
+    assert auth.login(auth.browser()).headers["location"] == auth.settings.web_origin + "/"
+    # Ordinary repeat login uses the persisted sub, even when its contact email changes.
+    auth.login(auth.client, email="renamed@example.invalid")
+    assert auth.client.get("/api/v1/auth/me").json()["id"] == user_id
+    assert auth.login(auth.browser(), "different-sub").headers["location"].endswith("?auth=denied")
+    auth.settings.google_bootstrap_email = "replacement@example.invalid"
+    assert (
+        auth.login(auth.browser(), "replacement-sub", "replacement@example.invalid")
+        .headers["location"]
+        .endswith("?auth=denied")
+    )
+    with auth.database.sessions() as session:
+        assert len(session.scalars(select(User)).all()) == 1
+        assert len(session.scalars(select(GoogleIdentity)).all()) == 1
+        assert (
+            len(
+                session.scalars(
+                    select(Event).where(Event.type == "security.administrator_bootstrapped")
+                ).all()
+            )
+            == 1
+        )
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_closed_or_missing_durable_state_fails_closed_even_without_accounts(
+    auth: AuthHarness, missing: bool
+) -> None:
+    with auth.database.sessions.begin() as session:
+        state = session.get(AdministratorBootstrap, 1)
+        assert state is not None
+        if missing:
+            session.delete(state)
+        else:
+            state.closed_at = datetime.now(UTC)
+    assert auth.login(auth.client).headers["location"].endswith("?auth=denied")
+    with auth.database.sessions() as session:
+        assert session.scalar(select(User)) is None
+
+
+@pytest.mark.parametrize("existing", ["admin", "multiple_roles", "identity"])
+def test_migration_closes_bootstrap_for_existing_installations(
+    auth: AuthHarness, existing: str
+) -> None:
+    with auth.database.sessions.begin() as session:
+        user = User(
+            email="legacy@example.invalid",
+            display_name="Existing",
+            enabled=False,
+            role="platform_admin" if existing == "admin" else "member",
+            roles=["member", "platform_admin"] if existing == "multiple_roles" else ["member"],
+        )
+        session.add(user)
+        session.flush()
+        user_id = user.id
+        if existing == "identity":
+            session.add(GoogleIdentity(user_id=user_id, subject="existing-linked-sub"))
+    command.downgrade(migration_config(), "0006_google_identity")
+    command.upgrade(migration_config(), "head")
+    with auth.database.sessions() as session:
+        state = session.get(AdministratorBootstrap, 1)
+        assert state is not None and state.closed_at is not None
+        assert session.get(User, user_id) is not None
+    assert auth.login(auth.client).headers["location"].endswith("?auth=denied")
+
+
+def test_failed_bootstrap_transaction_does_not_consume_allowlist(
+    auth: AuthHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_audit = authentication.audit
+
+    def fail_bootstrap_audit(*args: Any, **kwargs: Any) -> None:
+        if args[1] == "administrator_bootstrapped":
+            raise RuntimeError("Injected bootstrap transaction failure")
+        original_audit(*args, **kwargs)
+
+    monkeypatch.setattr(authentication, "audit", fail_bootstrap_audit)
+    assert auth.login(auth.client).headers["location"].endswith("?auth=denied")
+    with auth.database.sessions() as session:
+        assert session.scalar(select(User)) is None
+        assert session.scalar(select(GoogleIdentity)) is None
+        state = session.get(AdministratorBootstrap, 1)
+        assert state is not None and state.closed_at is None
+    monkeypatch.setattr(authentication, "audit", original_audit)
+    assert auth.login(auth.client).headers["location"] == auth.settings.web_origin + "/"
+
+
+@pytest.mark.parametrize("other", ["same_identity", "same_email", "unauthorized"])
+def test_concurrent_sign_ins_across_api_instances_bootstrap_exactly_once(
+    auth: AuthHarness, other: str
+) -> None:
+    first, second = auth.browser(), auth.browser()
+    first_parameters = auth.begin_login(first)
+    second_parameters = auth.begin_login(
+        second,
+        "first-sub" if other == "same_identity" else "other-sub",
+        "outsider@example.invalid" if other == "unauthorized" else "first@example.invalid",
+    )
+    ready = Barrier(2)
+
+    def synchronize_onboarding(
+        connection: Any,
+        cursor: Any,
+        statement: str,
+        parameters: Any,
+        context: Any,
+        executemany: bool,
+    ) -> None:
+        if statement == "SELECT pg_advisory_xact_lock(909001)":
+            # Both verified callbacks reach the database lock before either can
+            # claim bootstrap; independent API connections must serialize here.
+            ready.wait(timeout=10)
+
+    def callback(client: TestClient, parameters: dict[str, str]) -> str:
+        return str(
+            client.get("/api/v1/auth/callback", params=parameters, follow_redirects=False).headers[
+                "location"
+            ]
+        )
+
+    event.listen(Engine, "before_cursor_execute", synchronize_onboarding)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = [
+                pool.submit(callback, first, first_parameters),
+                pool.submit(callback, second, second_parameters),
+            ]
+            locations = [result.result(timeout=20) for result in results]
+    finally:
+        event.remove(Engine, "before_cursor_execute", synchronize_onboarding)
+    expected_successes = 2 if other == "same_identity" else 1
+    assert locations.count(auth.settings.web_origin + "/") == expected_successes
+    assert locations.count(auth.settings.web_origin + "/?auth=denied") == 2 - expected_successes
+    with auth.database.sessions() as session:
+        users = session.scalars(select(User)).all()
+        identities = session.scalars(select(GoogleIdentity)).all()
+        assert len(users) == len(identities) == 1
+        assert users[0].roles == ["platform_admin"]
+        if other == "unauthorized":
+            assert identities[0].subject == "first-sub"
+            assert locations[0] == auth.settings.web_origin + "/"
+        state = session.get(AdministratorBootstrap, 1)
+        assert state is not None and state.closed_at is not None
+        assert state.founder_user_id == users[0].id
+        assert len(session.scalars(select(HumanSession)).all()) == expected_successes
+        assert (
+            len(
+                session.scalars(
+                    select(Event).where(Event.type == "security.administrator_bootstrapped")
+                ).all()
+            )
+            == 1
+        )
 
 
 def test_invitation_only_equal_admins_contributor_roles_and_private_workspaces(

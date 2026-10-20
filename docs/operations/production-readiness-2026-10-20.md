@@ -1,5 +1,17 @@
 # Production configuration and deployment readiness - 2026-10-20
 
+Current preparation: the operator reports DNS and Google OAuth configured. The
+user has authorized local review/commit of founder authentication and a clean
+`0.1.0-rc.5` build, secure local configuration, image/migration/checksum validation
+and exact install/rollback instructions. No push, transfer, SSH or deployment is
+authorized. See [first-deployment.md](first-deployment.md); the final release report
+in ignored `dist/` records executed checks and remaining blockers.
+
+Historical readiness snapshot: the manual first-founder subject-verification
+instructions below are superseded by the [one-time founder setup](founder-bootstrap.md)
+in the current source. It requires a new release containing migration
+`0007_founder_bootstrap`; existing rc.4 artifacts remain unchanged.
+
 **Configuration review complete; deployment is blocked by the open gates below.**
 This milestone authorizes local preparation only. No SSH connection, production
 environment file, secret generation, artifact transfer, application startup, DNS,

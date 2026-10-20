@@ -1,5 +1,6 @@
 """Explicit environment configuration; secrets never appear in settings reprs."""
 
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -32,12 +33,21 @@ class Settings(BaseSettings):
     web_origin: str = "http://127.0.0.1:3000"
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
-    google_bootstrap_subject: str = ""
-    google_bootstrap_email: str = ""
+    # Optional legacy subject pin; normal founder setup only needs the email allowlist.
+    google_bootstrap_subject: str = Field(default="", max_length=255, repr=False)
+    google_bootstrap_email: str = Field(default="", max_length=320, repr=False)
     session_seconds: int = Field(default=28800, ge=300, le=86400)
     authentication_limit: int = Field(default=20, ge=1, le=100)
     # Legacy credentials are accepted ONLY in explicitly isolated regression tests.
     test_legacy_credentials: bool = False
+
+    @field_validator("google_bootstrap_email")
+    @classmethod
+    def founder_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Configure one exact founder Google email address or leave it blank")
+        return value
 
     @field_validator("web_origin")
     @classmethod

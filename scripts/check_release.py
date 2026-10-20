@@ -68,7 +68,7 @@ def check(folder: Path) -> None:
     audit = """
 import importlib.util, pathlib, shutil
 from godfather_api.migrations import migration_head
-assert migration_head() == '0006_google_identity'
+assert migration_head() == '0007_founder_bootstrap'
 for module in ('pytest', 'ruff', 'mypy', 'godfather_worker'):
     assert importlib.util.find_spec(module) is None, module
 for tool in ('git', 'uv'):
@@ -187,6 +187,22 @@ console.log('Dashboard standalone content passed');
         )
         compose("--profile", "tools", "run", "--rm", "-T", "migrate")
         compose("--profile", "tools", "run", "--rm", "-T", "migrate")
+        bootstrap = compose(
+            "exec",
+            "-T",
+            "postgres",
+            "psql",
+            "-U",
+            "godfather",
+            "-d",
+            "godfather",
+            "-Atc",
+            "SELECT version_num FROM alembic_version; "
+            "SELECT id, closed_at IS NULL, founder_user_id IS NULL "
+            "FROM administrator_bootstrap; "
+            "SELECT count(*) FROM users; SELECT count(*) FROM google_identities;",
+        )
+        assert bootstrap.strip().splitlines() == [b"0007_founder_bootstrap", b"1|t|t", b"0", b"0"]
         compose(
             "up",
             "-d",
@@ -347,6 +363,7 @@ console.log('Dashboard standalone content passed');
                         "production config and Caddy validation",
                         "shell syntax",
                         "fresh and repeat migrations",
+                        "durable founder singleton and no seeded application identities",
                         "healthy private services",
                         "real HTTP proxy and anonymous denial",
                         "database and artifact restore",

@@ -2,8 +2,9 @@
 
 Current milestone: [Phase 09 Google OIDC and administration](phase-09.md). The
 local Command Center is **http://127.0.0.1:3000**. Explicitly apply
-`0006_google_identity`, preserve database/artifact volumes, and configure Google
-Sign-In. Existing identities require explicit ownership-preserving linking;
+`0007_founder_bootstrap`, preserve database/artifact volumes, and configure Google
+Sign-In. For a fresh installation, follow the [one-time founder setup](founder-bootstrap.md).
+Existing identities require explicit ownership-preserving linking;
 legacy human bearer login is no longer supported in normal operation. Earlier
 phase notes below are historical. No remote deployment is authorized.
 

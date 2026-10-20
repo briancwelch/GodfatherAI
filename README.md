@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current scope: Phase 10 production configuration readiness; application deployment is not authorized.** Phase 09 Google OIDC and owner authorization remain the application baseline. Human access is invitation-only, with revocable PostgreSQL-backed sessions. Real Google login requires operator OAuth setup and remains unverified. BYOK remains planning only. Docker and empty deployment directories were prepared under separate authorization; DNS, OAuth, firewall and production application changes remain pending. See the [readiness checklist](docs/operations/production-readiness-2026-10-20.md), [production release guide](docs/operations/production-release.md) and [worker distribution/enrollment plan](docs/operations/worker-distribution.md).
+**Current scope: Phase 10 production configuration readiness; application deployment is not authorized.** Phase 09 Google OIDC and owner authorization remain the application baseline. Human access is invitation-only, with revocable PostgreSQL-backed sessions. The operator reports production DNS and Google OAuth setup complete; real HTTPS Google login remains unverified. BYOK remains planning only. Docker and deployment directories were prepared under separate authorization. Current work authorizes a local authentication commit and clean release only; firewall changes and production application deployment remain pending. See the [readiness checklist](docs/operations/production-readiness-2026-10-20.md), [production release guide](docs/operations/production-release.md), [first-deployment runbook](docs/operations/first-deployment.md) and [worker distribution/enrollment plan](docs/operations/worker-distribution.md).
 
 ## Start here
 
@@ -35,7 +35,7 @@ docker compose --profile tools run --rm migrate
 docker compose up --wait
 ```
 
-Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Configure Google OIDC and bootstrap or explicitly link the first verified administrator using the Phase 09 guide. Subsequent users require invitations; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
+Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Configure Google OIDC and the [one-time founder email allowlist](docs/operations/founder-bootstrap.md), then use normal Google sign-in; no manual ID token is required. Existing accounts still require explicit ownership-preserving linking. Subsequent users require invitations; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
 
 For frontend hot reload, start only the dependencies and run Next.js natively:
 

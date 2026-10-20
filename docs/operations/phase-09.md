@@ -43,8 +43,8 @@ deployment secret store. Never paste the client secret into chat, logs or Git.
 | `GODFATHER_GOOGLE_CLIENT_SECRET`     | Google Web client secret; API only                                                                      |
 | `GODFATHER_WEB_ORIGIN`               | Exact application origin; API and dashboard                                                             |
 | `GODFATHER_API_URL`                  | Dashboard server's backend address; defaults to `http://127.0.0.1:8000`, Compose uses `http://api:8000` |
-| `GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT` | Explicitly verified stable Google sub for first administrator                                           |
-| `GODFATHER_GOOGLE_BOOTSTRAP_EMAIL`   | Matching verified Google email for first administrator                                                  |
+| `GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT` | Optional legacy additional subject pin; leave blank for normal founder setup                            |
+| `GODFATHER_GOOGLE_BOOTSTRAP_EMAIL`   | One exact founder Google email; verified by normal server-side Google sign-in                           |
 | `GODFATHER_SESSION_SECONDS`          | API session lifetime, 300–86400 seconds; default 28800                                                  |
 | `GODFATHER_AUTHENTICATION_LIMIT`     | API auth start/callback requests per direct peer/action/minute; default 20                              |
 | `GODFATHER_ENVIRONMENT`              | `local`, `test`, or `production` for API configuration                                                  |
@@ -67,17 +67,21 @@ continues publishing only loopback API/UI ports and no database/inference ports.
 
 ## Bootstrap and ownership-preserving migration
 
-Obtain the founding administrator's `sub` from a Google-issued ID token verified
-with a maintained Google/OIDC library for the intended OAuth client. Do not copy
-an unverified JWT payload, trust an email address alone, or publish that token.
-The configured subject is an allowlisted identity, not a password. First login
-still independently verifies Google's signature, issuer, audience, expiry, nonce,
-PKCE exchange and verified email.
+On a fresh database, configure only `GODFATHER_GOOGLE_BOOTSTRAP_EMAIL` with the
+founder's exact Google email and leave the optional subject setting blank. Apply
+`0007_founder_bootstrap` explicitly when rollout is authorized, then choose
+**Continue with Google**, without an invitation. No ID-token extraction or
+identity-verification script is required. The normal callback verifies Google's
+signature, issuer, audience, expiry, nonce and PKCE exchange, requires the boolean
+`email_verified=true`, and compares the verified email with the allowlist.
 
-On a fresh database, set both bootstrap identity variables, apply the migration,
-start locally and choose **Continue with Google**. The matching identity creates
-the first administrator once. Remove bootstrap settings after successful setup.
-No account is automatically created at startup, and no hardcoded founder exists.
+Successful bootstrap persists Google's stable `sub`, creates the platform
+administrator, session and audit records, and permanently closes bootstrap in one
+transaction. A concurrent or later different identity cannot become another
+founder. Remove the allowlist afterward as configuration hygiene; closure remains
+enforced even if it is retained or changed. No account is created at startup.
+See the [founder operator checklist](founder-bootstrap.md). Existing subject
+configuration remains an optional additional restriction for compatibility.
 
 Existing Phase 03–08 users keep their UUIDs and owned resources. If any legacy
 administrator exists, bootstrap intentionally refuses to create an unrelated
@@ -109,7 +113,8 @@ docker compose up --wait api dashboard
 ```
 
 Migrations are explicit; never reset application volumes. The head is
-`0006_google_identity`. For native frontend development, use the same documented
+`0007_founder_bootstrap`. This additive migration closes bootstrap for existing
+administrators or Google identities and preserves their records. For native frontend development, use the same documented
 origin and API URL and avoid running two dashboards on port 3000.
 
 ## Invitations, administration and recovery

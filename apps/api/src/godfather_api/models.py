@@ -66,6 +66,18 @@ class GoogleIdentity(Entity, Base):
     subject: Mapped[str] = mapped_column(String(255), unique=True)
 
 
+class AdministratorBootstrap(Base):
+    """Durable singleton: once closed, environment changes cannot rearm bootstrap."""
+
+    __tablename__ = "administrator_bootstrap"
+    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    founder_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+
+
 class HumanSession(Entity, Owned, Base):
     __tablename__ = "human_sessions"
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)

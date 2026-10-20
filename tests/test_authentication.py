@@ -41,3 +41,22 @@ def test_only_exact_reviewed_origins_are_configurable(origin: str) -> None:
 def test_test_authentication_cannot_target_application_database() -> None:
     with pytest.raises(ValidationError):
         Settings(database_password="test", environment="test", database_name="godfather")
+
+
+def test_founder_allowlist_is_explicit_normalized_and_private() -> None:
+    settings = Settings(
+        database_password="test", google_bootstrap_email=" Founder@Example.invalid "
+    )
+    assert settings.google_bootstrap_email == "founder@example.invalid"
+    assert settings.google_bootstrap_subject == ""
+    assert "founder@example.invalid" not in repr(settings)
+    assert Settings(database_password="test").google_bootstrap_email == ""
+
+
+@pytest.mark.parametrize(
+    "email",
+    ["*", "@example.invalid", "one@example.invalid,two@example.invalid", "no-domain", "one@host"],
+)
+def test_invalid_founder_allowlist_is_rejected(email: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings(database_password="test", google_bootstrap_email=email)

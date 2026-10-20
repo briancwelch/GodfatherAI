@@ -4,25 +4,28 @@ This guide covers Phase 10 local packaging and production configuration readines
 The [server preparation report](server-preparation-2026-10-20.md) records the separately
 authorized Docker installation and empty directories. The
 [readiness checklist](production-readiness-2026-10-20.md) records the configuration
-review and outstanding decisions. Application deployment, DNS, Google Cloud changes,
+review and outstanding decisions. The operator reports DNS and the production Google OAuth client already configured;
+this preparation does not recheck or change them remotely. Application deployment,
 Tailscale administration and firewall changes require separate authorization.
+Use [first-deployment.md](first-deployment.md) for the exact install/rollback
+commands (packaged as DEPLOYMENT.md); founder instructions are packaged as FOUNDER.md.
 This guide is packaged as `INSTALL.md` (linked reports are repository documents).
 The release is a candidate until the acceptance gates below pass.
 
-The next unused coordinator candidate is `0.1.0-rc.4`. Before building, review the
-entire proposed commit, obtain the user's explicit commit approval, and commit
-locally. Do not push or deploy without separate authorization. Build from a clean
+The current coordinator candidate is `0.1.0-rc.5`. The user has authorized review
+and a local commit of the founder authentication changes, followed by a clean
+release build. Review the entire proposed commit and keep all credentials excluded. Do not push or deploy without separate authorization. Build from a clean
 detached worktree under the ignored `.cache/` directory to preserve development
 files and avoid copying local credentials into the build context. For example:
 
 ```powershell
 $sourceRevision = git rev-parse HEAD
-git worktree add --detach .cache/release-source-rc.4 $sourceRevision
-Set-Location .cache/release-source-rc.4
+git worktree add --detach .cache/release-source-rc.5 $sourceRevision
+Set-Location .cache/release-source-rc.5
 if (git status --porcelain) { throw 'Release source is dirty' }
 # Use the existing build-host uv on PATH. This worktree gets its own environment.
-uv run --locked --all-packages python -m scripts.release --version 0.1.0-rc.4
-uv run --locked --all-packages python -m scripts.check_release dist/godfather-0.1.0-rc.4-linux-amd64
+uv run --locked --all-packages python -m scripts.release --version 0.1.0-rc.5
+uv run --locked --all-packages python -m scripts.check_release dist/godfather-0.1.0-rc.5-linux-amd64
 ```
 
 Do not use the Phase 09 HEAD before the release changes are committed. Run the
@@ -46,8 +49,8 @@ docker compose --profile tools build api-test
 docker compose exec -T postgres psql -U godfather -d postgres -Atc "SELECT datname FROM pg_database WHERE datname='godfather_test'"
 docker compose exec -T postgres createdb -U godfather godfather_test
 docker compose --profile tools run --rm api-test
-uv run --locked --all-packages python -m scripts.release --version 0.1.0-rc.4
-uv run --locked --all-packages python -m scripts.check_release dist/godfather-0.1.0-rc.4-linux-amd64
+uv run --locked --all-packages python -m scripts.release --version 0.1.0-rc.5
+uv run --locked --all-packages python -m scripts.check_release dist/godfather-0.1.0-rc.5-linux-amd64
 ```
 
 Skip `createdb` when the preceding query returns `godfather_test`. Integration
@@ -111,29 +114,36 @@ then monitor artifact/database growth, disk/inodes, OOM events, latency and swap
 or a workload guarantee. Log rotation is 3 x 10MiB per container. Configure backup
 retention/off-host storage before growth consumes the volume.
 
-## Required secrets, identities and DNS (configure only after approval)
+## Required secrets, identities and DNS (prepare locally; apply only after approval)
 
 Keep `/opt/the-godfather/production.env` outside release directories, owned by the
 operator with mode 600. Fill the supplied template privately:
 
-| Setting                                    | Required value                                                  |
-| ------------------------------------------ | --------------------------------------------------------------- |
-| POSTGRES_PASSWORD                          | Unique random URL-safe password, at least 32 random bytes       |
-| GODFATHER_GOOGLE_CLIENT_ID                 | Production Google Web OAuth client ID                           |
-| GODFATHER_GOOGLE_CLIENT_SECRET             | Client secret, only injected into API/migrate                   |
-| GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT / EMAIL | Independently verified sub/email, first empty installation only |
-| ACME_EMAIL                                 | Operator certificate contact                                    |
+| Setting                            | Required value                                                |
+| ---------------------------------- | ------------------------------------------------------------- |
+| POSTGRES_PASSWORD                  | Unique random URL-safe password, at least 32 random bytes     |
+| GODFATHER_GOOGLE_CLIENT_ID         | Production Google Web OAuth client ID                         |
+| GODFATHER_GOOGLE_CLIENT_SECRET     | Client secret, only injected into API/migrate                 |
+| GODFATHER_GOOGLE_BOOTSTRAP_EMAIL   | Exact founder email, verified during normal Google OIDC login |
+| GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT | Optional legacy additional subject pin; normally blank        |
+| ACME_EMAIL                         | Operator certificate contact                                  |
 
 Register exact OAuth callback
 `https://app.the-godfather.ai/api/auth/callback`, scopes `openid email profile`.
-Google client setup, verified subjects, invitations and real account acceptance
-are operator prerequisites. Existing UUIDs must be linked explicitly through
+The operator reports Google client setup complete. Confirm the configured callback,
+audience and credentials privately; the founder allowlist, invitations and real
+account acceptance remain deployment prerequisites. Existing UUIDs must be linked explicitly through
 `python -m godfather_api.identity`; consult `docs/operations/phase-09.md` in the
-development checkout before migration. Never bootstrap by email alone. Remove
-bootstrap values after activation and recreate API/migrate configuration. Invite
+development checkout before migration. The [one-time founder flow](founder-bootstrap.md)
+requires a signed, server-verified Google identity with `email_verified=true`; it
+does not require manually extracting a subject or ID token. Migration
+`0007_founder_bootstrap` persists permanent closure after successful bootstrap and
+closes existing installations with administrators or Google identities. This change
+is included in rc.5; historical rc.4 does not contain it. Remove
+bootstrap values after activation as configuration hygiene. Invite
 the second administrator with equal role; there is no hardcoded account count.
 
-Verify domain ownership first. Public A records for `app.the-godfather.ai` and
+The operator reports DNS configured. At authorized deployment, verify public A records for `app.the-godfather.ai` and
 `api.the-godfather.ai` point to the approved Droplet IPv4; add AAAA only after IPv6
 is configured and tested. Caddy manages HTTPS and persists certificate material in
 private Docker volumes. Apex DNS/redirect is optional and absent from this release.
@@ -158,7 +168,7 @@ the archive and checksum with normal OpenSSH. Do not disable host-key verificati
 Keep production secrets out of shell history and transfer them separately.
 
 ```powershell
-scp dist/godfather-0.1.0-rc.4-linux-amd64.tar.gz dist/godfather-0.1.0-rc.4-linux-amd64.tar.gz.sha256 operator@DROPLET:/opt/the-godfather/incoming/
+scp dist/godfather-0.1.0-rc.5-linux-amd64.tar.gz dist/godfather-0.1.0-rc.5-linux-amd64.tar.gz.sha256 operator@DROPLET:/opt/the-godfather/incoming/
 ssh operator@DROPLET
 ```
 
@@ -169,11 +179,11 @@ signature or an independent authenticity guarantee.
 
 ```bash
 cd /opt/the-godfather/incoming
-sha256sum -c godfather-0.1.0-rc.4-linux-amd64.tar.gz.sha256
-tar -xzf godfather-0.1.0-rc.4-linux-amd64.tar.gz -C /opt/the-godfather/releases
+sha256sum -c godfather-0.1.0-rc.5-linux-amd64.tar.gz.sha256
+tar -xzf godfather-0.1.0-rc.5-linux-amd64.tar.gz -C /opt/the-godfather/releases
 export GODFATHER_ENV_FILE=/opt/the-godfather/production.env
 export GODFATHER_STATE_DIR=/opt/the-godfather/state
-bash /opt/the-godfather/releases/godfather-0.1.0-rc.4-linux-amd64/scripts/install.sh install
+bash /opt/the-godfather/releases/godfather-0.1.0-rc.5-linux-amd64/scripts/install.sh install
 ```
 
 The installer checks RAM/disk/platform, configuration/checksums, saved image IDs,
@@ -225,9 +235,11 @@ Retain old volumes for investigation. A schema-compatible image-only rollback ca
 use the previous images only when readiness matches their exact migration head;
 otherwise use the matching backup. Never run `down -v` against production.
 
-## Acceptance still required before public exposure
+## Deployment and operational acceptance gates
 
-Real Google login/PKCE callback and logout/revocation on HTTPS; two equal admins;
+Before exposure, complete host/cloud firewall, private secrets, security review and
+backup/recovery policy. At authorized startup, validate real Google login/PKCE
+callback and logout/revocation on HTTPS; two equal admins;
 invitation-only denial; private workspace/owner isolation; production secret rotation;
 actual TLS/DNS and tailnet routing/grants; single-use worker enrollment implementation;
 signed native worker distribution; real remote macOS execution and disconnect/fencing;

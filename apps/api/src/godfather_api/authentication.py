@@ -10,7 +10,7 @@ from authlib.integrations.starlette_client import OAuth  # type: ignore[import-u
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from godfather_api.config import Settings
 from godfather_api.logging import correlation_id
 from godfather_api.models import (
     AccessCredential,
+    AdministratorBootstrap,
     AuthenticationLimit,
     Event,
     GoogleIdentity,
@@ -258,12 +259,23 @@ def onboard(
         invitation = (
             session.get(Invitation, invitation_id, with_for_update=True) if invitation_id else None
         )
+        bootstrap_state = session.get(AdministratorBootstrap, 1, with_for_update=True)
+        if bootstrap_state is None:
+            # Missing durable state is never permission to bootstrap again.
+            raise ValueError("Identity refused")
         bootstrap = (
-            subject == settings.google_bootstrap_subject
-            and email.lower() == settings.google_bootstrap_email.lower()
+            bool(settings.google_bootstrap_email)
+            and email.lower() == settings.google_bootstrap_email
+            and (
+                not settings.google_bootstrap_subject
+                or subject == settings.google_bootstrap_subject
+            )
+            and bootstrap_state.closed_at is None
             and session.scalar(select(func.count()).select_from(GoogleIdentity)) == 0
             and session.scalar(
-                select(func.count()).select_from(User).where(User.role == "platform_admin")
+                select(func.count())
+                .select_from(User)
+                .where(or_(User.role == "platform_admin", User.roles.contains(["platform_admin"])))
             )
             == 0
         )
@@ -288,6 +300,8 @@ def onboard(
             invitation.used_by = user.id
             audit(session, "invitation_accepted", user.id, invitation.id)
         if bootstrap:
+            bootstrap_state.closed_at = datetime.now(UTC)
+            bootstrap_state.founder_user_id = user.id
             audit(session, "administrator_bootstrapped", user.id, user.id)
     # Email is mutable display/contact data; identity lookup above uses only sub.
     user.email = email

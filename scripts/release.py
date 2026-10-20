@@ -103,6 +103,8 @@ def assemble(
         destination.write_text(path.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     for name, target in (
         ("production-release.md", "INSTALL.md"),
+        ("founder-bootstrap.md", "FOUNDER.md"),
+        ("first-deployment.md", "DEPLOYMENT.md"),
         ("worker-distribution.md", "WORKERS.md"),
     ):
         shutil.copyfile(ROOT / "docs/operations" / name, folder / target)

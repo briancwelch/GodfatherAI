@@ -71,7 +71,12 @@ def test_bundle_allowlist_excludes_operator_secrets(
     (source / "images.lock.json").write_text(json.dumps(pins))
     docs = tmp_path / "docs/operations"
     docs.mkdir(parents=True)
-    for name in ("production-release.md", "worker-distribution.md"):
+    for name in (
+        "production-release.md",
+        "founder-bootstrap.md",
+        "first-deployment.md",
+        "worker-distribution.md",
+    ):
         (docs / name).write_text("documentation")
     output = tmp_path / "output"
     output.mkdir()
@@ -80,6 +85,8 @@ def test_bundle_allowlist_excludes_operator_secrets(
     assert not (output / "credentials.json").exists()
     assert not (output / "production.env").exists()
     assert (output / "scripts/install.sh").read_bytes() == b"template\n"
+    assert (output / "FOUNDER.md").read_text() == "documentation"
+    assert (output / "DEPLOYMENT.md").read_text() == "documentation"
     verify_files(output)
     manifest = json.loads((output / "manifest.json").read_text())
     assert manifest["source_dirty"] is False

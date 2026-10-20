@@ -16,6 +16,7 @@ class OIDCProvider:
     def __init__(self) -> None:
         self.key = RSAKey.generate_key(2048, parameters={"kid": "test-signing-key"})
         self.codes: dict[str, dict[str, Any]] = {}
+        self.challenges: dict[str, str] = {}
         self.challenge = ""
         self.verifier_checked = False
         self.mode = "valid"
@@ -39,7 +40,8 @@ class OIDCProvider:
             verifier = form["code_verifier"][0]
             assert form["grant_type"] == ["authorization_code"]
             assert form["redirect_uri"][0].endswith("/api/auth/callback")
-            assert not self.challenge or create_s256_code_challenge(verifier) == self.challenge
+            challenge = self.challenges.get(form["code"][0], self.challenge)
+            assert not challenge or create_s256_code_challenge(verifier) == challenge
             self.verifier_checked = True
             claims = dict(self.codes[form["code"][0]])
             now = int(time.time())

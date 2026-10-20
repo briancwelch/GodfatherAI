@@ -60,10 +60,23 @@ Google email matching the invitation, consumes it under a database lock and bind
 the new UUID to `sub`. Expired/revoked/used invitations cannot activate another user.
 An invitation never changes the roles of an existing linked account.
 
-First-administrator bootstrap requires both an explicitly configured Google `sub`
-and its verified email. It runs only when there are no existing administrators or
-Google identities, under a transaction advisory lock. Later users require invitations.
-There are no default accounts, passwords, geographic limits or fixed account counts.
+First-administrator bootstrap requires one explicitly allowlisted Google email.
+The ordinary server-side OIDC callback must first verify the signed ID token and
+require the boolean claim `email_verified=true`; its email must match the allowlist
+case-insensitively, without alias or Gmail dot normalization. Google `sub` becomes
+the durable identity. A preconfigured subject is optional as a legacy additional
+pin; no manual token extraction is needed. Bootstrap requires no Google identities
+or administrators (including disabled and multi-role accounts). A transaction
+advisory lock and singleton row lock serialize admission. The same transaction
+creates the account, identity, session and audit events and permanently closes
+bootstrap. Rollback leaves it unused. Later users require invitations, even if the
+email setting changes. There are no default accounts or first-visitor admission.
+
+The additive `0007_founder_bootstrap` migration seeds the durable singleton closed
+for installations with existing Google identities or administrators. Missing state
+fails closed; changing configuration cannot reopen it. This mechanism is not an
+account-recovery tool. See the [founder setup guide](../operations/founder-bootstrap.md)
+and [ADR 0010](../decisions/0010-one-time-founder-bootstrap.md).
 
 The additive `0006_google_identity` migration preserves all existing user UUIDs,
 workspace membership, node ownership, jobs and events. Legacy accounts are never
