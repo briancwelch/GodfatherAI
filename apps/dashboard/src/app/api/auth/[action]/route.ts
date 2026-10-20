@@ -35,6 +35,7 @@ async function handle(request: NextRequest, action: string) {
     headers.Cookie = `godfather_login=${browser}`;
   try {
     let body: string | undefined;
+    let workerChallenge: string | undefined;
     if (action === "start") {
       if (Number(request.headers.get("content-length") ?? 0) > 2048)
         return NextResponse.json(
@@ -48,6 +49,8 @@ async function handle(request: NextRequest, action: string) {
           { status: 413 },
         );
       const form = new URLSearchParams(raw);
+      const challenge = form.get("worker_challenge") ?? "";
+      if (/^[a-f0-9]{64}$/.test(challenge)) workerChallenge = challenge;
       body = JSON.stringify({ invitation: form.get("invitation") || null });
     } else if (mutation) body = "{}";
     const path = action === "revoke" ? "sessions/revoke" : action;
@@ -66,6 +69,12 @@ async function handle(request: NextRequest, action: string) {
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
     });
+    if (action === "start") {
+      outgoing.append(
+        "Set-Cookie",
+        `godfather_worker_return=${workerChallenge ?? ""}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${workerChallenge ? 600 : 0}${webOrigin().startsWith("https:") ? "; Secure" : ""}`,
+      );
+    }
     for (const value of upstream.headers.getSetCookie())
       outgoing.append("Set-Cookie", value);
     const location = upstream.headers.get("location");
@@ -76,7 +85,25 @@ async function handle(request: NextRequest, action: string) {
         !(action === "start" && url.origin === "https://accounts.google.com")
       )
         throw new Error("Untrusted authentication redirect");
-      outgoing.set("Location", location);
+      const workerReturn =
+        request.cookies.get("godfather_worker_return")?.value ?? "";
+      const returnToWorker =
+        action === "callback" &&
+        url.origin === webOrigin() &&
+        url.pathname === "/" &&
+        !url.search &&
+        /^[a-f0-9]{64}$/.test(workerReturn);
+      outgoing.set(
+        "Location",
+        returnToWorker
+          ? `${webOrigin()}/worker-enrollment#challenge=${workerReturn}`
+          : location,
+      );
+      if (action === "callback")
+        outgoing.append(
+          "Set-Cookie",
+          "godfather_worker_return=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+        );
       if (
         action === "start" &&
         request.headers.get("accept")?.includes("application/json")

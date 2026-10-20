@@ -114,6 +114,14 @@ class AuthenticationLimit(Base):
     count: Mapped[int] = mapped_column(Integer)
 
 
+class WorkerEnrollment(Entity, Owned, Base):
+    __tablename__ = "worker_enrollments"
+    challenge: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(100))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
 class Workspace(Entity, Owned, Base):
     __tablename__ = "workspaces"
     name: Mapped[str] = mapped_column(String(200))

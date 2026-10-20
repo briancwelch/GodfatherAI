@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: Worker source branch, tag, or commit (main still contains Phase 01)
+        description: Worker source branch, tag, or commit
         required: true
-        default: phase-09-google-oidc
+        default: main
         type: string
       version:
         description: Candidate version, for example 0.1.0-rc.6 (blank uses a unique dev version)

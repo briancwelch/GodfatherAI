@@ -84,6 +84,8 @@ export function allowedPath(path: string, method: string): boolean {
   ];
   const writes = [
     "models/install",
+    "administration/worker-enrollments",
+    "administration/worker-enrollments/revoke",
     "agents",
     `agents/${uuid}/versions`,
     "administration/(invitations|workspaces|node-credentials)",

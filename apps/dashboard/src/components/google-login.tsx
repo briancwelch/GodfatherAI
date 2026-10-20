@@ -2,7 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 
-export function GoogleLogin({ error }: { error?: string }) {
+export function GoogleLogin({
+  error,
+  workerChallenge,
+}: {
+  error?: string;
+  workerChallenge?: string;
+}) {
   const [failure, setFailure] = useState("");
   const [busy, setBusy] = useState(false);
   async function start(event: FormEvent<HTMLFormElement>) {
@@ -19,6 +25,7 @@ export function GoogleLogin({ error }: { error?: string }) {
         },
         body: new URLSearchParams({
           invitation: String(form.get("invitation") ?? ""),
+          worker_challenge: workerChallenge ?? "",
         }),
       });
       if (!response.ok)

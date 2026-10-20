@@ -11,9 +11,9 @@ do not need Python, Docker, Git or VS Code.
 
 1. Open <https://github.com/briancwelch/GodfatherAI/actions/workflows/macos-worker.yml>.
 2. Click **Run workflow**. Leave **Use workflow from** set to `main`.
-3. Set **source_ref** to `phase-09-google-oidc`, or an exact commit/tag containing
-   the prepared Mac worker and its packaging/check scripts. This is separate from
-   the workflow branch because `main` still contains the older Phase 01 source.
+3. Leave **source_ref** set to `main`, or select an exact commit/tag containing
+   the prepared Mac worker and its packaging/check scripts. Both the workflow
+   and current application source are available on `main`.
 4. Leave **version** blank for `0.1.0-dev.RUN_ID.RUN_ATTEMPT`, or enter a candidate
    version such as `0.1.0-rc.6`. Click the green **Run workflow** button.
 5. Open the new run. Both architecture jobs must finish successfully. Under
@@ -24,7 +24,7 @@ do not need Python, Docker, Git or VS Code.
 Equivalent Windows command with an authenticated GitHub CLI:
 
 ```powershell
-gh workflow run macos-worker.yml --repo briancwelch/GodfatherAI --ref main -f source_ref=phase-09-google-oidc
+gh workflow run macos-worker.yml --repo briancwelch/GodfatherAI --ref main -f source_ref=main
 gh run list --repo briancwelch/GodfatherAI --workflow macos-worker.yml
 ```
 

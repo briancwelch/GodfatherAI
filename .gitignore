@@ -5,6 +5,13 @@
 production.env
 *.pem
 *.key
+*.p12
+*.pfx
+*.ppk
+client_secret*.json
+credentials.json
+oauth-credentials*.json
+token.json
 .tools/
 .cache/
 .venv/
@@ -22,6 +29,17 @@ __pycache__/
 htmlcov/
 dist/
 build/
+
+# Local databases, logs and generated installers
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.log
+*.exe
+*.dll
+*.dmg
+*.app/
 
 # JavaScript
 node_modules/

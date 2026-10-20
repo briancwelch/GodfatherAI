@@ -22,6 +22,7 @@ from godfather_api.authentication import router as authentication_router
 from godfather_api.command_center import router as command_center_router
 from godfather_api.config import Settings
 from godfather_api.database import Database
+from godfather_api.enrollment import router as enrollment_router
 from godfather_api.inference import router as inference_router
 from godfather_api.jobs import router as jobs_router
 from godfather_api.logging import configure_logging, correlation_id
@@ -157,4 +158,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(command_center_router)
     app.include_router(authentication_router)
     app.include_router(administration_router)
+    app.include_router(enrollment_router)
     return app
