@@ -1,0 +1,220 @@
+name: godfather-production
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-api-environment: &api-environment
+  GODFATHER_ENVIRONMENT: production
+  GODFATHER_WEB_ORIGIN: https://app.the-godfather.ai
+  GODFATHER_DATABASE_HOST: postgres
+  GODFATHER_DATABASE_NAME: godfather
+  GODFATHER_DATABASE_USER: godfather
+  GODFATHER_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set the production database password}
+  GODFATHER_GOOGLE_CLIENT_ID: ${GODFATHER_GOOGLE_CLIENT_ID:?Configure Google OIDC}
+  GODFATHER_GOOGLE_CLIENT_SECRET: ${GODFATHER_GOOGLE_CLIENT_SECRET:?Configure Google OIDC}
+  GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT: ${GODFATHER_GOOGLE_BOOTSTRAP_SUBJECT:-}
+  GODFATHER_GOOGLE_BOOTSTRAP_EMAIL: ${GODFATHER_GOOGLE_BOOTSTRAP_EMAIL:-}
+  GODFATHER_SESSION_SECONDS: "28800"
+  GODFATHER_AUTHENTICATION_LIMIT: "20"
+  GODFATHER_EXECUTION_LEASE_SECONDS: "30"
+  GODFATHER_HEARTBEAT_INTERVAL_SECONDS: "10"
+  GODFATHER_SUSPECT_AFTER_SECONDS: "20"
+  GODFATHER_OFFLINE_AFTER_SECONDS: "30"
+
+x-api: &api
+  image: ${API_IMAGE:?Use the generated release.env}
+  platform: linux/amd64
+  environment: *api-environment
+  init: true
+  read_only: true
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging: *logging
+  mem_limit: 768m
+  cpus: 1.0
+  pids_limit: 128
+  networks: [frontend, backend]
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  api:
+    <<: *api
+    restart: unless-stopped
+    volumes: ["artifacts-data:/var/lib/godfather/artifacts"]
+    healthcheck:
+      test:
+        [
+          CMD,
+          python,
+          -c,
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 7s
+      retries: 5
+      start_period: 20s
+
+  migrate:
+    <<: *api
+    profiles: [tools]
+    restart: "no"
+    command:
+      [
+        python,
+        -m,
+        alembic,
+        -c,
+        infrastructure/migrations/alembic.ini,
+        upgrade,
+        head,
+      ]
+    environment:
+      <<: *api-environment
+      GODFATHER_DATABASE_TIMEOUT_SECONDS: "30"
+    networks: [backend]
+
+  dashboard:
+    image: ${DASHBOARD_IMAGE:?Use the generated release.env}
+    platform: linux/amd64
+    environment:
+      GODFATHER_API_URL: http://api:8000
+      GODFATHER_WEB_ORIGIN: https://app.the-godfather.ai
+      NODE_OPTIONS: --max-old-space-size=384
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 128
+    logging: *logging
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [frontend]
+
+  caddy:
+    image: ${CADDY_IMAGE:?Use the generated release.env}
+    platform: linux/amd64
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?Set certificate contact email}
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 64
+    logging: *logging
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks: [frontend]
+
+  postgres:
+    image: ${POSTGRES_IMAGE:?Use the generated release.env}
+    platform: linux/amd64
+    environment:
+      POSTGRES_DB: godfather
+      POSTGRES_USER: godfather
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the production database password}
+    command:
+      [
+        postgres,
+        -c,
+        shared_buffers=256MB,
+        -c,
+        max_connections=40,
+        -c,
+        work_mem=4MB,
+        -c,
+        maintenance_work_mem=64MB,
+      ]
+    restart: unless-stopped
+    shm_size: 256m
+    mem_limit: 1024m
+    cpus: 1.0
+    pids_limit: 128
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U godfather -d godfather"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+  redis:
+    image: ${REDIS_IMAGE:?Use the generated release.env}
+    platform: linux/amd64
+    user: redis
+    command:
+      [
+        redis-server,
+        --save,
+        "",
+        --appendonly,
+        "no",
+        --maxmemory,
+        64mb,
+        --maxmemory-policy,
+        allkeys-lru,
+      ]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 32
+    logging: *logging
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [backend]
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  postgres-data:
+  artifacts-data:
+  caddy-data:
+  caddy-config:

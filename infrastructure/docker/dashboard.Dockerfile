@@ -1,5 +1,6 @@
 # Same application container model locally and on the future Linux coordinator.
-FROM node:24.22.0-bookworm-slim AS build
+ARG NODE_IMAGE=node:24.22.0-bookworm-slim
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1 GODFATHER_CONTAINER_BUILD=1
 COPY package.json package-lock.json ./
@@ -8,7 +9,7 @@ RUN npm ci
 COPY apps/dashboard ./apps/dashboard
 RUN npm run build
 
-FROM node:24.22.0-bookworm-slim AS runtime
+FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

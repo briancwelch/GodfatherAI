@@ -1,6 +1,9 @@
 .git
 .env
 .env.*
+**/.env
+**/.env.*
+**/production.env
 .tools
 .cache
 .venv
@@ -11,3 +14,13 @@
 .pytest_cache
 .mypy_cache
 .ruff_cache
+dist
+build
+.agents
+.codex
+.aws
+**/*.pem
+**/*.key
+**/*.log
+**/credentials*.json
+**/worker.json

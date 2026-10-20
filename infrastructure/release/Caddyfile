@@ -1,0 +1,32 @@
+{
+	email {$ACME_EMAIL}
+	# No access log: OAuth codes/cookies must not enter request logs.
+}
+
+app.the-godfather.ai {
+	request_body {
+		max_size 2MB
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy dashboard:3000 {
+		header_up Host app.the-godfather.ai
+	}
+}
+
+api.the-godfather.ai {
+	request_body {
+		max_size 2MB
+	}
+	header Strict-Transport-Security "max-age=31536000"
+	# Worker routes stay private over the approved Tailscale policy.
+	@worker path /api/v1/workers /api/v1/workers/*
+	handle @worker {
+		@tailnet remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48
+		handle @tailnet {
+			reverse_proxy api:8000
+		}
+		respond 403
+	}
+	# Browser sessions use the same-origin dashboard bridge. No public API bypass.
+	respond 404
+}

@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current milestone: Phase 09 - Google OIDC, multi-user administration and independent owner authorization.** Human access is invitation-only, with revocable PostgreSQL-backed sessions. Worker credentials and lease/fencing protections remain independent. Operational views use authenticated backend state. Real Google login requires operator OAuth setup and remains unverified. BYOK remains planning only. Phase 10 is not authorized.
+**Current scope: Phase 10 production configuration readiness; application deployment is not authorized.** Phase 09 Google OIDC and owner authorization remain the application baseline. Human access is invitation-only, with revocable PostgreSQL-backed sessions. Real Google login requires operator OAuth setup and remains unverified. BYOK remains planning only. Docker and empty deployment directories were prepared under separate authorization; DNS, OAuth, firewall and production application changes remain pending. See the [readiness checklist](docs/operations/production-readiness-2026-10-20.md), [production release guide](docs/operations/production-release.md) and [worker distribution/enrollment plan](docs/operations/worker-distribution.md).
 
 ## Start here
 
@@ -85,4 +85,4 @@ PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, lea
 
 `app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
 
-Phase 01-08 baseline checks passed before Phase 09 changes. The Phase 09 report separates isolated automated OIDC tests, actual local worker/model integration and pending real Google acceptance. No Phase 10 deployment or frontier billing integration is authorized. Stop after Phase 09.
+Phase 01-08 baseline checks passed before Phase 09 changes. The Phase 09 report separates isolated automated OIDC tests, actual local worker/model integration and pending real Google acceptance. Current authorization covers production configuration readiness only. Stop before remote deployment; frontier billing remains planning only.

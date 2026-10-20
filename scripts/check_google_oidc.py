@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 from contextlib import ExitStack
+from pathlib import Path
 from time import monotonic
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -29,6 +30,9 @@ from scripts.dev import ROOT
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, help="Exact already-installed local Ollama model")
+    parser.add_argument(
+        "--worker-executable", type=Path, help="Optional standalone worker to verify"
+    )
     args = parser.parse_args()
     docker, node = shutil.which("docker"), shutil.which("node")
     if not docker or not node:
@@ -144,11 +148,14 @@ def main() -> int:
                 encoding="utf-8",
             )
             worker_log = stack.enter_context((folder / "worker.log").open("w", encoding="utf-8"))
+            worker_command = (
+                [str(args.worker_executable.resolve())]
+                if args.worker_executable
+                else [sys.executable, "-m", "godfather_worker.cli"]
+            )
             worker = subprocess.Popen(
                 [
-                    sys.executable,
-                    "-m",
-                    "godfather_worker.cli",
+                    *worker_command,
                     "--url",
                     "http://127.0.0.1:8009",
                     "--credential-file",
