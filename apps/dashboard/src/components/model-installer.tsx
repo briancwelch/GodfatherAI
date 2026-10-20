@@ -107,6 +107,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                   Owned worker
                   <select
                     required
+                    aria-label="Owned worker"
                     value={nodeId}
                     onChange={(e) => setNodeId(e.target.value)}
                   >
@@ -128,6 +129,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                   <select
                     key={nodeId}
                     name="provider"
+                    aria-label="Ollama runtime"
                     required
                     disabled={!node}
                   >

@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { control } from "../lib/control-client";
 import type {
   AgentInfo,
@@ -33,6 +40,9 @@ interface Options {
 }
 const key = (tool: { name: string; version: number }) =>
   `${tool.name}@${tool.version}`;
+const subscribeRibbon = () => () => {};
+const ribbonHost = () => document.getElementById("section-ribbon");
+const serverRibbon = () => null;
 
 export function AgentManagement({
   data,
@@ -44,6 +54,7 @@ export function AgentManagement({
   initialModel?: string;
 }) {
   const [selectedId, setSelectedId] = useState("");
+  const host = useSyncExternalStore(subscribeRibbon, ribbonHost, serverRibbon);
   const selected = data.agents.find((a) => a.version_id === selectedId);
   const [options, setOptions] = useState<Options | null>(null);
   const [error, setError] = useState("");
@@ -108,75 +119,75 @@ export function AgentManagement({
     : !selected
       ? "Select an agent version"
       : "";
+  const commands = (
+    <div className="context-ribbon" aria-label="Agent commands">
+      <RibbonGroup label="Definitions">
+        {manage && options ? (
+          <button
+            className="action secondary"
+            onClick={() => setEditing("new")}
+          >
+            Create agent
+          </button>
+        ) : (
+          <UnavailableCommand
+            label="Create agent"
+            reason={
+              !manage
+                ? "Workspace administration required"
+                : "Waiting for backend catalog"
+            }
+          />
+        )}
+        {editReason ? (
+          <UnavailableCommand label="Edit / New version" reason={editReason} />
+        ) : (
+          <button
+            className="action secondary"
+            onClick={() => selected && setEditing(selected)}
+          >
+            Edit / New version
+          </button>
+        )}
+      </RibbonGroup>
+      <RibbonGroup label="Availability">
+        {selected && manage ? (
+          <ConfirmAction
+            label={selected.enabled ? "Disable agent" : "Enable agent"}
+            description="Change availability for this pinned version. Disabling prevents new step starts; existing committed work remains. Cancel a job to stop execution."
+            onConfirm={async () => {
+              await control(
+                `agents/${selected.id}/versions/${selected.version}/control`,
+                { action: selected.enabled ? "disable" : "enable" },
+              );
+              refresh();
+            }}
+          />
+        ) : (
+          <UnavailableCommand label="Enable / Disable" reason={editReason} />
+        )}
+      </RibbonGroup>
+      <RibbonGroup label="Execution">
+        {selected?.enabled ? (
+          <button className="action" onClick={() => setRunning(true)}>
+            Run agent
+          </button>
+        ) : (
+          <UnavailableCommand
+            label="Run agent"
+            reason={
+              selected
+                ? "Enable this version before running"
+                : "Select an enabled agent version"
+            }
+          />
+        )}
+      </RibbonGroup>
+    </div>
+  );
   return (
     <>
-      <div className="context-ribbon" aria-label="Agent commands">
-        <RibbonGroup label="Definitions">
-          {manage && options ? (
-            <button
-              className="action secondary"
-              onClick={() => setEditing("new")}
-            >
-              Create agent
-            </button>
-          ) : (
-            <UnavailableCommand
-              label="Create agent"
-              reason={
-                !manage
-                  ? "Workspace administration required"
-                  : "Waiting for backend catalog"
-              }
-            />
-          )}
-          {editReason ? (
-            <UnavailableCommand
-              label="Edit / New version"
-              reason={editReason}
-            />
-          ) : (
-            <button
-              className="action secondary"
-              onClick={() => selected && setEditing(selected)}
-            >
-              Edit / New version
-            </button>
-          )}
-        </RibbonGroup>
-        <RibbonGroup label="Availability">
-          {selected && manage ? (
-            <ConfirmAction
-              label={selected.enabled ? "Disable agent" : "Enable agent"}
-              description="Change availability for this pinned version. Disabling prevents new step starts; existing committed work remains. Cancel a job to stop execution."
-              onConfirm={async () => {
-                await control(
-                  `agents/${selected.id}/versions/${selected.version}/control`,
-                  { action: selected.enabled ? "disable" : "enable" },
-                );
-                refresh();
-              }}
-            />
-          ) : (
-            <UnavailableCommand label="Enable / Disable" reason={editReason} />
-          )}
-        </RibbonGroup>
-        <RibbonGroup label="Execution">
-          {selected?.enabled ? (
-            <button className="action" onClick={() => setRunning(true)}>
-              Run agent
-            </button>
-          ) : (
-            <UnavailableCommand
-              label="Run agent"
-              reason={
-                selected
-                  ? "Enable this version before running"
-                  : "Select an enabled agent version"
-              }
-            />
-          )}
-        </RibbonGroup>
-      </div>
+      {host ? createPortal(commands, host) : commands}
       {error && (
         <p className="notice error" role="alert">
           {error}
@@ -497,6 +508,7 @@ function AgentEditor({
             Description
             <textarea
               name="description"
+              aria-label="Description"
               maxLength={2000}
               defaultValue={initial?.definition.description}
               rows={2}
@@ -506,6 +518,7 @@ function AgentEditor({
             Model requirement
             <select
               name="model"
+              aria-label="Model requirement"
               defaultValue={
                 existingModel ||
                 initialModel ||

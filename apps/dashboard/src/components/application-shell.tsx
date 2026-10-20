@@ -170,6 +170,7 @@ export function ApplicationShell({
           </button>
         </RibbonGroup>
         {ribbon}
+        <div id="section-ribbon" />
         <RibbonGroup label="Workspace layout">
           <button
             className="action secondary"

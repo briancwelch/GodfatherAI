@@ -1025,6 +1025,13 @@ tbody tr[aria-selected="true"] {
   padding: 18px;
   border-radius: 4px;
 }
+dialog {
+  margin: auto;
+}
+.application-ribbon .context-ribbon {
+  padding: 0;
+  border: 0;
+}
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
