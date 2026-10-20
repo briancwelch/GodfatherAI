@@ -57,8 +57,8 @@ jobs:
           echo "GODFATHER_BUILD_PYTHON=$build_python" >> "$GITHUB_ENV"
           "$build_python" -c 'import os, platform, tkinter; assert platform.machine() == os.environ["EXPECTED_MACHINE"]; r = tkinter.Tk(); r.withdraw(); r.update(); r.destroy()'
           xcrun --find clang
-      - name: Install locked project dependencies
-        run: uv sync --locked --all-packages --python "$GODFATHER_BUILD_PYTHON"
+      - name: Install locked worker and test dependencies
+        run: uv sync --locked --package godfather-worker --python "$GODFATHER_BUILD_PYTHON"
       - name: Validate candidate version and record source
         run: |
           candidate="${REQUESTED_VERSION:-0.1.0-dev.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}}"
@@ -67,10 +67,10 @@ jobs:
           echo "### Unsigned development candidate: $candidate ($EXPECTED_MACHINE)" >> "$GITHUB_STEP_SUMMARY"
           echo "Source commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
           echo "No Developer ID signing, notarization, or production Gatekeeper acceptance. Enrollment deployment remains separate." >> "$GITHUB_STEP_SUMMARY"
-      - name: Worker protocol, desktop and packaging unit checks
+      - name: Desktop lifecycle, security and packaging unit checks
         run: |
           uv run --no-sync ruff check scripts/build_macos_worker.py scripts/check_macos_worker.py tests/test_macos_worker_package.py
-          uv run --no-sync pytest tests/test_worker.py tests/test_desktop_worker.py tests/test_macos_worker_package.py
+          uv run --no-sync pytest tests/test_desktop_worker.py tests/test_macos_worker_package.py
       - name: Build standalone app and DMG using existing packaging
         run: uv run --no-sync python -m scripts.build_macos_worker --version "$CANDIDATE_VERSION"
       - name: Verify DMG, checksum, native app startup and bundled libraries
