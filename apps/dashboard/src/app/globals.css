@@ -1028,6 +1028,11 @@ tbody tr[aria-selected="true"] {
 dialog {
   margin: auto;
 }
+.ribbon-group dialog .action {
+  min-height: 32px;
+  min-width: 0;
+  flex-direction: row;
+}
 .application-ribbon .context-ribbon {
   padding: 0;
   border: 0;
@@ -1148,6 +1153,15 @@ legend {
   }
 }
 @media (max-width: 760px) {
+  .application-ribbon {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .application-ribbon > .ribbon-group,
+  .application-ribbon > #section-ribbon {
+    flex-shrink: 0;
+  }
   .application-bar {
     flex-wrap: wrap;
     gap: 8px;
