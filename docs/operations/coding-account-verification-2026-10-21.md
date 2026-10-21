@@ -1,8 +1,9 @@
 # Coding/account usability verification — 2026-10-21
 
 Candidate **0.3.1-rc.3** adds account API key entry, project setup, responsive native
-windows, default tray restore and corrected download layout. It is not deployed
-by committing this report. Production remains on `0.3.0-rc.4` until activation.
+windows, default tray restore and corrected download layout. The owner explicitly
+approved activation, and it was deployed on 2026-10-21. A subsequent same-computer
+reconnection repair is tracked in the [reconnection report](worker-reconnection-2026-10-21.md).
 
 The [user/operator guide](coding-and-account-setup.md) and
 [decision record](../decisions/0017-account-connections-and-coding-project-setup.md)
@@ -49,7 +50,7 @@ Counts overlap; separate runs are not additive.
 Private local evidence is under `.cache/coding-setup/`. The browser used a loopback
 fixture API and fresh browser context; it did not forge a production session or
 access a real user's account. No provider key was supplied and no real billable
-inference, model download, host installation or production change was performed.
+inference, model download or normal-user host installation was performed.
 
 ## Built candidates and remaining acceptance
 
@@ -85,5 +86,24 @@ At the user's explicit request, the old local worker process (PID 10792, the
 `0.2.0-rc.4` Windows CLI) was stopped. A subsequent process inventory found no
 local Godfather workers running. Saved settings and credentials were preserved;
 no replacement was started, enrolled or installed into the user's normal app
-directory. Production activation and real account-key/coding acceptance remain
-pending. No later workload phase was started.
+directory. Real account-key/coding acceptance remains pending. No later workload
+phase was started.
+
+## Authorized production activation
+
+The backup-based installer deployed `0.3.1-rc.3` from the exact package above.
+Schema `0010_account_provider_keys` applied; all five services were healthy. The
+separate vault key was generated privately on the host, existing environment
+values and proxy token were preserved, and the environment remained root-owned
+mode 600. PostgreSQL and Redis still had no published host ports.
+
+Stable record fingerprints matched before/after: 2 users, 2 Google identities,
+2 workspaces, 2 credentials, 1 node ownership/policy, 3 jobs, 2 artifacts,
+1 checkpoint and 1 existing provider connection. No account provider keys were
+seeded. The node was offline as expected after the requested local stop.
+The paired backup at
+`/opt/the-godfather/state/backups/20261021T200919-643668` passed checksum,
+`pg_restore --list` and artifact archive checks. Private evidence is
+`.cache/coding-setup/postflight-deploy.log`. Fresh signed-in account/coding
+acceptance remains pending; public checks for the subsequent repair are recorded
+in its report.

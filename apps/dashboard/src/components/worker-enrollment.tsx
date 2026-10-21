@@ -37,6 +37,7 @@ export default function WorkerEnrollment() {
   async function approve(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get("name") ?? "");
+    const reconnect = new FormData(event.currentTarget).has("reconnect");
     setBusy(true);
     try {
       const response = await fetch(
@@ -44,13 +45,17 @@ export default function WorkerEnrollment() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ challenge, name }),
+          body: JSON.stringify({ challenge, name, reconnect }),
         },
       );
-      if (!response.ok)
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
         throw new Error(
-          "Approval refused. Reconnect from the app, or contact your administrator.",
+          typeof error?.detail === "string"
+            ? error.detail
+            : "Approval refused. Reconnect from the app, or contact your administrator.",
         );
+      }
       setApproved(true);
       setNodeName(name);
       setStatus(
@@ -124,6 +129,16 @@ export default function WorkerEnrollment() {
             Registration grants no shell, private files, repositories, paid
             inference, or shared workloads. Choose resource contributions
             locally afterward.
+          </p>
+          <label>
+            <input type="checkbox" name="reconnect" />
+            Reconnect this computer, keeping its name and history.
+          </label>
+          <p>
+            Use the existing name and quit the old worker first. Reconnecting
+            permanently replaces its old credential. Existing computer
+            permissions stay with this computer; files and local settings stay
+            on your device.
           </p>
           <label>
             <input type="checkbox" required />

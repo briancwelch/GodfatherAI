@@ -8,11 +8,14 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
-Next usability candidate **0.3.1-rc.3** adds account API key entry with
+Usability release **0.3.1-rc.3** adds account API key entry with
 provider-managed billing, local coding-project setup and tray/window improvements.
 See its [verification](docs/operations/coding-account-verification-2026-10-21.md)
 and [setup guide](docs/operations/coding-and-account-setup.md). It requires a new
-coordinator migration and worker build; it is not activated merely by this source update.
+coordinator migration and worker build; it is deployed. The next coordinator
+candidate **0.3.1-rc.4** adds explicit reconnection under the same computer name
+and node history, using those unchanged worker installers. See the
+[reconnection report](docs/operations/worker-reconnection-2026-10-21.md).
 
 **Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
 The normal worker is a tray app with automatic browser pairing, saved OS credentials

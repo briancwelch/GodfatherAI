@@ -180,6 +180,9 @@ class WorkerEnrollment(Entity, Owned, Base):
     name: Mapped[str] = mapped_column(String(100))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    replaces_credential_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("access_credentials.id", ondelete="RESTRICT")
+    )
 
 
 class Workspace(Entity, Owned, Base):

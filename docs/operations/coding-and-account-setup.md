@@ -1,8 +1,26 @@
 # Coding projects and account API connections
 
-Candidate **0.3.1-rc.3** requires its coordinator migration and an updated worker.
-The deployed `0.3.0-rc.4` app lacks these settings. Build and activation status are
+Worker **0.3.1-rc.3** requires the account/project coordinator update. Build and activation status are
 recorded separately in the [candidate verification report](coding-account-verification-2026-10-21.md).
+
+## Reconnect the same computer
+
+Routine updates keep the saved connection; open the worker and resume. If the
+local credential was lost or you are switching from the old CLI to the tray app:
+
+1. Quit the old worker and wait 30 seconds. Let unfinished work settle.
+2. Click **Connect** in the worker. In its browser approval, enter the existing
+   computer name, such as **Carbon**.
+3. Check **Reconnect this computer** and approve the matching code.
+
+Coordinator **0.3.1-rc.4** adds this option. The node ID, display name, history and
+computer permissions remain in place; no second node is added. A fresh credential
+replaces the previous one, which stays permanently revoked. The owned-credential
+audit list retains that retired credential. This requires the owning Google
+account; a platform administrator cannot replace someone else's computer. Active
+workers, unfinished attempts and administrative disable/drain states block
+replacement. Revoked credentials can be replaced through this fresh approval;
+their old secret never becomes valid again. Local files/settings are untouched.
 
 ## Connect an API account
 
