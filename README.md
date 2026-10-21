@@ -13,6 +13,9 @@ The normal worker is a tray app with automatic browser pairing, saved OS credent
 and outbound HTTPS. Tailscale is optional. Native installers and the guided
 coordinator setup are candidates until their recorded build and deployment checks
 pass; this source change does not activate new public routes on the existing server.
+Candidate **0.3.0-rc.4** and its Windows/Mac installers have passed the
+[recorded local and native checks](docs/operations/simple-onboarding-verification-2026-10-21.md).
+Production activation and publisher signing remain separate.
 
 For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
 Invited users select Continue with Google using the exact invited email; no code

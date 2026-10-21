@@ -5,6 +5,9 @@ Tailscale setup. Its candidate must be activated on the coordinator before publi
 HTTPS worker pairing works. Production status is recorded separately; existing
 deployments do not change just because this source is checked in.
 
+Prepared candidate: **0.3.0-rc.4**. See the
+[executed checks and artifact hashes](simple-onboarding-verification-2026-10-21.md).
+
 ## Contributor
 
 1. Your administrator invites your exact Google email. Open Command Center and
@@ -80,8 +83,8 @@ Use the existing project-local uv toolchain. Native builds never install service
 download models, enroll a node or modify production.
 
 ```text
-uv run --locked --all-packages python -m scripts.build_windows_worker --version 0.3.0-rc.1
-uv run --locked --all-packages python -m scripts.build_macos_worker --version 0.3.0-rc.1
+uv run --locked --all-packages python -m scripts.build_windows_worker --version 0.3.0-rc.4
+uv run --locked --all-packages python -m scripts.build_macos_worker --version 0.3.0-rc.4
 uv run --locked --all-packages python -m scripts.check_desktop_ui
 ```
 
@@ -97,7 +100,7 @@ Stage verified installers for the coordinator's download panel:
 
 ```text
 uv run --no-sync python -m scripts.stage_worker_downloads --output dist/worker-downloads INSTALLER...
-uv run --no-sync python -m scripts.release --version 0.3.0-rc.1 --worker-downloads dist/worker-downloads
+uv run --no-sync python -m scripts.release --version 0.3.0-rc.4 --worker-downloads dist/worker-downloads
 ```
 
 Staging checks installer hashes and version manifests; release assembly checks
