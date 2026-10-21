@@ -26,7 +26,11 @@ def stage(files: list[Path], output: Path) -> None:
         manifest = json.loads(Path(str(path) + ".manifest.json").read_text())
         if manifest["version"] != match[1] or not isinstance(manifest.get("signing"), str):
             raise ValueError("Worker manifest mismatch")
-        platform = "Windows x64" if path.suffix == ".exe" else "Mac " + match[3]
+        platform = (
+            "Windows x64"
+            if path.suffix == ".exe"
+            else ("Mac (Apple silicon)" if match[3] == "arm64" else "Mac (Intel)")
+        )
         artifacts.append(
             {
                 "platform": platform,
