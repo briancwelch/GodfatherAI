@@ -155,11 +155,11 @@ console.log('Dashboard standalone content passed');
     ]
     caddyfile = work / "Caddyfile"
     original = (folder / "Caddyfile").read_text(encoding="utf-8")
-    caddyfile.write_text(
-        original.replace("app.the-godfather.ai {", "http://app.the-godfather.ai {").replace(
-            "api.the-godfather.ai {", "http://api.the-godfather.ai {"
-        ),
-        encoding="utf-8",
+    caddyfile.write_text(original, encoding="utf-8")
+    # Keep the actual production routing rules; only disable ACME/TLS in this
+    # isolated loopback preflight through the supported hostname configuration.
+    services["caddy"]["environment"]["GODFATHER_PUBLIC_HOSTS"] = (
+        "http://app.the-godfather.ai http://api.the-godfather.ai"
     )
     for volume in services["caddy"]["volumes"]:
         if volume.get("target") == "/etc/caddy/Caddyfile":
@@ -239,7 +239,7 @@ console.log('Dashboard standalone content passed');
         for path, host, status in (
             ("/", "app.the-godfather.ai", 200),
             ("/api/control/command-center?section=nodes", "app.the-godfather.ai", 401),
-            ("/api/v1/workers/register", "api.the-godfather.ai", 403),
+            ("/api/v1/workers/register", "api.the-godfather.ai", 405),
             ("/health/ready", "api.the-godfather.ai", 404),
         ):
             request = Request(f"http://127.0.0.1:{port}{path}", headers={"Host": host})
@@ -249,6 +249,27 @@ console.log('Dashboard standalone content passed');
             except HTTPError as error:
                 actual_status = error.code
             assert actual_status == status, (path, actual_status)
+        from godfather_contracts import Registration, Resources
+
+        registration = Registration(
+            os="linux",
+            os_version="offline-test",
+            architecture="x86_64",
+            resources=Resources(source="physical", cpu_name="offline-test", cpu_count=1),
+            session_id=uuid4(),
+        )
+        for host in ("app.the-godfather.ai", "api.the-godfather.ai"):
+            request = Request(
+                f"http://127.0.0.1:{port}/api/v1/workers/register",
+                data=registration.model_dump_json().encode(),
+                headers={"Host": host, "Content-Type": "application/json"},
+            )
+            try:
+                urlopen(request, timeout=15).close()
+            except HTTPError as error:
+                assert error.code == 401
+            else:
+                raise AssertionError("Anonymous worker registered")
         assert compose("exec", "-T", "redis", "redis-cli", "ping").strip() == b"PONG"
         compose(
             "exec",

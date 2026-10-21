@@ -29,6 +29,7 @@ from godfather_worker.native_desktop import (
     CredentialStore,
     acquire_lock,
     data_folder,
+    login_startup_enabled,
     set_login_startup,
 )
 from godfather_worker.pairing import await_approval
@@ -172,6 +173,7 @@ class Application:
             settings=settings,
             advertisement=discover(),
             models=[m.identifier for m in deployments],
+            startup=login_startup_enabled(),
         )
 
     def connect(self) -> None:
@@ -386,6 +388,7 @@ class Application:
                     )
                 )
                 self.settings = values["settings"]
+                self.autostart.set(values["startup"])
                 self.inference.set(self.settings.inference)
                 self.cpu.set(str(self.settings.cpu_cores))
                 self.ram.set(str(self.settings.ram_gib))

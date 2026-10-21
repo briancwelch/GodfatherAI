@@ -3,12 +3,12 @@
 import json
 import threading
 from email.message import Message
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 from urllib.error import HTTPError
 
 import pytest
 from godfather_worker.desktop import Pairing, coordinator_origin
-from godfather_worker.native_desktop import CredentialStore
+from godfather_worker.native_desktop import CredentialStore, login_startup_enabled
 from godfather_worker.pairing import await_approval
 
 
@@ -85,3 +85,20 @@ def test_store_refuses_silent_identity_replacement(monkeypatch: pytest.MonkeyPat
     with pytest.raises(OSError, match="already exists"):
         CredentialStore().write("replacement")
     backend.set_password.assert_not_called()
+
+
+def test_startup_setting_reflects_registered_executable_without_writing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    registry = MagicMock()
+    registry.QueryValueEx.return_value = (f'"{sys.executable}" --login', 1)
+    monkeypatch.setattr("godfather_worker.native_desktop.platform.system", lambda: "Windows")
+    monkeypatch.setattr(
+        "godfather_worker.native_desktop.importlib.import_module", lambda _: registry
+    )
+    assert login_startup_enabled()
+    registry.QueryValueEx.return_value = ('"another-app.exe" --login', 1)
+    assert not login_startup_enabled()
+    registry.SetValueEx.assert_not_called()

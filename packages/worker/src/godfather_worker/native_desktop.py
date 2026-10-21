@@ -73,6 +73,22 @@ def set_login_startup(enable: bool) -> None:
         raise ValueError("Login startup is currently supported by the Windows and Mac installers")
 
 
+def login_startup_enabled() -> bool:
+    if platform.system() == "Darwin":
+        return (Path.home() / "Library/LaunchAgents/ai.the-godfather.worker.plist").is_file()
+    if platform.system() == "Windows":
+        registry = importlib.import_module("winreg")
+        try:
+            with registry.OpenKey(
+                registry.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"
+            ) as key:
+                value, _ = registry.QueryValueEx(key, "The Godfather Worker")
+            return bool(value == f'"{sys.executable}" --login')
+        except OSError:
+            return False
+    return False
+
+
 def acquire_lock(folder: Path) -> Any:
     """Keep the open handle for the life of the app; OS releases it after a crash."""
     folder.mkdir(parents=True, exist_ok=True, mode=0o700)

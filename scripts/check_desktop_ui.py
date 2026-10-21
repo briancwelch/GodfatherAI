@@ -1,6 +1,7 @@
 """Native Tk/tray lifecycle smoke with synthetic identity and controller only."""
 
 import argparse
+import json
 import tempfile
 import threading
 import tkinter as tk
@@ -11,7 +12,7 @@ from godfather_worker.desktop_app import Application
 from godfather_worker.simulated import profile
 
 
-def check(screenshot: Path | None = None) -> None:
+def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
     identity = {
         "kind": "worker",
         "token": "synthetic-only",
@@ -20,7 +21,7 @@ def check(screenshot: Path | None = None) -> None:
         "name": "Test computer",
     }
     store = Mock()
-    store.read.return_value = None
+    store.read.return_value = json.dumps(identity) if saved else None
     store.write.side_effect = AssertionError("Real enrollment is not part of UI smoke")
     controllers: list[Mock] = []
 
@@ -72,7 +73,10 @@ def check(screenshot: Path | None = None) -> None:
                     root.after(30, connected)
                     return
                 assert app.identity == identity and len(controllers) == 1
-                browser.assert_called_once()
+                if saved:
+                    browser.assert_not_called()
+                else:
+                    browser.assert_called_once()
                 if screenshot:
                     from PIL import ImageGrab
 
@@ -100,7 +104,7 @@ def check(screenshot: Path | None = None) -> None:
                 if not deadline.is_set():
                     app.quit()
 
-            root.after(30, loaded)
+            root.after(30, connected if saved else loaded)
             root.after(15000, expired)
             root.mainloop()
     assert result, "Native desktop lifecycle did not complete"
@@ -111,6 +115,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--screenshot", type=Path)
     check(parser.parse_args().screenshot)
+    check(saved=True)
     return 0
 
 
