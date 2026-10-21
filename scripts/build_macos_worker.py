@@ -48,9 +48,16 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
                 check=True,
                 capture_output=True,
                 text=True,
-                env={**os.environ, "PYINSTALLER_CONFIG_DIR": str(workspace / "pyinstaller-cache")},
+                env={
+                    **os.environ,
+                    "PYINSTALLER_CONFIG_DIR": str(workspace / "pyinstaller-cache"),
+                    "GODFATHER_SELF_TEST_REPORT": str(workspace / "native-self-test.json"),
+                },
             ).stdout
         except subprocess.CalledProcessError as error:
+            report = workspace / "native-self-test.json"
+            if report.is_file():
+                print("Native self-test stage: " + report.read_text(), file=sys.stderr)
             print(error.stdout or "", file=sys.stderr)
             print(error.stderr or "", file=sys.stderr)
             raise

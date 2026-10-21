@@ -73,6 +73,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
             ),
         ),
         patch("godfather_worker.coding_projects.local_images", images),
+        patch("godfather_worker.desktop_settings.local_images", images),
         patch("godfather_worker.coding_projects.check_project", project_check),
     ):
 
@@ -117,18 +118,24 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
 
             def restored() -> None:
                 assert root.state() == "normal"
-                root.geometry("540x580")
+                root.geometry("800x600")
                 root.update()
-                assert root.winfo_width() <= 900
-                root.geometry("900x900")
+                assert root.winfo_width() == 800
+                expanded_width = min(1200, root.winfo_screenwidth() - 64)
+                expanded_height = min(900, root.winfo_screenheight() - 96)
+                root.geometry(f"{expanded_width}x{expanded_height}")
                 root.update()
-                assert root.winfo_width() <= 900 and root.winfo_height() <= 900
+                assert root.winfo_width() == expanded_width
+                assert root.winfo_height() == expanded_height
                 app.pause()
                 root.after(130, paused)
 
             def paused() -> None:
                 assert app.status.get() == "Paused"
-                project = Projects(app)
+                app.projects()
+                project = app.project_editor
+                assert isinstance(project, Projects)
+                assert not isinstance(project.window, tk.Toplevel)
 
                 def add_project() -> None:
                     if project.options is None:
@@ -148,21 +155,51 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     assert app.settings.repositories[0].allowed_user_ids == [
                         UUID(identity["owner_id"])
                     ]
-                    project.projects.selection_set(0)
+                    root.update()
+                    if screenshot:
+                        from PIL import ImageGrab
+
+                        ImageGrab.grab(window=root.winfo_id()).save(
+                            screenshot.with_stem(screenshot.stem + "-projects")
+                        )
+                    root.geometry("800x600")
+                    root.update()
+                    assert (
+                        project.save_button.winfo_rooty() + project.save_button.winfo_height()
+                        <= root.winfo_rooty() + root.winfo_height()
+                    )
+                    app.advanced()
+                    dialog = app.settings_dialog
+                    assert len(dialog.notebook.tabs()) == 6
+                    dialog.values["theme"].set("dark")
+                    dialog.save()
+                    assert app.preferences.theme == "dark"
+                    assert not dialog.window.winfo_exists()
+                    app.advanced()
+                    dialog = app.settings_dialog
+                    dialog.notebook.select(dialog.pages["Workloads"])
+                    root.update()
+                    if screenshot:
+                        ImageGrab.grab(window=dialog.window.winfo_id()).save(
+                            screenshot.with_stem(screenshot.stem + "-settings")
+                        )
+                    dialog.window.destroy()
+                    project.projects.selection_set(project.projects.get_children()[0])
                     assert not app.settings.repositories[0].allow_apply
                     project.toggle_apply()
                     assert app.settings.repositories[0].allow_apply
-                    project.projects.selection_set(0)
+                    project.projects.selection_set(project.projects.get_children()[0])
                     project.toggle_apply()
                     assert not app.settings.repositories[0].allow_apply
-                    project.projects.selection_set(0)
+                    project.projects.selection_set(project.projects.get_children()[0])
                     project.remove()
                     assert not app.settings.repositories
-                    project.window.destroy()
+                    # Projects remains embedded in the main notebook.
                     app.start()
                     assert len(controllers) == 2
                     result.append(
-                        "pairing, tray restore, resize, scoped project add/remove and pause/resume"
+                        "pairing, tray restore, expanded resizing, embedded Projects, "
+                        "tabbed Settings, theme persistence and project permissions"
                     )
                     deadline.set()
                     app.quit()

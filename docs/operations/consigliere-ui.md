@@ -4,6 +4,39 @@ Owner-authorized update, 2026-10-21. The worker desktop app is now **Consigliere
 carrying **The Godfather AI** branding. Worker protocol, authentication, node
 ownership, local project consent and provider permissions are unchanged.
 
+## Native layout revision during Phase 12
+
+The owner requested closer alignment with the Element desktop reference. The new
+candidate uses the shared navy/cyan header, compact menu and grouped icon ribbon.
+The command icons are rendered from the existing bundled Font Awesome vectors.
+The main window expands normally; it no longer caps its size to 900 pixels or
+recalculates a maximum height from its contents. There is no window-wide scrolling
+canvas. Only genuinely overflowing project rows display a vertical scrollbar.
+
+**Projects** is a main tab, with a resizable approved-project list and an embedded
+editor. Project details and Files & testing are compact subtabs. Existing owner,
+workspace, file-scope, test-environment and reviewed-application permissions remain.
+Project Save controls retain space when the window shrinks.
+
+**Settings** is a single resizable window containing six tabs:
+
+- General: sign-in startup, start minimized and close-to-tray behavior.
+- Resources: CPU/RAM scheduling allowance, primary specialty, local models and
+  authorized account API connections.
+- Workloads: explicit analytics/report permission, an already installed pinned
+  Python environment, and optional local image-backend/model permission.
+- Sharing: explicit allowed owners and workspaces; private remains the default.
+- Appearance: light/dark theme, text size, remembered dimensions and reset layout.
+- Connection: account/coordinator/network status, refresh, Command Center and the
+  existing confirmed local-disconnect action.
+
+Appearance changes can be saved while working; contribution changes require Pause.
+Appearance preferences live in owner-local `appearance.json`, separately from
+contribution settings and OS credentials. Startup changes occur only when the
+owner explicitly saves them. This UI revision grants no new access by default.
+Native checks cover resized windows, embedded project operations, six settings
+tabs, theme persistence and tray restore with an isolated fixture identity.
+
 ## Command Center
 
 - **Jobs:** Submit a job opens by default. Job history uses authenticated,

@@ -11,90 +11,124 @@ from godfather_contracts.coding import CodingRepository, CodingSetupOptions
 
 from godfather_worker.coding_setup import check_project, local_images, project_config, setup_options
 from godfather_worker.desktop import save_settings
-from godfather_worker.desktop_layout import content_frame
+from godfather_worker.desktop_layout import table_scroll
 
 if TYPE_CHECKING:
     from godfather_worker.desktop_app import Application
 
 
 class Projects:
-    def __init__(self, app: "Application") -> None:
+    def __init__(self, app: "Application", parent: ttk.Frame) -> None:
         self.app = app
-        self.window = tk.Toplevel(app.root)
-        self.window.title("Coding projects")
-        self.window.transient(app.root)
+        self.window = parent
         self.options: CodingSetupOptions | None = None
         self.images: dict[str, str] = {}
         self.workspaces: dict[str, Any] = {}
-        frame = content_frame(self.window, maximum_width=740)
-        ttk.Label(frame, text="Coding projects", font=("Segoe UI", 15, "bold")).pack(anchor="w")
+        frame = ttk.Frame(parent, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Coding projects", style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             frame,
-            text="Only you may use these projects. Pause the worker before saving changes.",
-            wraplength=570,
-        ).pack(anchor="w", pady=8)
-        self.projects = tk.Listbox(frame, height=3, exportselection=False)
-        self.projects.pack(fill="x")
-        self.refresh_projects()
-        ttk.Button(frame, text="Remove selected project", command=self.remove).pack(
-            anchor="w", pady=6
+            text=(
+                "Private project grants · Pause before changing access · "
+                "Review patches before applying"
+            ),
+            style="Muted.TLabel",
+            wraplength=650,
+        ).pack(anchor="w", pady=(4, 12))
+        panes = ttk.Panedwindow(frame, orient="horizontal")
+        panes.pack(fill="both", expand=True)
+        library = ttk.Frame(panes, padding=(0, 0, 16, 0))
+        editor = ttk.Frame(panes)
+        panes.add(library, weight=2)
+        panes.add(editor, weight=3)
+        ttk.Label(library, text="APPROVED PROJECTS", style="Muted.TLabel").pack(
+            anchor="w", pady=(0, 8)
         )
-        ttk.Button(
-            frame,
-            text="Toggle applying reviewed changes for selected project",
-            command=self.toggle_apply,
-        ).pack(anchor="w", pady=6)
+        rows = ttk.Frame(library)
+        rows.pack(fill="both", expand=True)
+        rows.rowconfigure(0, weight=1)
+        rows.columnconfigure(0, weight=1)
+        self.projects = ttk.Treeview(
+            rows, columns=("project", "apply"), show="headings", selectmode="browse", height=6
+        )
+        self.projects.heading("project", text="Project")
+        self.projects.heading("apply", text="Changes")
+        self.projects.column("project", width=160, minwidth=100)
+        self.projects.column("apply", width=110, minwidth=90, stretch=False)
+        self.projects.grid(row=0, column=0, sticky="nsew")
+        table_scroll(rows, self.projects)
+        self.refresh_projects()
+        controls = ttk.Frame(library)
+        controls.pack(fill="x", pady=(8, 0))
+        ttk.Button(controls, text="Remove", command=self.remove).pack(side="left")
+        ttk.Button(controls, text="Allow / disable Apply", command=self.toggle_apply).pack(
+            side="left", padx=6
+        )
         self.name, self.folder = tk.StringVar(), tk.StringVar()
         self.workspace, self.image = tk.StringVar(), tk.StringVar()
         self.patterns, self.command = tk.StringVar(), tk.StringVar()
         self.allow_apply = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            frame,
-            text="Allow me to apply reviewed changes from Command Center",
-            variable=self.allow_apply,
-        ).pack(anchor="w", pady=6)
-        self.status = tk.StringVar(
-            value="Loading your workspaces and installed test environments..."
-        )
-        for label, variable in (("Project name", self.name), ("Git project folder", self.folder)):
-            ttk.Label(frame, text=label).pack(anchor="w")
-            ttk.Entry(frame, textvariable=variable, width=65).pack(fill="x", pady=(0, 5))
-        ttk.Button(frame, text="Choose folder...", command=self.browse).pack(
-            anchor="w", pady=(0, 8)
-        )
-        ttk.Label(frame, text="Workspace").pack(anchor="w")
-        self.workspace_box = ttk.Combobox(frame, textvariable=self.workspace, state="readonly")
-        self.workspace_box.pack(fill="x", pady=(0, 8))
-        ttk.Label(frame, text="Installed test environment (Docker image)").pack(anchor="w")
-        self.image_box = ttk.Combobox(frame, textvariable=self.image, state="readonly")
-        self.image_box.pack(fill="x", pady=(0, 8))
-        for label, variable in (
-            (
-                "Allowed committed files (comma-separated patterns, e.g. src/*.py, tests/*.py)",
-                self.patterns,
-            ),
-            (
-                "Test command inside that environment (e.g. python -m unittest discover -s tests)",
-                self.command,
-            ),
+        self.status = tk.StringVar(value="Loading your workspaces and installed test environments…")
+        ttk.Label(editor, text="ADD PROJECT", style="Muted.TLabel").pack(anchor="w", pady=(0, 8))
+        tabs = ttk.Notebook(editor)
+        tabs.pack(fill="both", expand=True)
+        details = ttk.Frame(tabs, padding=12)
+        scope = ttk.Frame(tabs, padding=12)
+        tabs.add(details, text="Project details")
+        tabs.add(scope, text="Files & testing")
+        details.columnconfigure(0, weight=1)
+        details.columnconfigure(1, weight=1)
+        for index, (label, variable) in enumerate(
+            (("Project name", self.name), ("Git project folder", self.folder))
         ):
-            ttk.Label(frame, text=label, wraplength=570).pack(anchor="w")
-            ttk.Entry(frame, textvariable=variable).pack(fill="x", pady=(0, 8))
-        ttk.Label(
-            frame,
-            text=(
-                "Choose a focused set of files. The agent returns a patch; your original "
-                "project stays unchanged. Tests run offline in a disposable Linux container. "
-                "Tools and dependencies must already be installed in the selected image."
-            ),
-            wraplength=570,
-        ).pack(anchor="w", pady=6)
-        ttk.Label(frame, textvariable=self.status, wraplength=570).pack(anchor="w", pady=6)
-        self.save_button = ttk.Button(
-            frame, text="Check and save project", command=self.save, state="disabled"
+            cell = ttk.Frame(details, padding=(0, 0, 8 if index == 0 else 0, 0))
+            cell.grid(row=0, column=index, sticky="ew")
+            ttk.Label(cell, text=label).pack(anchor="w")
+            row = ttk.Frame(cell)
+            row.pack(fill="x", pady=(3, 10))
+            ttk.Entry(row, textvariable=variable, width=12).pack(side="left", fill="x", expand=True)
+            if variable is self.folder:
+                ttk.Button(row, text="Browse…", command=self.browse).pack(side="right", padx=(6, 0))
+        workspace_cell = ttk.Frame(details, padding=(0, 0, 8, 0))
+        workspace_cell.grid(row=1, column=0, sticky="ew")
+        image_cell = ttk.Frame(details)
+        image_cell.grid(row=1, column=1, sticky="ew")
+        ttk.Label(workspace_cell, text="Workspace").pack(anchor="w")
+        self.workspace_box = ttk.Combobox(
+            workspace_cell, textvariable=self.workspace, state="readonly", width=12
         )
-        self.save_button.pack(anchor="w")
-        ttk.Button(frame, text="Close", command=self.window.destroy).pack(anchor="w", pady=8)
+        self.workspace_box.pack(fill="x", pady=(3, 10))
+        ttk.Label(image_cell, text="Installed test environment").pack(anchor="w")
+        self.image_box = ttk.Combobox(
+            image_cell, textvariable=self.image, state="readonly", width=12
+        )
+        self.image_box.pack(fill="x", pady=(3, 10))
+        for label, variable in (
+            ("Allowed committed files (comma-separated patterns)", self.patterns),
+            ("Test command inside the selected environment", self.command),
+        ):
+            ttk.Label(scope, text=label, wraplength=400).pack(anchor="w")
+            ttk.Entry(scope, textvariable=variable).pack(fill="x", pady=(3, 12))
+        ttk.Checkbutton(
+            scope, text="Allow applying my reviewed changes", variable=self.allow_apply
+        ).pack(anchor="w")
+        ttk.Label(
+            scope,
+            text=(
+                "Tests run offline in an existing container. Project files remain"
+                " unchanged until you explicitly apply a reviewed patch."
+            ),
+            wraplength=400,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=12)
+        self.save_button = ttk.Button(
+            editor, text="Check and save project", command=self.save, state="disabled"
+        )
+        self.save_button.pack(side="bottom", before=tabs, anchor="e", pady=(12, 0))
+        ttk.Label(frame, textvariable=self.status, wraplength=650, style="Muted.TLabel").pack(
+            side="bottom", before=panes, anchor="w", pady=(12, 0)
+        )
         self.work(self.load, self.loaded)
 
     def work(self, action: Callable[[], Any], apply: Callable[[Any], None]) -> None:
@@ -154,7 +188,7 @@ class Projects:
         )
 
     def browse(self) -> None:
-        path = filedialog.askdirectory(parent=self.window, title="Choose your Git project")
+        path = filedialog.askdirectory(parent=self.app.root, title="Choose your Git project")
         if path:
             from pathlib import Path
 
@@ -166,26 +200,28 @@ class Projects:
             messagebox.showinfo(
                 "Pause first",
                 "Pause the worker, then save project changes. Resume afterward to publish them.",
-                parent=self.window,
+                parent=self.app.root,
             )
             return False
         return True
 
     def refresh_projects(self) -> None:
-        self.projects.delete(0, tk.END)
+        self.projects.delete(*self.projects.get_children())
         for repo in self.app.settings.repositories:
             self.projects.insert(
-                tk.END, repo.name + (" — Apply enabled" if repo.allow_apply else " — Preview only")
+                "",
+                tk.END,
+                iid=str(repo.id),
+                values=(repo.name, "Apply enabled" if repo.allow_apply else "Preview only"),
             )
 
     def toggle_apply(self) -> None:
-        selected = self.projects.curselection()  # type: ignore[no-untyped-call]
+        selected = self.projects.selection()
         if selected and self.editable():
             repositories = list(self.app.settings.repositories)
-            repo = repositories[selected[0]]
-            repositories[selected[0]] = repo.model_copy(
-                update={"allow_apply": not repo.allow_apply}
-            )
+            index = self.projects.index(selected[0])
+            repo = repositories[index]
+            repositories[index] = repo.model_copy(update={"allow_apply": not repo.allow_apply})
             self.persist(repositories)
 
     def persist(self, repositories: list[CodingRepository]) -> None:
@@ -200,10 +236,10 @@ class Projects:
         )
 
     def remove(self) -> None:
-        selected = self.projects.curselection()  # type: ignore[no-untyped-call]
+        selected = self.projects.selection()
         if selected and self.editable():
             repositories = list(self.app.settings.repositories)
-            repositories.pop(selected[0])
+            repositories.pop(self.projects.index(selected[0]))
             self.persist(repositories)
 
     def save(self) -> None:

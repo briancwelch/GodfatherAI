@@ -3,12 +3,14 @@
 import asyncio
 import json
 import logging
+import os
 import queue
 import sys
 import threading
 import tkinter as tk
 import webbrowser
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
@@ -23,7 +25,6 @@ from godfather_worker.desktop import (
     connection_error,
     coordinator_origin,
 )
-from godfather_worker.desktop_layout import content_frame
 from godfather_worker.discovery import discover
 from godfather_worker.inference import discover_models
 from godfather_worker.native_desktop import (
@@ -76,134 +77,201 @@ class Application:
         self.network = tk.StringVar(value="Checking optional Tailscale connection…")
         self.network_checking = False
         self.network_timer: str | None = None
-        style = ttk.Style(root)
-        style.theme_use("clam")
-        style.configure("TFrame", background="#F4F8FC")
-        style.configure("TLabelframe", background="#F4F8FC", bordercolor="#D4DFE9")
-        style.configure("TLabelframe.Label", background="#F4F8FC", foreground="#52677D")
-        style.configure("TButton", padding=(14, 10), foreground="#1468CC", background="#F4F8FC")
-        style.map("TButton", background=[("active", "#E1EFF8")])
-        style.configure("TCheckbutton", background="#F4F8FC", foreground="#14283D", padding=6)
-        style.configure("TNotebook", background="#F4F8FC", borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(16, 10), background="#E8F0F7")
-        style.map(
-            "TNotebook.Tab",
-            background=[("selected", "#FFFFFF")],
-            foreground=[("selected", "#087F8C")],
-        )
-        header = tk.Frame(root, background="#14283D", padx=16, pady=14)
+        from godfather_worker import desktop_theme
+        from godfather_worker.desktop_layout import window_size
+
+        self.preferences = desktop_theme.load(folder)
+        self.settings_dialog: Any = None
+        self.project_editor: Any = None
+        self.command_images = {
+            name: tk.PhotoImage(file=str(Path(__file__).parent / f"assets/command-{name}.png"))
+            for name in (
+                "providers",
+                "workspaces",
+                "run",
+                "disable",
+                "settings",
+                "refresh",
+                "inspect",
+            )
+        }
+        desktop_theme.apply(ttk.Style(root), self.preferences)
+        width = self.preferences.width if self.preferences.remember_size else 1120
+        height = self.preferences.height if self.preferences.remember_size else 760
+        window_size(root, width, height)
+        header = tk.Frame(root, background="#14283D", padx=16, pady=10)
         header.pack(fill="x")
         tk.Label(
             header,
             text="GF",
             background="#14283D",
             foreground="#58D5DE",
-            font=("Segoe UI", 16, "bold"),
+            font=("Segoe UI", 12, "bold"),
             relief="solid",
             borderwidth=1,
             padx=8,
-            pady=4,
+            pady=5,
         ).pack(side="left")
         tk.Label(
             header,
             text="Consigliere",
             background="#14283D",
             foreground="#58D5DE",
-            font=("Segoe UI", 21, "bold"),
-            padx=14,
+            font=("Segoe UI", 17, "bold"),
+            padx=12,
         ).pack(side="left")
         tk.Label(
             header,
             text="THE GODFATHER AI",
-            background="#14283D",
+            background="#31465B",
             foreground="#F4F8FC",
-            font=("Segoe UI", 11, "bold"),
+            font=("Segoe UI", 9, "bold"),
+            padx=8,
+            pady=4,
         ).pack(side="left")
+        ttk.Style(root).configure("Header.TButton", background="#263D52", foreground="white")
+        ttk.Button(header, text="Settings", command=self.advanced, style="Header.TButton").pack(
+            side="right"
+        )
+        menu = tk.Menu(root)
+        file_menu = tk.Menu(menu, tearoff=False)
+        file_menu.add_command(label="Open Command Center", command=self.open_center)
+        file_menu.add_command(label="Settings…", command=self.advanced)
+        file_menu.add_separator()
+        file_menu.add_command(label="Quit Consigliere", command=self.quit)
+        menu.add_cascade(label="File", menu=file_menu)
+        view_menu = tk.Menu(menu, tearoff=False)
+        view_menu.add_command(label="Projects", command=self.projects)
+        view_menu.add_command(label="Reset window size", command=lambda: window_size(root))
+        menu.add_cascade(label="View", menu=view_menu)
+        root.configure(menu=menu)
         ribbon = ttk.Frame(root, padding=(12, 8))
         ribbon.pack(fill="x")
-        connection_commands = ttk.LabelFrame(ribbon, text="CONNECTION", padding=6)
-        connection_commands.pack(side="left", fill="y")
-        execution_commands = ttk.LabelFrame(ribbon, text="CONTRIBUTION", padding=6)
-        execution_commands.pack(side="left", fill="y", padx=8)
-        settings_commands = ttk.LabelFrame(ribbon, text="COMPUTER", padding=6)
-        settings_commands.pack(side="left", fill="y")
-        ttk.Button(settings_commands, text="Projects", command=self.projects).pack(side="left")
-        ttk.Button(settings_commands, text="Settings", command=self.advanced).pack(
-            side="left", padx=4
+
+        def group(caption: str) -> ttk.Frame:
+            outer = ttk.Frame(ribbon, padding=(0, 0, 12, 0))
+            outer.pack(side="left", fill="y")
+            commands = ttk.Frame(outer)
+            commands.pack(fill="both", expand=True)
+            ttk.Label(outer, text=caption, style="RibbonCaption.TLabel").pack(fill="x", pady=(4, 0))
+            return commands
+
+        def command(
+            parent: ttk.Frame,
+            text: str,
+            icon: str,
+            callback: Callable[[], None],
+            disabled: bool = False,
+        ) -> ttk.Button:
+            button = ttk.Button(
+                parent,
+                text=text,
+                image=self.command_images[icon],
+                compound="top",
+                command=callback,
+                style="Ribbon.TButton",
+                state="disabled" if disabled else "normal",
+            )
+            button.pack(side="left", padx=(0, 4), fill="y")
+            return button
+
+        connection_commands = group("CONNECTION")
+        self.connect_button = command(
+            connection_commands, "Connect", "providers", self.connect, True
         )
-        footer = ttk.Frame(root, padding=(16, 8))
+        command(connection_commands, "Open Center", "workspaces", self.open_center)
+        execution_commands = group("CONTRIBUTION")
+        self.resume_button = command(execution_commands, "Resume", "run", self.start, True)
+        self.pause_button = command(execution_commands, "Pause", "disable", self.pause, True)
+        computer_commands = group("WORKSPACE")
+        command(computer_commands, "Projects", "workspaces", self.projects)
+        command(computer_commands, "Refresh", "refresh", self.refresh_network)
+        ttk.Separator(root).pack(fill="x")
+        footer = ttk.Frame(root, padding=(16, 6))
         footer.pack(side="bottom", fill="x")
         ttk.Label(
-            footer, text="The Godfather AI  /  Consigliere  /  Owner-controlled contribution"
-        ).pack(anchor="w")
-        style.configure("TLabel", background="#F4F8FC", foreground="#14283D")
-        frame = content_frame(root)
-        notebook = ttk.Notebook(frame)
-        notebook.pack(fill="both", expand=True)
-        connection = ttk.Frame(notebook, padding=16)
-        models = ttk.Frame(notebook, padding=16)
-        notebook.add(connection, text="Connection")
-        notebook.add(models, text="Models & API connections")
-        frame = connection
-        ttk.Label(
-            frame, textvariable=self.status, wraplength=490, font=("Segoe UI", 11, "bold")
-        ).pack(anchor="w", pady=(14, 6))
-        ttk.Label(frame, textvariable=self.owner, wraplength=490).pack(anchor="w")
-        ttk.Label(frame, text="Command Center address").pack(anchor="w", pady=(14, 4))
-        self.address_entry = ttk.Entry(frame, textvariable=self.address, width=55)
-        self.address_entry.pack(fill="x")
-        self.connect_button = ttk.Button(
-            connection_commands, text="Connect", command=self.connect, state="disabled"
+            footer, text="The Godfather AI · Owner-controlled worker", style="Muted.TLabel"
+        ).pack(side="left")
+        ttk.Label(footer, textvariable=self.status, style="Muted.TLabel").pack(side="right")
+        body = ttk.Frame(root)
+        body.pack(fill="both", expand=True)
+        self.notebook = ttk.Notebook(body)
+        self.notebook.pack(fill="both", expand=True)
+        connection = ttk.Frame(self.notebook, padding=20)
+        self.projects_tab = ttk.Frame(self.notebook)
+        models = ttk.Frame(self.notebook, padding=20)
+        self.notebook.add(connection, text="Connection")
+        self.notebook.add(self.projects_tab, text="Projects")
+        self.notebook.add(models, text="Models & API connections")
+        self.projects_placeholder = ttk.Label(
+            self.projects_tab,
+            text="Connect this computer, then open Projects to configure your workspace.",
+            padding=20,
         )
-        self.connect_button.pack(side="left")
-        ttk.Label(frame, textvariable=self.code, wraplength=490).pack(anchor="w")
+        self.projects_placeholder.pack(anchor="w")
+        self.notebook.bind("<<NotebookTabChanged>>", self.tab_changed)
+        connection.columnconfigure(0, weight=3)
+        connection.columnconfigure(1, weight=2)
+        main = ttk.LabelFrame(connection, text="COMPUTER CONNECTION", padding=16)
+        main.grid(row=0, column=0, sticky="new", padx=(0, 16))
+        ttk.Label(main, textvariable=self.status, style="Title.TLabel", wraplength=380).pack(
+            anchor="w", pady=(0, 8)
+        )
+        ttk.Label(main, textvariable=self.owner, style="Muted.TLabel", wraplength=380).pack(
+            anchor="w"
+        )
+        ttk.Label(main, text="Command Center address").pack(anchor="w", pady=(18, 5))
+        self.address_entry = ttk.Entry(main, textvariable=self.address)
+        self.address_entry.pack(fill="x")
+        ttk.Label(main, textvariable=self.code, wraplength=380).pack(anchor="w", pady=8)
+        network = ttk.LabelFrame(connection, text="NETWORK", padding=16)
+        network.grid(row=0, column=1, sticky="new")
+        ttk.Label(network, textvariable=self.network, wraplength=280).pack(anchor="w", pady=(0, 12))
+        ttk.Label(
+            network,
+            text=(
+                "Authenticated outbound HTTPS. Existing private routes "
+                "are preferred when available."
+            ),
+            style="Muted.TLabel",
+            wraplength=280,
+        ).pack(anchor="w")
+        ttk.Label(connection, textvariable=self.hardware, style="Muted.TLabel").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=16
+        )
+        ttk.Label(models, text="Local models", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
         ttk.Checkbutton(
             models,
             text="Allow my existing local AI models",
             variable=self.inference,
             command=self.apply_models,
-        ).pack(anchor="w", pady=(12, 4))
-        ttk.Label(models, textvariable=self.inventory, wraplength=490).pack(anchor="w")
+        ).pack(anchor="w")
+        ttk.Label(models, textvariable=self.inventory, wraplength=650, style="Muted.TLabel").pack(
+            anchor="w", pady=8
+        )
+        ttk.Separator(models).pack(fill="x", pady=16)
+        ttk.Label(models, text="Account API connections", style="Title.TLabel").pack(
+            anchor="w", pady=(0, 8)
+        )
         ttk.Checkbutton(
             models,
             text="Use API connections from my account",
             variable=self.account_connections,
             command=self.apply_models,
-        ).pack(anchor="w", pady=6)
+        ).pack(anchor="w")
         ttk.Label(
             models,
-            text="Manage keys in Account settings. Add project access below.",
-            wraplength=490,
-        ).pack(anchor="w", pady=4)
-        actions = execution_commands
-        self.resume_button = ttk.Button(
-            actions, text="Resume", command=self.start, state="disabled"
+            text=(
+                "Manage API keys and computer grants in Command Center. "
+                "Google Sign-In remains separate."
+            ),
+            style="Muted.TLabel",
+            wraplength=650,
+        ).pack(anchor="w", pady=8)
+        ttk.Button(models, text="Open account connections", command=self.open_center).pack(
+            anchor="w"
         )
-        self.resume_button.pack(side="left", fill="x", expand=True)
-        self.pause_button = ttk.Button(actions, text="Pause", command=self.pause, state="disabled")
-        self.pause_button.pack(side="left", padx=8, fill="x", expand=True)
-        ttk.Button(frame, text="Open Command Center", command=self.open_center).pack(
-            fill="x", pady=(0, 10)
-        )
-        ttk.Label(frame, text="NETWORK", font=("Segoe UI", 11, "bold")).pack(
-            anchor="w", pady=(16, 4)
-        )
-        ttk.Label(frame, textvariable=self.network, wraplength=490).pack(anchor="w")
-        ttk.Label(
-            frame,
-            text="Private routes use your existing system routing and DNS. "
-            "No Tailscale login or settings changes are made.",
-            wraplength=490,
-        ).pack(anchor="w", pady=6)
-        ttk.Button(frame, text="Refresh network", command=self.refresh_network).pack(
-            anchor="w", pady=6
-        )
-        ttk.Label(
-            frame,
-            text="Closing this window keeps the worker in the tray. Use Quit to exit.",
-            wraplength=490,
-        ).pack(anchor="w", pady=(12, 0))
-        root.protocol("WM_DELETE_WINDOW", self.hide)
+        root.protocol("WM_DELETE_WINDOW", self.close_window)
         self.setup_tray()
         self.background(self.load)
         self.refresh_network()
@@ -354,107 +422,44 @@ class Application:
         # Saved credentials always use their bound origin, regardless of textbox edits.
         webbrowser.open(coordinator_origin((self.identity or {}).get("origin", self.address.get())))
 
-    def projects(self) -> None:
-        if not self.identity:
-            messagebox.showinfo(
-                "Connect first", "Connect this computer before adding a coding project."
-            )
-            return
-        from godfather_worker.coding_projects import Projects
+    def tab_changed(self, _: object = None) -> None:
+        if self.notebook.select() == str(self.projects_tab):  # type: ignore[no-untyped-call]
+            self.projects()
 
-        Projects(self)
+    def projects(self) -> None:
+        self.notebook.select(self.projects_tab)  # type: ignore[no-untyped-call]
+        if not self.identity:
+            return
+        if self.project_editor is None:
+            from godfather_worker.coding_projects import Projects
+
+            self.projects_placeholder.pack_forget()
+            self.project_editor = Projects(self, self.projects_tab)
 
     def advanced(self) -> None:
-        window = tk.Toplevel(self.root)
-        window.title("Worker settings")
-        frame = content_frame(window, maximum_width=740)
-        ttk.Label(frame, textvariable=self.hardware, wraplength=470).pack(anchor="w")
-        for label, variable in (
-            ("CPU scheduling cores", self.cpu),
-            ("RAM scheduling GiB", self.ram),
-        ):
-            ttk.Label(frame, text=label).pack(anchor="w", pady=(10, 0))
-            ttk.Entry(frame, textvariable=variable).pack(fill="x")
-        ttk.Label(
-            frame,
-            text="Scheduling limits do not enforce host or Ollama resource usage.",
-            wraplength=470,
-        ).pack(anchor="w", pady=8)
-        ttk.Checkbutton(frame, text="Accept explicitly shared work", variable=self.shared).pack(
-            anchor="w"
-        )
-        for label, variable in (
-            ("Allowed owner IDs (comma separated)", self.owners),
-            ("Allowed workspace IDs (comma separated)", self.workspaces),
-        ):
-            ttk.Label(frame, text=label).pack(anchor="w")
-            ttk.Entry(frame, textvariable=variable, width=52).pack(fill="x")
-        for label, variable in (
-            ("Analytics/reporting: installed Python image digest (blank: off)", self.data_image),
-            ("Local image API URL (blank: off)", self.image_endpoint),
-            ("Permitted installed image model names (comma separated)", self.image_models),
-        ):
-            ttk.Label(frame, text=label).pack(anchor="w")
-            ttk.Entry(frame, textvariable=variable, width=52).pack(fill="x")
-        ttk.Label(
-            frame,
-            text=(
-                "Saving enables these workloads on this computer. Data runs in a networkless "
-                "512 MiB container. Nothing is downloaded."
-            ),
-            wraplength=470,
-        ).pack(anchor="w")
-        ttk.Checkbutton(
-            frame, text="Start at login", variable=self.autostart, command=self.startup
-        ).pack(anchor="w", pady=10)
+        if self.settings_dialog and self.settings_dialog.window.winfo_exists():
+            self.settings_dialog.window.lift()
+            return
+        from godfather_worker.desktop_settings import Settings
 
-        def save() -> None:
-            if self.controller and self.controller.running:
-                messagebox.showinfo("Pause first", "Pause the worker before saving settings.")
-                return
-            try:
-                self.settings = Contribution(
-                    workloads={
-                        "image": self.data_image.get().strip() or None,
-                        "images": {
-                            "url": self.image_endpoint.get().strip(),
-                            "models": [
-                                m.strip() for m in self.image_models.get().split(",") if m.strip()
-                            ],
-                        }
-                        if self.image_endpoint.get().strip()
-                        else None,
-                    }
-                    if self.data_image.get().strip() or self.image_endpoint.get().strip()
-                    else None,
-                    repositories=self.settings.repositories,
-                    cpu_cores=int(self.cpu.get()),
-                    ram_gib=int(self.ram.get()),
-                    inference=self.inference.get(),
-                    account_providers=self.account_connections.get(),
-                    shared=self.shared.get(),
-                    allowed_owner_ids=[
-                        s.strip() for s in self.owners.get().split(",") if s.strip()
-                    ],
-                    allowed_workspace_ids=[
-                        s.strip() for s in self.workspaces.get().split(",") if s.strip()
-                    ],
-                )
-                if self.settings.shared and not (
-                    self.settings.allowed_owner_ids and self.settings.allowed_workspace_ids
-                ):
-                    raise ValueError("Shared work needs explicit owner and workspace scopes.")
-                from godfather_worker.desktop import save_settings
+        self.settings_dialog = Settings(self)
 
-                save_settings(self.folder / "settings.json", self.settings)
-                window.destroy()
-            except (ValueError, OSError):
-                messagebox.showerror("Check settings", "Enter valid capacity and sharing IDs.")
+    def close_window(self) -> None:
+        from godfather_worker.desktop_theme import save
 
-        ttk.Button(frame, text="Save", command=save).pack(anchor="w")
-        ttk.Button(frame, text="Disconnect this computer...", command=self.forget).pack(
-            anchor="w", pady=10
-        )
+        if self.preferences.remember_size:
+            self.preferences = self.preferences.model_copy(
+                update={
+                    "width": max(640, self.root.winfo_width()),
+                    "height": max(480, self.root.winfo_height()),
+                }
+            )
+            with suppress(OSError):
+                save(self.folder, self.preferences)
+        if self.preferences.close_to_tray and self.tray:
+            self.hide()
+        else:
+            self.quit()
 
     def startup(self) -> None:
         try:
@@ -575,7 +580,7 @@ class Application:
                 )
                 if values["identity"]:
                     self.show_identity(values["identity"])
-                    if "--login" in sys.argv and self.tray:
+                    if ("--login" in sys.argv or self.preferences.start_minimized) and self.tray:
                         self.hide()
                 else:
                     self.status.set("Ready. Connect to your Command Center.")
@@ -648,24 +653,38 @@ def main() -> int:
 
         return install_main()
     logging.disable(logging.CRITICAL)
+
+    def self_test_stage(stage: str) -> None:
+        report = os.getenv("GODFATHER_SELF_TEST_REPORT")
+        if report and "--self-test" in sys.argv:
+            Path(report).write_text(json.dumps({"stage": stage}), encoding="utf-8")
+
+    self_test_stage("before_tk")
     root = tk.Tk()
     if "--self-test" in sys.argv:
+        self_test_stage("tk_ready")
         # Frozen builds need this fixed source file to pass into a worker sandbox.
-        assert Path(__file__).with_name("data_program.py").is_file()
+        from godfather_worker.workloads import program_source
+
+        assert program_source().is_file()
+        self_test_stage("source_ready")
         root.withdraw()
         import pystray
         from PIL import Image
 
         tray = pystray.Icon("godfather-startup-smoke", Image.new("RGB", (16, 16), "#14283D"))
         tray.run_detached()
+        self_test_stage("tray_started")
 
         def done() -> None:
+            self_test_stage("closing")
             tray.visible = False
             tray.stop()
             root.destroy()
 
         root.after(200, done)
         root.mainloop()
+        self_test_stage("passed")
         return 0
     lock = acquire_lock(data_folder())
     if lock is None:

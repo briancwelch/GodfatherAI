@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -12,11 +13,22 @@ from godfather_contracts.agents import WorkflowInput, WorkflowStep
 from godfather_contracts.workloads import WorkloadOutput
 from godfather_model_gateway import GatewayError
 from godfather_model_gateway.images import Automatic1111, ImageProviderConfig
-from PIL import Image
 from pydantic import Field, model_validator
 
 from godfather_worker import data_program
 from godfather_worker.coding import command, local_engine
+
+
+def program_source() -> Path:
+    candidates = [Path(__file__).with_name("data_program.py")]
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        candidates.append(Path(bundle) / "godfather_worker/data_program.py")
+    if sys.platform == "darwin":
+        candidates.append(
+            Path(sys.executable).parent.parent / "Resources/godfather_worker/data_program.py"
+        )
+    return next((path for path in candidates if path.is_file()), candidates[0])
 
 
 class WorkloadConfig(Contract):
@@ -91,7 +103,7 @@ async def isolated(
         if "," in str(root):
             raise WorkflowError("tool_permission")
         program = root / "program.py"
-        program.write_bytes(Path(__file__).with_name("data_program.py").read_bytes())
+        program.write_bytes(program_source().read_bytes())
         request = root / "request.json"
         request.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         program.chmod(0o644)
@@ -159,6 +171,8 @@ async def execute(
         )
     if config.images is None or payload.image is None:
         raise WorkflowError("model_unavailable")
+    from PIL import Image
+
     images = await Automatic1111(config.images).generate(payload.instruction, payload.image)
     files = []
     for i, raw in enumerate(images, 1):
