@@ -4,7 +4,12 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status, with the authorized install-and-connect usability milestone.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate OpenAI/Anthropic API connections authorize paid inference. Account keys are encrypted and require explicit owned-computer grants plus local worker opt-in. Providers manage billing. No paid API calls are authorized by this release work. Live coding and account-key acceptance require the owner to configure their project/key. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
+**Current assignment: Phase 12 images, analytics and reporting.** See the
+[Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
+bounded dataset uploads, deterministic calculations and downloadable reports.
+No real dataset or paid image call is authorized; live customer acceptance remains
+pending. Google Sign-In remains separate from data-source and provider consent.
+Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is preserved.
 
 ## Start here
 

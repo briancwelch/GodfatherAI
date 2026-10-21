@@ -133,6 +133,9 @@ def matches(requirements: Requirements, node: NodeView, reserved: list[Requireme
     ):
         if node.inference_protocol_version != 1:
             return False
+    elif "data-workloads-v1" in requirements.runtimes or "local-images-v1" in requirements.runtimes:
+        if node.workflow_protocol_version != 1:
+            return False
     elif node.job_protocol_version != 1 or node.resources.source != "simulated":
         return False
     if requirements.os not in ("any", node.os) or requirements.architecture not in (

@@ -16,6 +16,15 @@ from godfather_contracts import Contract, Label, ModelDeployment, ToolReference
 from godfather_contracts.coding import CODING_RUNTIME, CodingOutput
 from godfather_contracts.execution import AttemptIdentity, Requirements, RetryPolicy
 from godfather_contracts.inference import InferenceParameters, InferenceUsage
+from godfather_contracts.workloads import (
+    IMAGE_RUNTIME,
+    MAX_ARTIFACT_BYTES,
+    WORKLOAD_RUNTIME,
+    AnalysisSettings,
+    Dataset,
+    ImageSettings,
+    WorkloadOutput,
+)
 
 
 class Plan(Contract):
@@ -35,14 +44,14 @@ class PlanSummary(Contract):
     outline: str = Field(min_length=1, max_length=8192)
 
 
-StepOutput = Plan | TextOutput | PlanSummary | CodingOutput
+StepOutput = Plan | TextOutput | PlanSummary | CodingOutput | WorkloadOutput
 
 
 class WorkflowStep(Contract):
     id: Label
-    kind: Literal["model", "tool", "coding"]
+    kind: Literal["model", "tool", "coding", "analytics", "report", "image"]
     instruction: str = Field(default="", max_length=4096)
-    output_schema: Literal["plan", "text", "plan_summary", "coding"]
+    output_schema: Literal["plan", "text", "plan_summary", "coding", "workload"]
     input_step: Label | None = None
     tool: ToolReference | None = None
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
@@ -50,6 +59,12 @@ class WorkflowStep(Contract):
 
     @model_validator(mode="after")
     def supported_operation(self) -> "WorkflowStep":
+        if self.kind in ("analytics", "report", "image"):
+            if self.tool or self.output_schema != "workload":
+                raise ValueError("Data stages require the workload output contract")
+            if (self.kind == "report") != (self.input_step is not None):
+                raise ValueError("Only report stages require a prior analytics stage")
+            return self
         if self.kind == "coding":
             if (
                 self.tool
@@ -84,6 +99,8 @@ class WorkflowDefinition(Contract):
                 )
             if step.kind == "tool" and seen[str(step.input_step)].output_schema != "plan":
                 raise ValueError("The demonstration tool requires a structured plan predecessor")
+            if step.kind == "report" and seen[str(step.input_step)].kind != "analytics":
+                raise ValueError("Reports require a validated analytics predecessor")
             seen[step.id] = step
         return self
 
@@ -102,6 +119,22 @@ class AgentDefinition(Contract):
 
     @model_validator(mode="after")
     def portable_requirements(self) -> "AgentDefinition":
+        data_steps = [s for s in self.workflow.steps if s.kind in ("analytics", "report", "image")]
+        if data_steps:
+            if len(data_steps) != len(self.workflow.steps) or self.requirements.model_selection:
+                raise ValueError("Data workloads cannot mix with text inference steps")
+            kinds = [s.kind for s in data_steps]
+            if kinds not in (["analytics"], ["analytics", "report"], ["image"]):
+                raise ValueError("Supported data workflows: analytics, analytics-report or image")
+            required_runtime = IMAGE_RUNTIME if kinds == ["image"] else WORKLOAD_RUNTIME
+            required_permission = "images.generate" if kinds == ["image"] else "data.analyze"
+            if (
+                required_runtime not in self.requirements.runtimes
+                or required_permission not in self.permissions
+            ):
+                raise ValueError("Data workloads require explicit runtime and permission")
+            if kinds == ["image"] and self.retry.limit:
+                raise ValueError("Image generation does not replay automatically")
         if any(s.kind == "coding" for s in self.workflow.steps) and (
             len(self.workflow.steps) != 1
             or self.retry.limit != 0
@@ -115,10 +148,11 @@ class AgentDefinition(Contract):
             and self.retry.limit
         ):
             raise ValueError("Paid workflows cannot retry automatically")
-        if self.requirements.model_selection is None:
+        if self.requirements.model_selection is None and not data_steps:
             raise ValueError("A model selection is required")
         if (
-            self.requirements.model_selection.connection_id
+            self.requirements.model_selection
+            and self.requirements.model_selection.connection_id
             and any(s.output_schema in ("plan", "coding") for s in self.workflow.steps)
             and "structured_output" not in self.requirements.model_selection.required_operations
         ):
@@ -162,6 +196,10 @@ class AgentView(Contract):
 class WorkflowInput(Contract):
     instruction: str = Field(min_length=1, max_length=4096)
     repository_id: UUID | None = None
+    dataset: Dataset | None = None
+    analysis: AnalysisSettings | None = None
+    image: ImageSettings | None = None
+    report_format: Literal["html", "markdown", "csv", "xlsx"] | None = None
     search_terms: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
         default_factory=list, max_length=8
     )
@@ -173,6 +211,9 @@ class WorkflowInput(Contract):
             data.pop("repository_id", None)
         if not self.search_terms:
             data.pop("search_terms", None)
+        for key in ("dataset", "analysis", "image", "report_format"):
+            if getattr(self, key) is None:
+                data.pop(key, None)
         return data
 
 
@@ -188,7 +229,7 @@ class WorkflowSubmission(Contract):
 class ArtifactReference(Contract):
     id: UUID
     checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
-    size_bytes: int = Field(ge=1, le=262144)
+    size_bytes: int = Field(ge=1, le=MAX_ARTIFACT_BYTES)
     format_version: Literal[1] = 1
 
 

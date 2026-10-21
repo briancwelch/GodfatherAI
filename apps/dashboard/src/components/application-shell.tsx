@@ -17,6 +17,7 @@ export const navigation = {
   agents: "Agents",
   models: "Models",
   providers: "Provider Connections",
+  workloads: "Images / Analytics / Reports",
   activity: "Activity / Audit",
   administration: "Administration",
 };

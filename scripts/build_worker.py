@@ -103,6 +103,12 @@ def build(release: str) -> Path:
         "pystray",
         "--collect-data",
         "godfather_worker",
+        "--add-data",
+        (
+            str(ROOT / "packages/worker/src/godfather_worker/data_program.py")
+            + os.pathsep
+            + "godfather_worker"
+        ),
         "--hidden-import",
         {
             "Windows": "keyring.backends.Windows",

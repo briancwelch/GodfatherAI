@@ -20,6 +20,7 @@ from pydantic import Field
 
 from godfather_worker import cli
 from godfather_worker.client import WorkerClient
+from godfather_worker.workloads import WorkloadConfig
 
 WEB_ORIGIN = "https://app.the-godfather.ai"
 API_ORIGIN = "https://api.the-godfather.ai"
@@ -99,6 +100,7 @@ class Contribution(Contract):
     allowed_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
     repositories: list[CodingRepository] = Field(default_factory=list, max_length=8, repr=False)
+    workloads: WorkloadConfig | None = None
 
     def resources(self, actual: Resources) -> Resources:
         values = actual.model_dump()
@@ -221,6 +223,15 @@ class Controller:
             ]
         if settings.account_providers:
             arguments += ["--account-providers"]
+        if settings.workloads:
+            config_path = self.folder / "workloads.json"
+            config_path.write_text(settings.workloads.model_dump_json(), encoding="utf-8")
+            config_path.chmod(0o600)
+            arguments += ["--execute-workflows", "--workload-config", str(config_path)]
+            if settings.workloads.image:
+                arguments += ["--allow-tool-permission", "data.analyze"]
+            if settings.workloads.images:
+                arguments += ["--allow-tool-permission", "images.generate"]
         for owner in settings.allowed_owner_ids:
             arguments += ["--allow-owner", str(owner)]
         for workspace in dict.fromkeys(

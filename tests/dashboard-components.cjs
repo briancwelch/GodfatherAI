@@ -27,6 +27,57 @@ const shell = require("../apps/dashboard/src/components/application-shell.tsx");
 const results = require("../apps/dashboard/src/components/job-result.tsx");
 const outcomes = require("../apps/dashboard/src/lib/job-outcome.ts");
 
+test("workload results show persisted calculations and scoped downloads", () => {
+  const detail = codingDetail();
+  detail.context.coding = false;
+  detail.output.output = {
+    kind: "report",
+    summary: "Analyzed 3 rows from an isolated fixture.",
+    analysis: {
+      source: "fixture.csv",
+      source_checksum: "a".repeat(64),
+      row_count: 3,
+      metrics: {
+        revenue: {
+          count: 3,
+          missing: 0,
+          sum: 75,
+          mean: 25,
+          median: 20,
+          min: 10,
+          max: 45,
+          anomaly_count: 0,
+        },
+      },
+      periods: [
+        { label: "2026-01", value: 30, change: null, change_percent: null },
+        { label: "2026-02", value: 45, change: 15, change_percent: 50 },
+      ],
+    },
+    files: [{ filename: "report.html", media_type: "text/html" }],
+    limitations: ["Deterministic calculations"],
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail }),
+  );
+  assert.match(html, /Analyzed 3 rows/);
+  assert.match(html, /Supporting calculations/);
+  assert.match(html, /Monthly values/);
+  assert.match(html, /workloads\/jobs\/coding-fixture\/files\/artifact\/0/);
+  assert.match(html, /Download report.html/);
+  const id = "00000000-0000-0000-0000-000000000000";
+  assert.equal(
+    server.allowedPath(`workloads/jobs/${id}/files/${id}/0`, "GET"),
+    true,
+  );
+  assert.equal(server.allowedPath("workloads/jobs", "POST"), true);
+  assert.equal(server.allowedPath("workloads/options", "POST"), false);
+  assert.equal(
+    server.allowedPath(`workloads/jobs/${id}/files/${id}/../secret`, "GET"),
+    false,
+  );
+});
+
 function codingDetail(overrides = {}) {
   return {
     can_control: true,

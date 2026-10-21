@@ -72,6 +72,8 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
+    "workloads/options",
+    `workloads/jobs/${uuid}/files/${uuid}/[0-9]+`,
     "account/providers",
     "agent-options",
     "coding/repositories",
@@ -90,6 +92,7 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "workloads/jobs",
     "account/providers/(openai|anthropic)(/(disconnect|computers))?",
     "models/install",
     "provider-connections",
@@ -134,11 +137,12 @@ export async function proxy(request: NextRequest, segments: string[]) {
       { detail: "Google Sign-In required" },
       { status: 401 },
     );
-  if (Number(request.headers.get("content-length") ?? 0) > 16384)
+  const bodyLimit = path === "workloads/jobs" ? 1500000 : 16384;
+  if (Number(request.headers.get("content-length") ?? 0) > bodyLimit)
     return NextResponse.json({ detail: "Request too large" }, { status: 413 });
   try {
     const body = request.method === "POST" ? await request.text() : undefined;
-    if (body && Buffer.byteLength(body) > 16384)
+    if (body && Buffer.byteLength(body) > bodyLimit)
       return NextResponse.json(
         { detail: "Request too large" },
         { status: 413 },
@@ -149,6 +153,23 @@ export async function proxy(request: NextRequest, segments: string[]) {
       request.method,
       body || undefined,
     );
+    if (
+      response.ok &&
+      request.method === "GET" &&
+      new RegExp(`^workloads/jobs/${uuid}/files/${uuid}/[0-9]+$`).test(path)
+    ) {
+      return new NextResponse(await response.arrayBuffer(), {
+        headers: {
+          "Content-Type":
+            response.headers.get("content-type") || "application/octet-stream",
+          "Content-Disposition":
+            response.headers.get("content-disposition") || "attachment",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'none'; sandbox",
+        },
+      });
+    }
     if (
       response.ok &&
       request.method === "GET" &&

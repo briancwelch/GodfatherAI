@@ -60,6 +60,9 @@ class Application:
         self.hardware = tk.StringVar(value="")
         self.inference = tk.BooleanVar(value=False)
         self.account_connections = tk.BooleanVar(value=False)
+        self.data_image = tk.StringVar(value="")
+        self.image_endpoint = tk.StringVar(value="")
+        self.image_models = tk.StringVar(value="")
         self.cpu, self.ram = tk.StringVar(value="1"), tk.StringVar(value="2")
         self.shared = tk.BooleanVar(value=False)
         self.owners, self.workspaces = tk.StringVar(), tk.StringVar()
@@ -386,6 +389,21 @@ class Application:
         ):
             ttk.Label(frame, text=label).pack(anchor="w")
             ttk.Entry(frame, textvariable=variable, width=52).pack(fill="x")
+        for label, variable in (
+            ("Analytics/reporting: installed Python image digest (blank: off)", self.data_image),
+            ("Local image API URL (blank: off)", self.image_endpoint),
+            ("Permitted installed image model names (comma separated)", self.image_models),
+        ):
+            ttk.Label(frame, text=label).pack(anchor="w")
+            ttk.Entry(frame, textvariable=variable, width=52).pack(fill="x")
+        ttk.Label(
+            frame,
+            text=(
+                "Saving enables these workloads on this computer. Data runs in a networkless "
+                "512 MiB container. Nothing is downloaded."
+            ),
+            wraplength=470,
+        ).pack(anchor="w")
         ttk.Checkbutton(
             frame, text="Start at login", variable=self.autostart, command=self.startup
         ).pack(anchor="w", pady=10)
@@ -396,6 +414,19 @@ class Application:
                 return
             try:
                 self.settings = Contribution(
+                    workloads={
+                        "image": self.data_image.get().strip() or None,
+                        "images": {
+                            "url": self.image_endpoint.get().strip(),
+                            "models": [
+                                m.strip() for m in self.image_models.get().split(",") if m.strip()
+                            ],
+                        }
+                        if self.image_endpoint.get().strip()
+                        else None,
+                    }
+                    if self.data_image.get().strip() or self.image_endpoint.get().strip()
+                    else None,
                     repositories=self.settings.repositories,
                     cpu_cores=int(self.cpu.get()),
                     ram_gib=int(self.ram.get()),
@@ -525,6 +556,14 @@ class Application:
                 self.autostart.set(values["startup"])
                 self.inference.set(self.settings.inference)
                 self.account_connections.set(self.settings.account_providers)
+                workloads = self.settings.workloads
+                self.data_image.set(workloads.image or "" if workloads else "")
+                self.image_endpoint.set(
+                    workloads.images.url if workloads and workloads.images else ""
+                )
+                self.image_models.set(
+                    ",".join(workloads.images.models) if workloads and workloads.images else ""
+                )
                 self.cpu.set(str(self.settings.cpu_cores))
                 self.ram.set(str(self.settings.ram_gib))
                 self.shared.set(self.settings.shared)
@@ -611,6 +650,8 @@ def main() -> int:
     logging.disable(logging.CRITICAL)
     root = tk.Tk()
     if "--self-test" in sys.argv:
+        # Frozen builds need this fixed source file to pass into a worker sandbox.
+        assert Path(__file__).with_name("data_program.py").is_file()
         root.withdraw()
         import pystray
         from PIL import Image

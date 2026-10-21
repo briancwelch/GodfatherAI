@@ -4,7 +4,12 @@
 }
 
 {$GODFATHER_PUBLIC_HOSTS:app.the-godfather.ai api.the-godfather.ai} {
-	request_body {
+	@largeCheckpoint path_regexp checkpoint ^/api/v1/workers/[a-fA-F0-9-]{36}/jobs/[a-fA-F0-9-]{36}/workflow/report$
+	request_body @largeCheckpoint {
+		max_size 9MB
+	}
+	@ordinary not path_regexp checkpoint ^/api/v1/workers/[a-fA-F0-9-]{36}/jobs/[a-fA-F0-9-]{36}/workflow/report$
+	request_body @ordinary {
 		max_size 2MB
 	}
 	header Strict-Transport-Security "max-age=31536000"

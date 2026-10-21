@@ -1,5 +1,6 @@
 """Transactional workflow transitions, immutable artifacts and fenced checkpoints."""
 
+import base64
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ from godfather_contracts.agents import (
     WorkflowState,
 )
 from godfather_contracts.coding import CODING_RUNTIME, CodingOutput
+from godfather_contracts.workloads import WorkloadOutput
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -387,6 +389,11 @@ def transition(
         raise HTTPException(409, "Only the next uncommitted step may transition")
     if step.kind == "tool":
         validate_tool_policy(spec, node, step.tool)
+    if step.kind in ("analytics", "report", "image"):
+        permission = "images.generate" if step.kind == "image" else "data.analyze"
+        runtime = "local-images-v1" if step.kind == "image" else "data-workloads-v1"
+        if permission not in node.tool_permissions or runtime not in node.runtimes:
+            raise HTTPException(403, "Worker workload permission was withdrawn")
     if step.kind == "coding":
         repository_id = job.input_refs.get("repository_id")
         if (
@@ -458,6 +465,26 @@ def transition(
             output = CodingOutput.model_validate(payload.output.model_dump())
             if str(output.repository_id) != job.input_refs.get("repository_id"):
                 raise ValueError("Coding output must match the approved repository")
+        elif step.output_schema == "workload":
+            output = WorkloadOutput.model_validate(payload.output.model_dump())
+            if output.kind != step.kind:
+                raise ValueError("Output kind does not match this stage")
+            if step.kind == "analytics":
+                source = job.input_refs.get("dataset")
+                if (
+                    not isinstance(source, dict)
+                    or output.analysis.get("source_checksum")
+                    != hashlib.sha256(
+                        base64.b64decode(str(source.get("content_base64")), validate=True)
+                    ).hexdigest()
+                ):
+                    raise ValueError("Analysis must reference the submitted dataset")
+            elif step.kind == "report":
+                prior = WorkloadOutput.model_validate(
+                    load_artifact(session, store, job, state.context[str(step.input_step)])
+                )
+                if output.analysis != prior.analysis:
+                    raise ValueError("Report must preserve the committed analysis")
         else:
             output = PlanSummary.model_validate(payload.output.model_dump())
             source = load_artifact(session, store, job, state.context[str(step.input_step)])

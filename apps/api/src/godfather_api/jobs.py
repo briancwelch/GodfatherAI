@@ -351,7 +351,7 @@ def poll(node_id: UUID, payload: JobPoll, request: Request, session: SessionDep)
             lease_expires_at=attempt.lease_expires_at,
             deadline_at=attempt.deadline_at,
             deployment=ModelDeployment.model_validate(attempt.result["deployment"])
-            if job.type in ("inference.text", "agent.workflow")
+            if job.type in ("inference.text", "agent.workflow") and "deployment" in attempt.result
             else None,
             workflow=workflow_service.workflow_assignment(
                 session, request.app.state.artifacts, job, attempt

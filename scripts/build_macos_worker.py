@@ -86,6 +86,12 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.icns"),
         "--collect-data",
         "godfather_worker",
+        "--add-data",
+        (
+            str(ROOT / "packages/worker/src/godfather_worker/data_program.py")
+            + os.pathsep
+            + "godfather_worker"
+        ),
         "--target-arch",
         architecture,
         "--osx-bundle-identifier",

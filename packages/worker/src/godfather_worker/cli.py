@@ -69,6 +69,11 @@ def main(
     parser.add_argument("--execute-synthetic", action="store_true")
     parser.add_argument("--execute-workflows", action="store_true")
     parser.add_argument(
+        "--workload-config",
+        type=Path,
+        help="Owner opt-in to a pinned data sandbox and/or configured local image backend",
+    )
+    parser.add_argument(
         "--account-providers",
         action="store_true",
         help="Owner opt-in to explicitly authorized account API connections",
@@ -104,7 +109,12 @@ def main(
             raise ValueError("Synthetic execution requires a simulated profile")
         if args.inference_config and args.execute_synthetic:
             raise ValueError("Choose synthetic execution or inference per worker process")
-        if args.execute_workflows and not args.inference_config and not args.account_providers:
+        if (
+            args.execute_workflows
+            and not args.inference_config
+            and not args.account_providers
+            and not args.workload_config
+        ):
             raise ValueError("Workflow execution requires an inference configuration")
         if args.pause_after_checkpoint is not None and (
             not args.simulate
@@ -113,6 +123,21 @@ def main(
         ):
             raise ValueError("Checkpoint pauses require an explicitly simulated workflow worker")
         configs: list[ProviderConfig] = []
+        workloads = None
+        workload_runtimes: list[str] = []
+        if args.workload_config:
+            from godfather_worker.workloads import WorkloadConfig, inventory
+
+            if not args.execute_workflows or args.simulate:
+                raise ValueError("Data workloads require a physical opted-in worker")
+            workloads = WorkloadConfig.model_validate_json(
+                args.workload_config.read_text(encoding="utf-8")
+            )
+            workload_runtimes = asyncio.run(inventory(workloads))
+            if workloads.image and "data.analyze" not in args.allow_tool_permission:
+                raise ValueError("Explicit data.analyze permission is required")
+            if workloads.images and "images.generate" not in args.allow_tool_permission:
+                raise ValueError("Explicit images.generate permission is required")
         repositories: list[CodingRepository] = []
         if args.coding_config:
             if not args.execute_workflows or args.simulate:
@@ -190,6 +215,20 @@ def main(
         if args.concurrency is not None:
             values["concurrency_limit"] = args.concurrency
         values["job_protocol_version"] = 1 if args.execute_synthetic else None
+        if workloads:
+            values["concurrency_limit"] = 1
+            values["runtimes"] = [*values["runtimes"], *workload_runtimes]
+            additional = (
+                ["analytics", "reporting"] if "data-workloads-v1" in workload_runtimes else []
+            ) + (["images"] if "local-images-v1" in workload_runtimes else [])
+            values["secondary_capabilities"] = list(
+                dict.fromkeys(
+                    [
+                        *values["secondary_capabilities"],
+                        *(v for v in additional if v not in values["primary_capabilities"]),
+                    ]
+                )
+            )
         if configs or args.account_providers:
             if args.concurrency not in (None, 1):
                 raise ValueError("Phase 05 inference workers execute one attempt at a time")
@@ -312,7 +351,7 @@ def main(
                     )
                     notify("worker.heartbeat", node_id=str(node_id), state=result.state)
                 delay = 1
-                if args.execute_synthetic or configs:
+                if args.execute_synthetic or configs or workloads:
                     assert node_id is not None
                     polled = PollResponse.model_validate(
                         client.post_document(
@@ -346,6 +385,7 @@ def main(
                                     configs,
                                     args.pause_after_checkpoint,
                                     repositories=repositories,
+                                    workloads=workloads,
                                 )
                             )
                         elif polled.assignment.job.type == "result.action":

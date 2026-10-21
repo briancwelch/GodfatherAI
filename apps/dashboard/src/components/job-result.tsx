@@ -284,6 +284,127 @@ export function ReadableValue({ value }: { value: Json }) {
   );
 }
 
+function WorkloadResult({
+  data,
+  detail,
+}: {
+  data: Record<string, Json>;
+  detail: JobDetail;
+}) {
+  const analysis = object(data.analysis);
+  const metrics = object(analysis.metrics);
+  const result = object(detail.job.result);
+  const artifact = object(result.final_output);
+  const steps = detail.steps || [];
+  const last = [...steps].reverse().find((s) => s.status === "COMPLETED");
+  const artifactId = artifact.id || last?.output_artifact_id;
+  const files = Array.isArray(data.files) ? data.files.map(object) : [];
+  return (
+    <div className="workload-result">
+      <SafeMarkdown text={String(data.summary || "")} />
+      {Object.keys(metrics).length > 0 && (
+        <ReadableValue
+          value={{
+            title: "Supporting calculations",
+            columns: [
+              "Column",
+              "Count",
+              "Missing",
+              "Sum",
+              "Mean",
+              "Median",
+              "Min",
+              "Max",
+              "Anomaly candidates",
+            ],
+            rows: Object.entries(metrics).map(([column, raw]) => {
+              const v = object(raw);
+              return [
+                column,
+                v.count,
+                v.missing,
+                v.sum,
+                v.mean,
+                v.median,
+                v.min,
+                v.max,
+                v.anomaly_count,
+              ].map((c) => c ?? null);
+            }),
+          }}
+        />
+      )}
+      {Array.isArray(analysis.groups) && analysis.groups.length > 0 && (
+        <ReadableValue
+          value={{ title: "Grouped values", series: analysis.groups }}
+        />
+      )}
+      {Array.isArray(analysis.periods) && analysis.periods.length > 0 && (
+        <>
+          <ReadableValue
+            value={{ title: "Monthly values", series: analysis.periods }}
+          />
+          <ReadableValue
+            value={{
+              title: "Observed-period comparisons",
+              columns: ["Period", "Value", "Change", "Change %"],
+              rows: analysis.periods.map((p) => {
+                const v = object(p);
+                return [v.label, v.value, v.change, v.change_percent].map(
+                  (c) => c ?? null,
+                );
+              }),
+            }}
+          />
+        </>
+      )}
+      {files.map((file, index) => {
+        const url = artifactId
+          ? `/api/control/workloads/jobs/${detail.job.id}/files/${String(artifactId)}/${index}`
+          : null;
+        return (
+          <div key={index}>
+            {file.media_type === "image/png" && url && (
+              <img
+                className="workload-image"
+                src={url}
+                alt={`Generated image ${index + 1}`}
+                width={512}
+                height={512}
+              />
+            )}{" "}
+            {url && (
+              <a
+                className="action secondary"
+                href={url}
+                download={String(file.filename)}
+              >
+                Download {String(file.filename)}
+              </a>
+            )}
+          </div>
+        );
+      })}
+      {typeof analysis.source === "string" && (
+        <p className="muted">
+          Source: {analysis.source} · {String(analysis.row_count)} rows ·
+          SHA-256 <code>{String(analysis.source_checksum)}</code>
+        </p>
+      )}
+      {Array.isArray(data.limitations) && (
+        <details>
+          <summary>Methodology and limitations</summary>
+          <ul>
+            {data.limitations.map((v, i) => (
+              <li key={i}>{String(v)}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 export function CodingResult({
   data,
   detail,
@@ -656,6 +777,10 @@ export function JobResult({ detail }: { detail: JobDetail }) {
             </a>
           </p>
         </>
+      ) : ["analytics", "report", "image"].includes(
+          String(object(data).kind),
+        ) ? (
+        <WorkloadResult data={object(data)} detail={detail} />
       ) : coding ? (
         <CodingResult key={detail.job.id} data={object(data)} detail={detail} />
       ) : hasOutput ? (

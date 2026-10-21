@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import UUID
 
+from godfather_contracts.workloads import MAX_ARTIFACT_BYTES
+
 
 class ArtifactError(Exception):
     pass
@@ -38,7 +40,7 @@ class LocalArtifactStore:
         return path
 
     def write(self, artifact_id: UUID, data: bytes) -> None:
-        if not 0 < len(data) <= 262144:
+        if not 0 < len(data) <= MAX_ARTIFACT_BYTES:
             raise ArtifactError("Artifact size limit exceeded")
         try:
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -58,12 +60,12 @@ class LocalArtifactStore:
     def read(self, artifact_id: UUID, checksum: str, size_bytes: int) -> bytes:
         try:
             with self.path(artifact_id).open("rb") as handle:
-                data = handle.read(262145)
+                data = handle.read(MAX_ARTIFACT_BYTES + 1)
         except OSError:
             raise ArtifactError("Artifact unavailable") from None
         if (
             len(data) != size_bytes
-            or len(data) > 262144
+            or len(data) > MAX_ARTIFACT_BYTES
             or hashlib.sha256(data).hexdigest() != checksum
         ):
             raise ArtifactError("Artifact integrity check failed")

@@ -160,6 +160,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(result_actions_router)
     app.include_router(agents_router)
+    from godfather_api.workloads import router as workloads_router
+
+    app.include_router(workloads_router)
     app.include_router(inference_router)
     app.include_router(command_center_router)
     app.include_router(authentication_router)

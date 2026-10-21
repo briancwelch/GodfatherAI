@@ -309,6 +309,26 @@ def submit_workflow(payload: WorkflowSubmission, request: Request, session: Sess
         update={"tools": spec.allowed_tools, "tool_permissions": spec.permissions}
     )
     coding = any(s.kind == "coding" for s in spec.workflow.steps)
+    kinds = [s.kind for s in spec.workflow.steps]
+    if "analytics" in kinds and (payload.input.dataset is None or payload.input.image is not None):
+        raise HTTPException(422, "Analytics requires an uploaded dataset")
+    if "image" in kinds:
+        if payload.input.image is None or payload.input.dataset is not None:
+            raise HTTPException(422, "Image generation requires explicit local model settings")
+        requirements = requirements.model_copy(
+            update={
+                "runtimes": [*requirements.runtimes, "image-model:" + payload.input.image.model]
+            }
+        )
+    if not any(k in ("analytics", "report", "image") for k in kinds) and any(
+        (
+            payload.input.dataset,
+            payload.input.analysis,
+            payload.input.image,
+            payload.input.report_format,
+        )
+    ):
+        raise HTTPException(422, "Data inputs require a data workload agent")
     if not coding and (payload.input.repository_id or payload.input.search_terms):
         raise HTTPException(422, "Repository access and code search require a coding workflow")
     if coding:

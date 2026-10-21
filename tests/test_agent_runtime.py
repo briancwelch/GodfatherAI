@@ -233,7 +233,7 @@ def test_local_artifacts_are_immutable_bounded_and_verified(tmp_path: Path) -> N
     with pytest.raises(ArtifactError):
         store.write(key, raw)
     with pytest.raises(ArtifactError):
-        store.write(uuid4(), b"x" * 262145)
+        store.write(uuid4(), b"x" * (8 * 1024 * 1024 + 1))
     with pytest.raises(ArtifactError):
         store.path("../outside")  # type: ignore[arg-type]
     store.path(key).write_bytes(b"corruption")

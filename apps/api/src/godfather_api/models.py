@@ -432,7 +432,7 @@ class Artifact(Entity, Owned, Base):
             name="fk_artifacts_job_workspace",
             ondelete="RESTRICT",
         ),
-        CheckConstraint("size_bytes > 0 AND size_bytes <= 262144", name="size"),
+        CheckConstraint("size_bytes > 0 AND size_bytes <= 8388608", name="size"),
         CheckConstraint("kind IN ('step_output','workflow_state')", name="kind"),
     )
     job_id: Mapped[UUID] = mapped_column(index=True)

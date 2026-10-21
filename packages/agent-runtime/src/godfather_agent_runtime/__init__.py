@@ -49,14 +49,15 @@ def state_for(assignment: WorkflowAssignment, state: WorkflowState) -> None:
 async def execute_workflow(
     assignment: WorkflowAssignment,
     instruction: WorkflowInput,
-    deployment: ModelDeployment,
-    provider: Provider,
+    deployment: ModelDeployment | None,
+    provider: Provider | None,
     worker_tools: list[ToolReference],
     worker_permissions: list[str],
     os: str,
     read_artifact: Callable[[ArtifactReference], Awaitable[object]],
     report: Callable[[str, str, int, StepOutput | None, object | None], Awaitable[WorkflowState]],
     coding: Callable[[WorkflowStep], Awaitable[tuple[StepOutput, object]]] | None = None,
+    workload: Callable[[WorkflowStep, object], Awaitable[StepOutput]] | None = None,
 ) -> WorkflowResult:
     """Only completed checkpoint prefixes are skipped. Model output never chooses tools."""
     agent = assignment.agent.definition
@@ -73,11 +74,18 @@ async def execute_workflow(
             usage = None
             output: StepOutput
             async with asyncio.timeout(step.timeout_seconds):
-                if step.kind == "coding":
+                if step.kind in ("analytics", "report", "image"):
+                    permission = "images.generate" if step.kind == "image" else "data.analyze"
+                    if workload is None or permission not in worker_permissions:
+                        raise WorkflowError("tool_permission")
+                    output = await workload(step, context)
+                elif step.kind == "coding":
                     if coding is None or "coding.workspace" not in worker_permissions:
                         raise WorkflowError("tool_permission")
                     output, usage = await coding(step)
                 elif step.kind == "model":
+                    if provider is None or deployment is None:
+                        raise WorkflowError("model_unavailable")
                     prompt = step.instruction + "\nUser instruction:\n" + instruction.instruction
                     if context is not None:
                         prompt += "\nValidated prior step data:\n" + json.dumps(

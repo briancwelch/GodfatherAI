@@ -51,8 +51,9 @@ class WorkerClient:
             method="POST",
         )
         with self.opener.open(request, timeout=10) as response:
-            data = response.read(1024**2 + 1)
-            if len(data) > 1024**2:
+            limit = 9 * 1024**2 if path.endswith(("/jobs/poll", "/workflow/artifact")) else 1024**2
+            data = response.read(limit + 1)
+            if len(data) > limit:
                 raise ValueError("Coordinator response exceeds the protocol limit")
             return json.loads(data)
 

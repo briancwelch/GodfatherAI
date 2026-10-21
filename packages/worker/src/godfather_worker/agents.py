@@ -26,6 +26,8 @@ from godfather_model_gateway.providers import create_provider
 from godfather_worker.client import WorkerClient
 from godfather_worker.inference import maintain_execution
 from godfather_worker.paid_inference import MeteredProvider
+from godfather_worker.workloads import WorkloadConfig
+from godfather_worker.workloads import execute as execute_workload
 
 
 class ArtifactRead(Contract):
@@ -47,9 +49,10 @@ async def execute_agent(
     pause_after_checkpoint: int | None = None,
     provider_override: Provider | None = None,
     repositories: list[CodingRepository] | None = None,
+    workloads: WorkloadConfig | None = None,
 ) -> None:
     bundle, deployment, payload = assignment.workflow, assignment.deployment, assignment.job.input
-    if bundle is None or deployment is None or not isinstance(payload, WorkflowInput):
+    if bundle is None or not isinstance(payload, WorkflowInput):
         raise ValueError("Workflow assignment is incomplete")
     identity = {
         "session_id": registration.session_id,
@@ -72,21 +75,26 @@ async def execute_agent(
         (
             c
             for c in configs
-            if c.id == deployment.provider_id and c.provider == deployment.provider
+            if deployment is not None
+            and c.id == deployment.provider_id
+            and c.provider == deployment.provider
         ),
         None,
     )
-    if config is None:
+    needs_model = any(s.kind in ("model", "coding") for s in bundle.agent.definition.workflow.steps)
+    if needs_model and (config is None or deployment is None):
         await report("fail", error_code="model_unavailable")
         return
     # Compatible workflows remain local; native paid providers use the metered wrapper below.
-    if config.provider == "openai_compatible" and not config.url.startswith(
-        ("http://127.0.0.1", "http://localhost", "http://[::1]")
+    if (
+        config is not None
+        and config.provider == "openai_compatible"
+        and not config.url.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]"))
     ):
         await report("fail", error_code="workflow_validation")
         return
-    provider = provider_override or create_provider(config)
-    if config.provider in ("openai", "anthropic"):
+    provider = provider_override or (create_provider(config) if config else None)
+    if config is not None and provider is not None and config.provider in ("openai", "anthropic"):
         provider = MeteredProvider(provider, client, node_id, registration, assignment)
 
     async def read_artifact(ref: ArtifactReference) -> object:
@@ -143,7 +151,14 @@ async def execute_agent(
                 or assignment.job.workspace_id not in config.allowed_workspace_ids
             ):
                 raise WorkflowError("tool_permission")
+            if provider is None or deployment is None:
+                raise WorkflowError("model_unavailable")
             return await execute_coding(config, payload, step, provider, deployment)
+
+        async def workload(step: WorkflowStep, context: object) -> StepOutput:
+            if workloads is None:
+                raise WorkflowError("tool_permission")
+            return await execute_workload(workloads, payload, step, context)
 
         async with asyncio.timeout(
             max(0.001, (assignment.deadline_at - datetime.now(UTC)).total_seconds())
@@ -159,6 +174,7 @@ async def execute_agent(
                 read_artifact,
                 transition,
                 coding=coding,
+                workload=workload,
             )
             await report("complete", result=result)
 
@@ -194,4 +210,5 @@ async def execute_agent(
         for task in (work, watch):
             with suppress(asyncio.CancelledError, Exception):
                 await task
-        await provider.close()
+        if provider is not None:
+            await provider.close()
