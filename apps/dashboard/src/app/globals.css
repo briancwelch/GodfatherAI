@@ -722,15 +722,15 @@ footer {
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #0d1c2b;
+  --background: #141414;
   --foreground: #f4f8fc;
-  --card: #14283d;
-  --muted: #213c53;
+  --card: #202020;
+  --muted: #2b2b2b;
   --muted-foreground: #b6c8d9;
-  --border: #37536b;
+  --border: #444444;
   --primary: #58d5de;
   --primary-foreground: #14283d;
-  --sidebar: #14283d;
+  --sidebar: #1b1b1b;
   --focus: #58d5de;
 }
 body {
@@ -1446,4 +1446,40 @@ legend {
 }
 .coding-outcome {
   min-width: 0;
+}
+
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin: 12px 0;
+}
+.section-tabs button {
+  padding: 10px 16px;
+  color: var(--foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+}
+.section-tabs button[aria-selected="true"] {
+  background: var(--card);
+  border-bottom-color: var(--primary);
+}
+[hidden] {
+  display: none !important;
+}
+.navigation-panel nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.navigation-panel .command-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+:root[data-theme="dark"] .application-bar {
+  background: #202020;
 }

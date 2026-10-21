@@ -27,7 +27,7 @@ def target() -> str:
 
 def build(release: str) -> Path:
     native = target()
-    destination = ROOT / "dist" / f"godfather-worker-{release}-{native}"
+    destination = ROOT / "dist" / f"consigliere-{release}-{native}"
     archive = Path(str(destination) + ".zip")
     if destination.exists() or archive.exists():
         raise RuntimeError("Worker output already exists; use a new release version")
@@ -101,6 +101,8 @@ def build(release: str) -> Path:
         *(["--windowed"] if os.name == "nt" else []),
         "--collect-submodules",
         "pystray",
+        "--collect-data",
+        "godfather_worker",
         "--hidden-import",
         {
             "Windows": "keyring.backends.Windows",
@@ -108,7 +110,12 @@ def build(release: str) -> Path:
             "Darwin": "keyring.backends.macOS",
         }[platform.system()],
         "--name",
-        "godfather-worker",
+        "consigliere",
+        *(
+            ["--icon", str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.ico")]
+            if os.name == "nt"
+            else []
+        ),
         "--clean",
         "--noconfirm",
         "--exclude-module",
@@ -127,8 +134,8 @@ def build(release: str) -> Path:
         str(workspace),
         str(entry),
     )
-    shutil.copytree(workspace / "frozen/godfather-worker", destination)
-    executable = destination / ("godfather-worker.exe" if os.name == "nt" else "godfather-worker")
+    shutil.copytree(workspace / "frozen/consigliere", destination)
+    executable = destination / ("consigliere.exe" if os.name == "nt" else "consigliere")
     # Only help: no enrollment/network/model/host grants or service installation.
     execute(str(executable), "--help")
     shutil.copyfile(ROOT / "docs/operations/worker-distribution.md", destination / "WORKERS.md")

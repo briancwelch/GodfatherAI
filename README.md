@@ -8,6 +8,14 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
+**Consigliere** is the new name of The Godfather AI desktop worker. The current
+UI update adds 25-item AJAX pages, tabbed administration and job diagnostics,
+neutral dark surfaces and replacement installers. See the
+[Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
+Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
+installed and remains optional; existing private routing is preferred where
+configured. Release verification is recorded separately after activation.
+
 Deployed **0.3.2-rc.1** adds accomplishment-first coding results and
 **Run agent → Preview changes → Apply to my project**. See the
 [result/application guide](docs/operations/results-and-apply.md). Application

@@ -28,7 +28,7 @@ export function ConnectComputer() {
             (item) =>
               typeof item.signing === "string" &&
               /^[a-f0-9]{64}$/.test(item.sha256) &&
-              /^godfather-worker-[a-z0-9.-]+-(?:windows-x64-setup\.exe|macos-(?:arm64|x64)-installer\.dmg)$/.test(
+              /^(?:godfather-worker|consigliere)-[a-z0-9.-]+-(?:windows-x64-setup\.exe|macos-(?:arm64|x64)-installer\.dmg)$/.test(
                 item.filename,
               ),
           )
@@ -50,10 +50,11 @@ export function ConnectComputer() {
   }, []);
   return (
     <section className="panel connect-computer">
-      <h2>Connect a computer</h2>
+      <h2>Consigliere downloads</h2>
       <ol>
         <li>
-          Install The Godfather Worker on the computer you want to contribute.
+          Install Consigliere by The Godfather AI on the computer you want to
+          contribute.
         </li>
         <li>Open it, enter this Command Center address and click Connect.</li>
         <li>

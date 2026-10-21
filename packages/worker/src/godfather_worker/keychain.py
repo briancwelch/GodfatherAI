@@ -61,7 +61,7 @@ class Keychain:
         if status == NOT_FOUND:
             return None
         if status != 0:
-            raise OSError("Unlock your login Keychain and allow The Godfather Worker access")
+            raise OSError("Unlock your login Keychain and allow Consigliere access")
         try:
             return c.string_at(pointer, length.value).decode("utf-8")
         finally:

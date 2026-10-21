@@ -33,6 +33,10 @@ This document governs the design and interaction of the browser-based Command Ce
 - Stack: Next.js, React, TypeScript, Tailwind CSS, shadcn/ui, consistent with `AGENTS.md`.
 - A restrained, professional infrastructure-control-panel aesthetic. Neutral surfaces with limited semantic colors for healthy, degraded, offline, running, blocked, and failed states.
 - Support dark and light themes; do not rely on color alone for meaning.
+- Dark workspace/panel surfaces use neutral black and grey, retaining cyan
+  accents. Operational lists default to 25 items with request-based pagination.
+  Job submission and Job information start expanded; diagnostics, node downloads
+  and administration sections use accessible tabs.
 - Establish tokens for typography, spacing, radii, borders, elevations, semantic colors, and responsive breakpoints before expanding page designs.
 - Use a shared component library for page headers, summary metrics, data tables, filters, status indicators, detail drawers, dialogs, toasts, empty states, skeletons, and audit timelines.
 - No decorative graphs without actionable value. Prefer tables for precise operational data.

@@ -19,6 +19,7 @@ import {
   JsonDetails,
   Metric,
   Pager,
+  SectionTabs,
   StatusBadge,
 } from "@/components/operational";
 import {
@@ -27,6 +28,8 @@ import {
   retryEligible,
   short,
   type EventPage,
+  type Page,
+  type CheckpointInfo,
   type JobDetail,
   type JobInfo,
   type NodeDetail,
@@ -99,6 +102,7 @@ export default function CommandCenter({
   initialWorkspace?: string;
   initialModel?: string;
 }) {
+  const [nodeTab, setNodeTab] = useState("Connected nodes");
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -264,56 +268,58 @@ export default function CommandCenter({
                   />
                 ) : (
                   <>
-                    {["nodes", "jobs", "agents"].includes(section) && (
-                      <div className="filters">
-                        <label>
-                          Search {section}
-                          <input
-                            type="search"
-                            placeholder="Name, owner, platform or ID"
-                            value={search}
-                            onChange={(e) => {
-                              setSearch(e.target.value);
-                              setOffset(0);
-                            }}
-                          />
-                        </label>
-                        {section !== "agents" && (
+                    {["nodes", "jobs", "agents"].includes(section) &&
+                      (section !== "nodes" ||
+                        nodeTab === "Connected nodes") && (
+                        <div className="filters">
                           <label>
-                            Status
-                            <select
-                              value={status}
+                            Search {section}
+                            <input
+                              type="search"
+                              placeholder="Name, owner, platform or ID"
+                              value={search}
                               onChange={(e) => {
-                                setStatus(e.target.value);
+                                setSearch(e.target.value);
                                 setOffset(0);
                               }}
-                            >
-                              <option value="">All statuses</option>
-                              {(section === "nodes"
-                                ? [
-                                    "online",
-                                    "suspect",
-                                    "offline",
-                                    "draining",
-                                    "disabled",
-                                  ]
-                                : [
-                                    "PENDING",
-                                    "ASSIGNED",
-                                    "RUNNING",
-                                    "RETRY_WAIT",
-                                    "COMPLETED",
-                                    "FAILED",
-                                    "CANCELLED",
-                                  ]
-                              ).map((s) => (
-                                <option key={s}>{s}</option>
-                              ))}
-                            </select>
+                            />
                           </label>
-                        )}
-                      </div>
-                    )}
+                          {section !== "agents" && (
+                            <label>
+                              Status
+                              <select
+                                value={status}
+                                onChange={(e) => {
+                                  setStatus(e.target.value);
+                                  setOffset(0);
+                                }}
+                              >
+                                <option value="">All statuses</option>
+                                {(section === "nodes"
+                                  ? [
+                                      "online",
+                                      "suspect",
+                                      "offline",
+                                      "draining",
+                                      "disabled",
+                                    ]
+                                  : [
+                                      "PENDING",
+                                      "ASSIGNED",
+                                      "RUNNING",
+                                      "RETRY_WAIT",
+                                      "COMPLETED",
+                                      "FAILED",
+                                      "CANCELLED",
+                                    ]
+                                ).map((s) => (
+                                  <option key={s}>{s}</option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                        </div>
+                      )}
                     {section === "overview" && <Overview data={data} />}
                     {section === "jobs" && (
                       <>
@@ -323,8 +329,19 @@ export default function CommandCenter({
                     )}
                     {section === "nodes" && (
                       <>
-                        <ConnectComputer />
-                        <NodeTable data={data} />
+                        <SectionTabs
+                          label="Nodes"
+                          tabs={["Connected nodes", "Downloads"]}
+                          value={nodeTab}
+                          onChange={setNodeTab}
+                        />
+                        <section role="tabpanel" aria-label={nodeTab}>
+                          {nodeTab === "Downloads" ? (
+                            <ConnectComputer />
+                          ) : (
+                            <NodeTable data={data} />
+                          )}
+                        </section>
                       </>
                     )}
                     {section === "agents" && (
@@ -344,13 +361,14 @@ export default function CommandCenter({
                     )}
                     {section === "activity" && (
                       <Activity
+                        key={data.workspace_id}
                         data={data}
                         workspace={data.workspace_id}
                         revision={revision}
                       />
                     )}
                     {(section === "jobs" ||
-                      section === "nodes" ||
+                      (section === "nodes" && nodeTab === "Connected nodes") ||
                       section === "agents") && (
                       <Pager
                         offset={offset}
@@ -631,7 +649,7 @@ function SubmitJob({ data }: { data: Snapshot }) {
     }
   }
   return (
-    <details className="panel submission">
+    <details className="panel submission" open>
       <summary>Submit a job</summary>
       <form onSubmit={submit}>
         <p>Execute a pinned workflow on an authorized worker.</p>
@@ -755,6 +773,15 @@ function JobInspection({
   refresh: () => void;
 }) {
   const j = detail.job;
+  const [tab, setTab] = useState("Logs");
+  const [checkpointOffset, setCheckpointOffset] = useState(0);
+  const checkpoints = usePoll<Page<CheckpointInfo>>(
+    tab === "Checkpoints"
+      ? `command-center/jobs/${j.id}/checkpoints?offset=${checkpointOffset}`
+      : null,
+    0,
+  );
+
   const [artifact, setArtifact] = useState<unknown>(undefined);
   const [error, setError] = useState("");
   return (
@@ -771,7 +798,7 @@ function JobInspection({
         )}
       </div>
       <JobResult detail={detail} />
-      <details>
+      <details open>
         <summary>Job information</summary>
         <dl>
           <dt>Job ID</dt>
@@ -844,158 +871,200 @@ function JobInspection({
           label="Execution requirements and retry policy"
           value={{ requirements: j.requirements, retry: j.retry }}
         />
-        <h3>Execution attempts</h3>
-        <DataTable
-          caption="Original and recovery attempts"
-          rows={detail.attempts}
-          rowKey={(a) => a.id}
-          columns={[
-            {
-              label: "Attempt",
-              cell: (a) => (
-                <>
-                  {a.number} · {short(a.id)}
-                  <small>Fence {a.fencing_token}</small>
-                </>
-              ),
-            },
-            {
-              label: "Worker",
-              cell: (a) => (
-                <a href={`/nodes/${a.node_id}`}>{short(a.node_id)}</a>
-              ),
-            },
-            {
-              label: "Status",
-              cell: (a) => (
-                <>
-                  <StatusBadge value={a.status} />
-                  <small>{String(a.error.code || "")}</small>
-                </>
-              ),
-            },
-            {
-              label: "Recovery origin",
-              cell: (a) =>
-                a.recovered_from_attempt_id ? (
-                  <>
-                    <span>From {short(a.recovered_from_attempt_id)}</span>
-                    <small>
-                      {a.resumed_checkpoint_version
-                        ? `Resumed checkpoint v${a.resumed_checkpoint_version}`
-                        : "Restarted from beginning"}
-                    </small>
-                  </>
-                ) : (
-                  "Original execution"
-                ),
-            },
-            {
-              label: "Timing",
-              cell: (a) => (
-                <>
-                  {localTime(a.created_at)}
-                  <small>Finished: {localTime(a.finished_at)}</small>
-                </>
-              ),
-            },
-          ]}
+        <SectionTabs
+          label="Technical details"
+          tabs={["Logs", "Attempts", "Checkpoints"]}
+          value={tab}
+          onChange={setTab}
         />
-        {!!detail.steps.length && (
-          <>
-            <h3>Workflow steps</h3>
-            <DataTable
-              caption="Durable workflow progress"
-              rows={detail.steps}
-              rowKey={(s) => s.id}
-              columns={[
-                { label: "Step", cell: (s) => s.step_id },
-                {
-                  label: "Status",
-                  cell: (s) => <StatusBadge value={s.status} />,
-                },
-                { label: "Attempt", cell: (s) => short(s.attempt_id) },
-                {
-                  label: "Artifact",
-                  cell: (s) => s.output_artifact_id || "Uncommitted",
-                },
-                {
-                  label: "Usage",
-                  cell: (s) => (
-                    <JsonDetails label="Inspect metadata" value={s.metadata} />
-                  ),
-                },
-              ]}
-            />
-          </>
-        )}
-        {!!detail.checkpoints.length && (
-          <>
-            <h3>Durable checkpoints</h3>
-            <DataTable
-              caption="Integrity-checked checkpoint references"
-              rows={detail.checkpoints}
-              rowKey={(c) => c.id}
-              columns={[
-                { label: "Version", cell: (c) => `v${c.version}` },
-                { label: "Original attempt", cell: (c) => short(c.attempt_id) },
-                {
-                  label: "Artifact",
-                  cell: (c) => (
+        <section
+          role="tabpanel"
+          aria-label="Attempts"
+          hidden={tab !== "Attempts"}
+        >
+          <h3>Execution attempts</h3>
+          <DataTable
+            caption="Original and recovery attempts"
+            rows={detail.attempts}
+            rowKey={(a) => a.id}
+            columns={[
+              {
+                label: "Attempt",
+                cell: (a) => (
+                  <>
+                    {a.number} · {short(a.id)}
+                    <small>Fence {a.fencing_token}</small>
+                  </>
+                ),
+              },
+              {
+                label: "Worker",
+                cell: (a) => (
+                  <a href={`/nodes/${a.node_id}`}>{short(a.node_id)}</a>
+                ),
+              },
+              {
+                label: "Status",
+                cell: (a) => (
+                  <>
+                    <StatusBadge value={a.status} />
+                    <small>{String(a.error.code || "")}</small>
+                  </>
+                ),
+              },
+              {
+                label: "Recovery origin",
+                cell: (a) =>
+                  a.recovered_from_attempt_id ? (
                     <>
-                      <code>{c.artifact.id}</code>
-                      <small title={c.artifact.checksum}>
-                        SHA-256 {short(c.artifact.checksum)} ·{" "}
-                        {c.artifact.size_bytes} bytes
+                      <span>From {short(a.recovered_from_attempt_id)}</span>
+                      <small>
+                        {a.resumed_checkpoint_version
+                          ? `Resumed checkpoint v${a.resumed_checkpoint_version}`
+                          : "Restarted from beginning"}
                       </small>
                     </>
+                  ) : (
+                    "Original execution"
                   ),
-                },
-                {
-                  label: "Inspect",
-                  cell: (c) => (
-                    <button
-                      className="action secondary"
-                      onClick={async () => {
-                        try {
-                          setError("");
-                          setArtifact(
-                            await api(
-                              `workflow/jobs/${j.id}/artifacts/${c.artifact.id}`,
-                            ),
-                          );
-                        } catch {
-                          setError(
-                            "Artifact unavailable, corrupt or permission denied.",
-                          );
-                        }
-                      }}
-                    >
-                      View checkpoint v{c.version}
-                    </button>
-                  ),
-                },
-              ]}
+              },
+              {
+                label: "Timing",
+                cell: (a) => (
+                  <>
+                    {localTime(a.created_at)}
+                    <small>Finished: {localTime(a.finished_at)}</small>
+                  </>
+                ),
+              },
+            ]}
+          />
+          {!!detail.steps.length && (
+            <>
+              <h3>Workflow steps</h3>
+              <DataTable
+                caption="Durable workflow progress"
+                rows={detail.steps}
+                rowKey={(s) => s.id}
+                columns={[
+                  { label: "Step", cell: (s) => s.step_id },
+                  {
+                    label: "Status",
+                    cell: (s) => <StatusBadge value={s.status} />,
+                  },
+                  { label: "Attempt", cell: (s) => short(s.attempt_id) },
+                  {
+                    label: "Artifact",
+                    cell: (s) => s.output_artifact_id || "Uncommitted",
+                  },
+                  {
+                    label: "Usage",
+                    cell: (s) => (
+                      <JsonDetails
+                        label="Inspect metadata"
+                        value={s.metadata}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </section>
+        <section
+          role="tabpanel"
+          aria-label="Checkpoints"
+          hidden={tab !== "Checkpoints"}
+        >
+          {checkpoints.error && (
+            <p role="alert">
+              Checkpoints unavailable or permission denied. Refresh to retry.
+            </p>
+          )}
+          {!checkpoints.data && !checkpoints.error && (
+            <p role="status">Loading checkpoints…</p>
+          )}
+          {checkpoints.data && (
+            <>
+              <h3>Durable checkpoints</h3>
+              <DataTable
+                caption="Integrity-checked checkpoint references"
+                rows={checkpoints.data.items}
+                rowKey={(c) => c.id}
+                columns={[
+                  { label: "Version", cell: (c) => `v${c.version}` },
+                  {
+                    label: "Original attempt",
+                    cell: (c) => short(c.attempt_id),
+                  },
+                  {
+                    label: "Artifact",
+                    cell: (c) => (
+                      <>
+                        <code>{c.artifact.id}</code>
+                        <small title={c.artifact.checksum}>
+                          SHA-256 {short(c.artifact.checksum)} ·{" "}
+                          {c.artifact.size_bytes} bytes
+                        </small>
+                      </>
+                    ),
+                  },
+                  {
+                    label: "Inspect",
+                    cell: (c) => (
+                      <button
+                        className="action secondary"
+                        onClick={async () => {
+                          try {
+                            setError("");
+                            setArtifact(
+                              await api(
+                                `workflow/jobs/${j.id}/artifacts/${c.artifact.id}`,
+                              ),
+                            );
+                          } catch {
+                            setError(
+                              "Artifact unavailable, corrupt or permission denied.",
+                            );
+                          }
+                        }}
+                      >
+                        View checkpoint v{c.version}
+                      </button>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+          {checkpoints.data && (
+            <Pager
+              offset={checkpointOffset}
+              limit={checkpoints.data.limit}
+              total={checkpoints.data.total}
+              onChange={setCheckpointOffset}
             />
-          </>
-        )}
-        {error && <p role="alert">{error}</p>}
-        {artifact !== undefined && (
-          <JsonDetails label="Checkpoint artifact content" value={artifact} />
-        )}
-        <h3>Result and errors</h3>
-        <JsonDetails
-          label="Authoritative result"
-          value={
-            detail.output || j.result || detail.attempts.at(-1)?.error || null
-          }
-        />
-        <h3>Failover and lifecycle history</h3>
-        <p className="muted">
-          Latest {detail.events.items.length} of {detail.events.total} events,
-          newest first. Activity provides paged filters.
-        </p>
-        <EventTimeline events={detail.events.items} />
+          )}
+          {error && <p role="alert">{error}</p>}
+          {artifact !== undefined && (
+            <JsonDetails label="Checkpoint artifact content" value={artifact} />
+          )}
+        </section>
+        <section role="tabpanel" aria-label="Logs" hidden={tab !== "Logs"}>
+          <h3>Result and errors</h3>
+          <JsonDetails
+            label="Authoritative result"
+            value={
+              detail.output || j.result || detail.attempts.at(-1)?.error || null
+            }
+          />
+          <h3>Failover and lifecycle history</h3>
+          <p className="muted">
+            Latest {detail.events.items.length} of {detail.events.total} events,
+            newest first. Activity provides paged filters.
+          </p>
+          <EventTimeline events={detail.events.items} />
+        </section>
       </details>
     </>
   );
@@ -1100,7 +1169,7 @@ function NodeInspection({
       />
       <h3>Assigned and historical jobs</h3>
       <p className="muted">
-        Latest 100 jobs in your authorized workspaces. Other private jobs are
+        Latest 25 jobs in your authorized workspaces. Other private jobs are
         excluded.
       </p>
       <JobTable rows={detail.jobs} />

@@ -57,6 +57,13 @@ def test_summary_counts_pagination_and_real_telemetry(h: Harness) -> None:
     assert data["environment"] == "test"
     assert data["job_counts"] == {"PENDING": 103}
     assert data["totals"]["jobs"] == 103 and len(data["jobs"]) == 3
+    assert data["limit"] == 25
+    first = h.client.get("/api/v1/command-center?section=jobs", headers=headers(h.admin)).json()
+    second = h.client.get(
+        "/api/v1/command-center?section=jobs&offset=25", headers=headers(h.admin)
+    ).json()
+    assert len(first["jobs"]) == len(second["jobs"]) == 25
+    assert not {j["id"] for j in first["jobs"]} & {j["id"] for j in second["jobs"]}
     assert data["node_counts"] == {"online": 2}
     assert data["nodes"][0]["resources"]["source"] == "simulated"
     assert data["agent_counts"]["enabled_versions"] == 1

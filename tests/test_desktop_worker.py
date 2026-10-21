@@ -176,7 +176,7 @@ def test_native_packaging_commands_and_versioned_checksum(
     monkeypatch.setattr("scripts.build_macos_worker.build_worker.build", lambda _: None)
     link = Mock()
     monkeypatch.setattr(Path, "symlink_to", link)
-    cli_output = tmp_path / "dist/godfather-worker-0.1.0-rc.6-macos-arm64"
+    cli_output = tmp_path / "dist/consigliere-0.1.0-rc.6-macos-arm64"
     cli_output.mkdir(parents=True)
     (cli_output / "manifest.json").write_text(json.dumps({"source_revision": "a" * 40}))
     workspace = tmp_path / ".cache/worker-build/0.1.0-rc.6-macos-arm64"
@@ -190,9 +190,9 @@ def test_native_packaging_commands_and_versioned_checksum(
     def run(arguments: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[str]:
         commands.append(arguments)
         if "PyInstaller" in arguments:
-            app = workspace / "app/The Godfather Worker.app/Contents"
+            app = workspace / "app/Consigliere.app/Contents"
             (app / "MacOS").mkdir(parents=True)
-            (app / "MacOS/The Godfather Worker").write_bytes(b"mock-native-executable")
+            (app / "MacOS/Consigliere").write_bytes(b"mock-native-executable")
             (app / "Info.plist").write_bytes(
                 plistlib.dumps({"CFBundleIdentifier": "ai.the-godfather.worker"})
             )
@@ -204,10 +204,10 @@ def test_native_packaging_commands_and_versioned_checksum(
 
     monkeypatch.setattr("scripts.build_macos_worker.subprocess.run", run)
     dmg = build_macos_worker.build("0.1.0-rc.6")
-    assert dmg.name == "godfather-worker-0.1.0-rc.6-macos-arm64-installer.dmg"
+    assert dmg.name == "consigliere-0.1.0-rc.6-macos-arm64-installer.dmg"
     assert Path(str(dmg) + ".sha256").read_text().endswith(dmg.name + "\n")
     assert "Ad-hoc" in Path(str(dmg) + ".manifest.json").read_text()
-    link.assert_called_once_with("/Applications", target_is_directory=True)
+    assert (dmg.with_suffix("") / "Install Consigliere.command").is_file()
     assert any("--self-test" in command for command in commands)
     assert not any("notarytool" in command for command in commands)
     with pytest.raises(RuntimeError, match="already exists"):

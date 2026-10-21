@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import type { AuditEvent } from "../lib/contracts";
 import { localTime, short } from "../lib/contracts";
 
@@ -232,6 +232,54 @@ export function Pager({
       >
         Next page
       </button>
+    </div>
+  );
+}
+
+export function SectionTabs({
+  label,
+  tabs,
+  value,
+  onChange,
+}: {
+  label: string;
+  tabs: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="section-tabs" role="tablist" aria-label={label}>
+      {tabs.map((tab, index) => (
+        <button
+          key={tab}
+          type="button"
+          role="tab"
+          id={`${id}-${index}`}
+          aria-selected={value === tab}
+          tabIndex={value === tab ? 0 : -1}
+          onClick={() => onChange(tab)}
+          onKeyDown={(event) => {
+            const target =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? tabs.length - 1
+                  : event.key === "ArrowRight"
+                    ? (index + 1) % tabs.length
+                    : event.key === "ArrowLeft"
+                      ? (index + tabs.length - 1) % tabs.length
+                      : null;
+            if (target !== null) {
+              event.preventDefault();
+              onChange(tabs[target]);
+              document.getElementById(`${id}-${target}`)?.focus();
+            }
+          }}
+        >
+          {tab}
+        </button>
+      ))}
     </div>
   );
 }

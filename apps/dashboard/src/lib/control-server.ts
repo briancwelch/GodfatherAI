@@ -84,6 +84,7 @@ export function allowedPath(path: string, method: string): boolean {
     `administration/workspaces/${uuid}/members`,
     "command-center",
     "command-center/events",
+    `command-center/jobs/${uuid}/checkpoints`,
     `command-center/(jobs|nodes|agents)/${uuid}`,
     `agents/${uuid}/versions`,
     `workflow/jobs/${uuid}/artifacts/${uuid}`,

@@ -14,7 +14,7 @@ from scripts import build_worker
 from scripts.dev import ROOT
 from scripts.release import sha256, version
 
-APP_NAME = "The Godfather Worker"
+APP_NAME = "Consigliere"
 
 
 def native_architecture() -> str:
@@ -30,7 +30,7 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
     if notary_profile and not identity:
         raise ValueError("Notarization requires a Developer ID signing identity")
     suffix = "macos-arm64" if architecture == "arm64" else "macos-x64"
-    output = ROOT / "dist" / f"godfather-worker-{release}-{suffix}-installer"
+    output = ROOT / "dist" / f"consigliere-{release}-{suffix}-installer"
     dmg = Path(str(output) + ".dmg")
     if output.exists() or dmg.exists():
         raise RuntimeError("Installer output already exists; use a new release version")
@@ -82,6 +82,10 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         "--noconfirm",
         "--name",
         APP_NAME,
+        "--icon",
+        str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.icns"),
+        "--collect-data",
+        "godfather_worker",
         "--target-arch",
         architecture,
         "--osx-bundle-identifier",
@@ -112,12 +116,19 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
     output.mkdir(parents=True)
     app = output / source.name
     shutil.copytree(source, app, symlinks=True)
-    (output / "Applications").symlink_to("/Applications", target_is_directory=True)
+    installer = output / "Install Consigliere.command"
+    installer.write_text(
+        '#!/bin/bash\nset -euo pipefail\ncd "$(dirname "$0")"\n'
+        'exec "./Consigliere.app/Contents/MacOS/Consigliere" --install\n',
+        encoding="utf-8",
+    )
+    installer.chmod(0o755)
     info = app / "Contents/Info.plist"
     metadata = plistlib.loads(info.read_bytes())
     metadata.update(
         CFBundleShortVersionString=release.split("-")[0],
         CFBundleVersion=release.split("-")[0],
+        CFBundleDisplayName="Consigliere — The Godfather AI",
         NSHighResolutionCapable=True,
         LSMinimumSystemVersion="13.0",
     )
@@ -144,7 +155,7 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
     manifest = {
         "version": release,
         "source_revision": json.loads(
-            (ROOT / "dist" / f"godfather-worker-{release}-{suffix}" / "manifest.json").read_text()
+            (ROOT / "dist" / f"consigliere-{release}-{suffix}" / "manifest.json").read_text()
         )["source_revision"],
         "architecture": architecture,
         "minimum_macos": "13.0",

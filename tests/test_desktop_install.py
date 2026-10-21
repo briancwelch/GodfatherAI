@@ -24,6 +24,7 @@ def test_per_user_install_preserves_identity_and_repeats_safely(
     identity = local / "private-existing-identity"
     identity.write_text("preserve")
     command = Mock()
+    monkeypatch.setattr("godfather_worker.windows_setup.update_startup", Mock())
     monkeypatch.setattr("godfather_worker.windows_setup.subprocess.run", command)
     executable = install(source, local, tmp_path / "programs")
     assert executable.read_bytes() == b"synthetic executable"
@@ -53,10 +54,11 @@ def test_interrupted_install_can_be_retried_without_partial_version(
     monkeypatch.setattr("godfather_worker.windows_setup.shutil.copytree", partial_copy)
     with pytest.raises(OSError, match="disk full"):
         install(source, tmp_path / "local", tmp_path / "programs")
-    version = tmp_path / "local/The Godfather/Desktop Worker/versions/1.2.3"
+    version = tmp_path / "local/The Godfather/Desktop Worker/app"
     assert not version.exists()
     monkeypatch.setattr("godfather_worker.windows_setup.shutil.copytree", actual_copy)
     monkeypatch.setattr("godfather_worker.windows_setup.subprocess.run", Mock())
+    monkeypatch.setattr("godfather_worker.windows_setup.update_startup", Mock())
     assert install(source, tmp_path / "local", tmp_path / "programs").is_file()
 
 

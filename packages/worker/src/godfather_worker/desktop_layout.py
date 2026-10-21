@@ -10,7 +10,7 @@ def content_frame(window: tk.Tk | tk.Toplevel, *, maximum_width: int = 900) -> t
     max_height = min(900, window.winfo_screenheight() - 80)
     window.minsize(min(540, max_width), min(580, max_height))
     window.maxsize(max_width, max_height)
-    window.geometry(f"{min(640, max_width)}x{min(760, max_height)}")
+    window.geometry(f"{min(900, max_width)}x{min(760, max_height)}")
     canvas = tk.Canvas(window, highlightthickness=0, background="#F4F8FC")
     scroll = ttk.Scrollbar(window, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=scroll.set)

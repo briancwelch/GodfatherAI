@@ -124,7 +124,8 @@ def assemble(
             name = item["filename"]
             if (
                 not re.fullmatch(
-                    r"godfather-worker-[a-z0-9.-]+-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
+                    r"(?:godfather-worker|consigliere)-[a-z0-9.-]+-"
+                    r"(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
                     name,
                 )
                 or sha256(worker_downloads / name) != item["sha256"]

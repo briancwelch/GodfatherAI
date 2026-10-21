@@ -34,6 +34,7 @@ from godfather_worker.native_desktop import (
     set_login_startup,
 )
 from godfather_worker.pairing import await_approval
+from godfather_worker.tailscale import detect as detect_tailscale
 
 
 class Application:
@@ -63,15 +64,84 @@ class Application:
         self.shared = tk.BooleanVar(value=False)
         self.owners, self.workspaces = tk.StringVar(), tk.StringVar()
         self.autostart = tk.BooleanVar(value=False)
-        root.title("The Godfather Worker")
+        root.title("Consigliere — The Godfather AI")
         root.configure(background="#F4F8FC")
+        self.app_icon = tk.PhotoImage(
+            file=str(Path(__file__).parent / "assets/consigliere.png")
+        ).subsample(16)
+        root.iconphoto(True, self.app_icon)
+        self.network = tk.StringVar(value="Checking optional Tailscale connection…")
+        self.network_checking = False
+        self.network_timer: str | None = None
         style = ttk.Style(root)
+        style.theme_use("clam")
         style.configure("TFrame", background="#F4F8FC")
+        style.configure("TLabelframe", background="#F4F8FC", bordercolor="#D4DFE9")
+        style.configure("TLabelframe.Label", background="#F4F8FC", foreground="#52677D")
+        style.configure("TButton", padding=(14, 10), foreground="#1468CC", background="#F4F8FC")
+        style.map("TButton", background=[("active", "#E1EFF8")])
+        style.configure("TCheckbutton", background="#F4F8FC", foreground="#14283D", padding=6)
+        style.configure("TNotebook", background="#F4F8FC", borderwidth=0)
+        style.configure("TNotebook.Tab", padding=(16, 10), background="#E8F0F7")
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", "#FFFFFF")],
+            foreground=[("selected", "#087F8C")],
+        )
+        header = tk.Frame(root, background="#14283D", padx=16, pady=14)
+        header.pack(fill="x")
+        tk.Label(
+            header,
+            text="GF",
+            background="#14283D",
+            foreground="#58D5DE",
+            font=("Segoe UI", 16, "bold"),
+            relief="solid",
+            borderwidth=1,
+            padx=8,
+            pady=4,
+        ).pack(side="left")
+        tk.Label(
+            header,
+            text="Consigliere",
+            background="#14283D",
+            foreground="#58D5DE",
+            font=("Segoe UI", 21, "bold"),
+            padx=14,
+        ).pack(side="left")
+        tk.Label(
+            header,
+            text="THE GODFATHER AI",
+            background="#14283D",
+            foreground="#F4F8FC",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(side="left")
+        ribbon = ttk.Frame(root, padding=(12, 8))
+        ribbon.pack(fill="x")
+        connection_commands = ttk.LabelFrame(ribbon, text="CONNECTION", padding=6)
+        connection_commands.pack(side="left", fill="y")
+        execution_commands = ttk.LabelFrame(ribbon, text="CONTRIBUTION", padding=6)
+        execution_commands.pack(side="left", fill="y", padx=8)
+        settings_commands = ttk.LabelFrame(ribbon, text="COMPUTER", padding=6)
+        settings_commands.pack(side="left", fill="y")
+        ttk.Button(settings_commands, text="Projects", command=self.projects).pack(side="left")
+        ttk.Button(settings_commands, text="Settings", command=self.advanced).pack(
+            side="left", padx=4
+        )
+        footer = ttk.Frame(root, padding=(16, 8))
+        footer.pack(side="bottom", fill="x")
+        ttk.Label(
+            footer, text="The Godfather AI  /  Consigliere  /  Owner-controlled contribution"
+        ).pack(anchor="w")
         style.configure("TLabel", background="#F4F8FC", foreground="#14283D")
         frame = content_frame(root)
-        ttk.Label(frame, text="The Godfather Worker", font=("Segoe UI", 20, "bold")).pack(
-            anchor="w"
-        )
+        notebook = ttk.Notebook(frame)
+        notebook.pack(fill="both", expand=True)
+        connection = ttk.Frame(notebook, padding=16)
+        models = ttk.Frame(notebook, padding=16)
+        notebook.add(connection, text="Connection")
+        notebook.add(models, text="Models & API connections")
+        frame = connection
         ttk.Label(
             frame, textvariable=self.status, wraplength=490, font=("Segoe UI", 11, "bold")
         ).pack(anchor="w", pady=(14, 6))
@@ -80,30 +150,29 @@ class Application:
         self.address_entry = ttk.Entry(frame, textvariable=self.address, width=55)
         self.address_entry.pack(fill="x")
         self.connect_button = ttk.Button(
-            frame, text="Connect", command=self.connect, state="disabled"
+            connection_commands, text="Connect", command=self.connect, state="disabled"
         )
-        self.connect_button.pack(anchor="w", pady=10)
+        self.connect_button.pack(side="left")
         ttk.Label(frame, textvariable=self.code, wraplength=490).pack(anchor="w")
         ttk.Checkbutton(
-            frame,
+            models,
             text="Allow my existing local AI models",
             variable=self.inference,
             command=self.apply_models,
         ).pack(anchor="w", pady=(12, 4))
-        ttk.Label(frame, textvariable=self.inventory, wraplength=490).pack(anchor="w")
+        ttk.Label(models, textvariable=self.inventory, wraplength=490).pack(anchor="w")
         ttk.Checkbutton(
-            frame,
+            models,
             text="Use API connections from my account",
             variable=self.account_connections,
             command=self.apply_models,
         ).pack(anchor="w", pady=6)
         ttk.Label(
-            frame,
+            models,
             text="Manage keys in Account settings. Add project access below.",
             wraplength=490,
         ).pack(anchor="w", pady=4)
-        actions = ttk.Frame(frame)
-        actions.pack(fill="x", pady=14)
+        actions = execution_commands
         self.resume_button = ttk.Button(
             actions, text="Resume", command=self.start, state="disabled"
         )
@@ -113,8 +182,19 @@ class Application:
         ttk.Button(frame, text="Open Command Center", command=self.open_center).pack(
             fill="x", pady=(0, 10)
         )
-        ttk.Button(frame, text="Advanced settings...", command=self.advanced).pack(anchor="w")
-        ttk.Button(frame, text="Coding projects...", command=self.projects).pack(anchor="w", pady=6)
+        ttk.Label(frame, text="NETWORK", font=("Segoe UI", 11, "bold")).pack(
+            anchor="w", pady=(16, 4)
+        )
+        ttk.Label(frame, textvariable=self.network, wraplength=490).pack(anchor="w")
+        ttk.Label(
+            frame,
+            text="Private routes use your existing system routing and DNS. "
+            "No Tailscale login or settings changes are made.",
+            wraplength=490,
+        ).pack(anchor="w", pady=6)
+        ttk.Button(frame, text="Refresh network", command=self.refresh_network).pack(
+            anchor="w", pady=6
+        )
         ttk.Label(
             frame,
             text="Closing this window keeps the worker in the tray. Use Quit to exit.",
@@ -123,7 +203,18 @@ class Application:
         root.protocol("WM_DELETE_WINDOW", self.hide)
         self.setup_tray()
         self.background(self.load)
+        self.refresh_network()
         self.timer = root.after(100, self.pump)
+
+    def refresh_network(self) -> None:
+        if self.network_timer:
+            self.root.after_cancel(self.network_timer)
+            self.network_timer = None
+        if not self.closing:
+            self.network_timer = self.root.after(30000, self.refresh_network)
+        if not self.network_checking and not self.closing:
+            self.network_checking = True
+            self.background(lambda: self.event("network", message=detect_tailscale().message))
 
     def event(self, name: str, **values: Any) -> None:
         self.events.put((name, values))
@@ -154,9 +245,11 @@ class Application:
             self.tray = pystray.Icon(
                 "godfather-worker",
                 icon,
-                "The Godfather Worker",
+                "Consigliere — The Godfather AI",
                 pystray.Menu(
-                    pystray.MenuItem("Show worker", lambda *_: self.event("show"), default=True),
+                    pystray.MenuItem(
+                        "Show Consigliere", lambda *_: self.event("show"), default=True
+                    ),
                     item("Open Command Center", "open"),
                     item("Resume", "resume"),
                     item("Pause", "pause"),
@@ -375,6 +468,9 @@ class Application:
             self.quit()
 
     def quit(self) -> None:
+        if self.network_timer:
+            self.root.after_cancel(self.network_timer)
+            self.network_timer = None
         if self.closing:
             return
         self.closing = True
@@ -413,7 +509,10 @@ class Application:
         self.timer = None
         while not self.events.empty():
             name, values = self.events.get_nowait()
-            if name == "loaded":
+            if name == "network":
+                self.network_checking = False
+                self.network.set(values["message"])
+            elif name == "loaded":
                 self.models = values["models"]
                 self.inventory.set(
                     "Local models: "
@@ -499,12 +598,16 @@ class Application:
                     "Worker could not continue. Check settings or contact your administrator."
                 )
             if self.tray:
-                self.tray.title = "The Godfather Worker: " + self.status.get()[:80]
+                self.tray.title = "Consigliere — The Godfather AI: " + self.status.get()[:80]
         if not self.destroyed:
             self.timer = self.root.after(100, self.pump)
 
 
 def main() -> int:
+    if "--install" in sys.argv:
+        from godfather_worker.macos_setup import main as install_main
+
+        return install_main()
     logging.disable(logging.CRITICAL)
     root = tk.Tk()
     if "--self-test" in sys.argv:
@@ -527,7 +630,7 @@ def main() -> int:
     if lock is None:
         root.withdraw()
         messagebox.showinfo(
-            "The Godfather Worker", "The worker is already open. Use its tray icon."
+            "Consigliere — The Godfather AI", "The worker is already open. Use its tray icon."
         )
         root.destroy()
         return 0

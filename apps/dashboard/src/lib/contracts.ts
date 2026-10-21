@@ -197,6 +197,12 @@ export interface CheckpointInfo {
   created_at: string;
   artifact: { id: string; checksum: string; size_bytes: number };
 }
+export interface Page<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  limit: number;
+}
 export interface JobDetail {
   context?: {
     agent_name: string | null;

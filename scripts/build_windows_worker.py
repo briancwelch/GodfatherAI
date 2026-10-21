@@ -15,12 +15,12 @@ from scripts.release import sha256, version
 def build(release: str) -> Path:
     if platform.system() != "Windows" or platform.machine().lower() not in ("amd64", "x86_64"):
         raise RuntimeError("Build on a native Windows x64 host")
-    output = ROOT / "dist" / f"godfather-worker-{release}-windows-x64-setup.exe"
+    output = ROOT / "dist" / f"consigliere-{release}-windows-x64-setup.exe"
     if output.exists():
         raise RuntimeError("Installer already exists; use a new version")
     build_worker.build(release)
     workspace = ROOT / ".cache/worker-build" / f"{release}-windows-x64"
-    payload = ROOT / "dist" / f"godfather-worker-{release}-windows-x64"
+    payload = ROOT / "dist" / f"consigliere-{release}-windows-x64"
     entry = workspace / "setup-entry.py"
     entry.write_text("from godfather_worker.windows_setup import main\nraise SystemExit(main())\n")
     subprocess.run(
@@ -34,6 +34,8 @@ def build(release: str) -> Path:
             "--noconfirm",
             "--name",
             output.stem,
+            "--icon",
+            str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.ico"),
             "--distpath",
             str(output.parent),
             "--workpath",

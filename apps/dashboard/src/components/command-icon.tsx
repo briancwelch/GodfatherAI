@@ -2,27 +2,29 @@
 import icons from "../lib/command-icons.json";
 
 export function CommandIcon({ label }: { label: string }) {
-  const name = /refresh/i.test(label)
-    ? "refresh"
-    : /create|submit/i.test(label)
-      ? "create"
-      : /edit|version/i.test(label)
-        ? "edit"
-        : /run/i.test(label)
-          ? "run"
-          : /navigation|workspace/i.test(label)
-            ? "navigation"
-            : /inspect|capabilit/i.test(label)
-              ? "inspect"
-              : /model/i.test(label)
-                ? "models"
-                : /node/i.test(label)
-                  ? "nodes"
-                  : /job/i.test(label)
-                    ? "jobs"
-                    : /disable|enable/i.test(label)
-                      ? "disable"
-                      : "settings";
+  const mapping: [RegExp, keyof typeof icons][] = [
+    [/refresh/i, "refresh"],
+    [/invit/i, "invitations"],
+    [/users|account/i, "users"],
+    [/permission/i, "permissions"],
+    [/workspace/i, "workspaces"],
+    [/navigation|navigator/i, "navigation"],
+    [/overview/i, "overview"],
+    [/activity|audit/i, "activity"],
+    [/provider|integration/i, "providers"],
+    [/download/i, "downloads"],
+    [/create|submit/i, "create"],
+    [/edit|version/i, "edit"],
+    [/run/i, "run"],
+    [/inspect|capabilit/i, "inspect"],
+    [/model/i, "models"],
+    [/node/i, "nodes"],
+    [/job/i, "jobs"],
+    [/agent/i, "agents"],
+    [/disable|enable/i, "disable"],
+  ];
+  const name =
+    mapping.find(([pattern]) => pattern.test(label))?.[1] || "settings";
   const icon = icons[name as keyof typeof icons];
   return (
     <svg

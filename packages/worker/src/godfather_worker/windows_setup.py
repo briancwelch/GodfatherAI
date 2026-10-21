@@ -8,6 +8,13 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from godfather_worker.app_installation import (
+    contained_directory,
+    legacy_windows_versions,
+    replace_payload,
+)
+from godfather_worker.native_desktop import acquire_lock
+
 
 def install(payload: Path, local: Path, programs: Path) -> Path:
     manifest = json.loads((payload / "manifest.json").read_text(encoding="utf-8"))
@@ -16,24 +23,61 @@ def install(payload: Path, local: Path, programs: Path) -> Path:
 
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9]+(?:[.-][a-z0-9]+)*)?", version):
         raise ValueError("Invalid installer version")
-    destination = local / "The Godfather" / "Desktop Worker" / "versions" / version
-    executable = destination / "godfather-worker.exe"
-    # Idempotent installation requires byte-identical files. Never overwrite a
-    # running build or recursively remove an existing version.
-    if destination.exists():
-        for source in payload.rglob("*"):
-            if source.is_file():
-                target = destination / source.relative_to(payload)
-                if not target.is_file() or target.read_bytes() != source.read_bytes():
-                    raise OSError("This version is already installed with different files")
-    else:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(prefix=".install-", dir=destination.parent) as temporary:
-            staged = Path(temporary) / "payload"
-            shutil.copytree(payload, staged)
-            staged.rename(destination)
+    base = local / "The Godfather" / "Desktop Worker"
+    contained_directory(base, local)
+    base.mkdir(parents=True, exist_ok=True)
+    lock = acquire_lock(base)
+    if lock is None:
+        raise OSError("Quit Consigliere (or The Godfather Worker) from its tray menu, then retry.")
+    try:
+        legacy = legacy_windows_versions(base)
+        destination = base / "app"
+        if destination.exists():
+            installed = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
+            if installed.get("version") == version:
+                for source in payload.rglob("*"):
+                    if source.is_file():
+                        target = destination / source.relative_to(payload)
+                        if not target.is_file() or target.read_bytes() != source.read_bytes():
+                            raise OSError("This version is already installed with different files")
+        replace_payload(payload, destination)
+        executable = destination / (
+            "consigliere.exe" if (payload / "consigliere.exe").is_file() else "godfather-worker.exe"
+        )
+        create_shortcut(programs, executable)
+        update_startup(base, executable)
+        for path in legacy:
+            shutil.rmtree(path)
+        legacy_shortcut = programs / "The Godfather Worker.lnk"
+        if legacy_shortcut.is_file():
+            legacy_shortcut.unlink()
+        return executable
+    finally:
+        lock.close()
+
+
+def update_startup(base: Path, executable: Path) -> None:
+    import winreg
+
+    with winreg.CreateKey(
+        winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"
+    ) as key:
+        try:
+            value, _ = winreg.QueryValueEx(key, "The Godfather Worker")
+        except FileNotFoundError:
+            return
+        # Preserve the user's existing opt-in; never add autostart during installation.
+        if isinstance(value, str) and value.startswith('"'):
+            old = Path(value.split('"')[1])
+            if old.resolve().is_relative_to(base.resolve()):
+                winreg.SetValueEx(
+                    key, "The Godfather Worker", 0, winreg.REG_SZ, f'"{executable}" --login'
+                )
+
+
+def create_shortcut(programs: Path, executable: Path) -> None:
     programs.mkdir(parents=True, exist_ok=True)
-    shortcut = programs / "The Godfather Worker.lnk"
+    shortcut = programs / "Consigliere.lnk"
     # Values are passed as environment data, never interpolated into PowerShell code.
     subprocess.run(
         [
@@ -56,7 +100,6 @@ def install(payload: Path, local: Path, programs: Path) -> Path:
             "GODFATHER_SETUP_TARGET": str(executable),
         },
     )
-    return executable
 
 
 def main() -> int:
@@ -69,14 +112,16 @@ def main() -> int:
             folder = Path(temporary)
             executable = install(payload, folder / "local", folder / "programs")
             subprocess.run([str(executable), "--self-test"], check=True, timeout=30)
-            assert (folder / "programs/The Godfather Worker.lnk").is_file()
+            assert (folder / "programs/Consigliere.lnk").is_file()
             assert install(payload, folder / "local", folder / "programs") == executable
         return 0
     root = tk.Tk()
-    root.title("Install The Godfather Worker")
+    root.title("Install Consigliere — The Godfather AI")
     frame = ttk.Frame(root, padding=28)
     frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="The Godfather Worker", font=("Segoe UI", 20, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="Consigliere  /  The Godfather AI", font=("Segoe UI", 20, "bold")).pack(
+        anchor="w"
+    )
     ttk.Label(
         frame,
         text="Install for your Windows account. No administrator password needed.\n"
@@ -100,9 +145,10 @@ def main() -> int:
                 [str(executable)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
             )
             root.destroy()
-        except Exception:
+        except Exception as error:
             status.set(
-                "Installation did not finish. Close other setup windows and retry. "
+                f"Installation did not finish: {error}. "
+                "Close Consigliere from its tray menu and retry. "
                 "Existing worker identities and data were preserved."
             )
             button.configure(state="normal")

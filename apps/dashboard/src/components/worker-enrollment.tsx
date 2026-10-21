@@ -94,8 +94,8 @@ export default function WorkerEnrollment() {
     <main className="panel connect-panel">
       <h1>Connect your computer</h1>
       <p>
-        Only approve a connection you started in The Godfather Worker on your
-        own computer.
+        Only approve a connection you started in Consigliere by The Godfather AI
+        on your own computer.
       </p>
       {status && <p role="status">{status}</p>}
       {approved && (

@@ -371,7 +371,7 @@ test("administration renders backend account identity and hides platform control
   );
   assert.match(html, /&lt;Test contributor&gt;/);
   assert.match(html, /Owned computers and credentials/);
-  assert.match(html, /Connect a computer/);
+  assert.match(html, /Consigliere downloads/);
   assert.match(
     html,
     /<details><summary>Advanced: manual command-line worker credential/,

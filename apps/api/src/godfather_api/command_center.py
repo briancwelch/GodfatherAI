@@ -40,7 +40,7 @@ from godfather_api.scheduler import matches, permitted, workspace_access
 router = APIRouter(
     prefix="/api/v1/command-center", dependencies=[Depends(HTTPBearer(auto_error=False))]
 )
-PAGE_SIZE = 100
+PAGE_SIZE = 25
 
 
 def manages(session: Session, workspace: Workspace, actor_id: UUID) -> bool:
@@ -484,7 +484,10 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
         "checkpoints": [
             workflow_service.checkpoint_view(session, job, cp).model_dump(mode="json")
             for cp in session.scalars(
-                select(Checkpoint).where(Checkpoint.job_id == job.id).order_by(Checkpoint.version)
+                select(Checkpoint)
+                .where(Checkpoint.job_id == job.id)
+                .order_by(Checkpoint.version)
+                .limit(PAGE_SIZE)
             )
         ]
         if run
@@ -496,6 +499,32 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
         else inference.snapshot(session, job, include_partial=True)
         if job.type == "inference.text"
         else None,
+    }
+
+
+@router.get("/jobs/{job_id}/checkpoints")
+def checkpoint_page(
+    job_id: UUID,
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, object]:
+    actor = authenticate(request, session, "human")
+    job = jobs.authorized_job(session, job_id, actor.owner_id)
+    query = select(Checkpoint).where(Checkpoint.job_id == job.id)
+    if session.get(WorkflowRun, job.id) is None:
+        query = query.where(false())
+    total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    return {
+        "items": [
+            workflow_service.checkpoint_view(session, job, cp).model_dump(mode="json")
+            for cp in session.scalars(
+                query.order_by(Checkpoint.version, Checkpoint.id).limit(PAGE_SIZE).offset(offset)
+            )
+        ],
+        "total": total,
+        "offset": offset,
+        "limit": PAGE_SIZE,
     }
 
 

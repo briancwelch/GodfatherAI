@@ -1,6 +1,11 @@
-# The Godfather Worker for Mac
+# Consigliere for Mac — The Godfather AI
 
-Open the DMG, drag The Godfather Worker into Applications, then open it.
+Quit the existing worker from its tray menu before upgrading. Open the DMG and
+run **Install Consigliere.command**, then **Install / replace existing version**.
+Open Consigliere from Applications after installation and eject the DMG. The
+installer replaces the existing app, including its former The Godfather Worker
+name; it preserves the Keychain identity and local settings. New per-user installs
+use `~/Applications`. It does not request elevation or change folder permissions.
 Enter your Command Center address and click **Connect**. Sign in using your
 invited Google account, compare the code and approve this computer. It connects
 automatically. No credential file, invitation code or Tailscale setup is needed

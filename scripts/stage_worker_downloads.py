@@ -15,7 +15,7 @@ def stage(files: list[Path], output: Path) -> None:
     artifacts: list[dict[str, str]] = []
     for path in files:
         match = re.fullmatch(
-            r"godfather-worker-([a-z0-9.-]+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
+            r"(?:godfather-worker|consigliere)-([a-z0-9.-]+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
             path.name,
         )
         if not match:

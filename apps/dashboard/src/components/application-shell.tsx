@@ -208,6 +208,7 @@ export function ApplicationShell({
                   href={key === "overview" ? "/" : `/${key}`}
                   aria-current={key === section ? "page" : undefined}
                 >
+                  <CommandIcon label={label} />
                   {label}
                 </a>
               ))}

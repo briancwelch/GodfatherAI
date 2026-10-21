@@ -87,7 +87,7 @@ def check(release: str, architecture: str) -> None:
     if native_architecture() != architecture:
         raise RuntimeError("Smoke test must run on the requested native architecture")
     suffix = "arm64" if architecture == "arm64" else "x64"
-    dmg = ROOT / "dist" / f"godfather-worker-{release}-macos-{suffix}-installer.dmg"
+    dmg = ROOT / "dist" / f"consigliere-{release}-macos-{suffix}-installer.dmg"
     verify_checksum(dmg)
     manifest = json.loads(Path(str(dmg) + ".manifest.json").read_text(encoding="utf-8"))
     if (
@@ -112,7 +112,13 @@ def check(release: str, architecture: str) -> None:
             str(dmg),
         )
         try:
-            for name in ("README.md", "TROUBLESHOOTING.md", "ADMINISTRATOR.md", "manifest.json"):
+            for name in (
+                "README.md",
+                "TROUBLESHOOTING.md",
+                "ADMINISTRATOR.md",
+                "manifest.json",
+                "Install Consigliere.command",
+            ):
                 if not (mount / name).is_file():
                     raise RuntimeError(f"Missing packaged guide/manifest: {name}")
             if json.loads((mount / "manifest.json").read_text(encoding="utf-8")) != manifest:

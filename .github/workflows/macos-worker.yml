@@ -69,8 +69,8 @@ jobs:
           echo "No Developer ID signing, notarization, or production Gatekeeper acceptance. Enrollment deployment remains separate." >> "$GITHUB_STEP_SUMMARY"
       - name: Desktop lifecycle, security and packaging unit checks
         run: |
-          uv run --no-sync ruff check scripts/build_macos_worker.py scripts/check_macos_worker.py tests/test_macos_worker_package.py
-          uv run --no-sync pytest tests/test_desktop_worker.py tests/test_simple_onboarding.py tests/test_coding_setup.py tests/test_macos_worker_package.py
+          uv run --no-sync ruff check scripts/build_macos_worker.py scripts/check_macos_worker.py tests/test_macos_worker_package.py tests/test_consigliere.py
+          uv run --no-sync pytest tests/test_desktop_worker.py tests/test_simple_onboarding.py tests/test_coding_setup.py tests/test_macos_worker_package.py tests/test_consigliere.py
           uv run --no-sync pytest tests/test_result_actions.py tests/test_coding.py
       - name: Native tray and guided window lifecycle
         run: uv run --no-sync python -m scripts.check_desktop_ui
@@ -81,11 +81,11 @@ jobs:
       - name: Upload verified DMG and checksum
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-unsigned-development-candidate
+          name: consigliere-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-unsigned-development-candidate
           path: |
-            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg
-            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.sha256
-            dist/godfather-worker-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.manifest.json
+            dist/consigliere-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg
+            dist/consigliere-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.sha256
+            dist/consigliere-${{ env.CANDIDATE_VERSION }}-macos-${{ matrix.arch }}-installer.dmg.manifest.json
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

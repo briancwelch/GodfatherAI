@@ -2,12 +2,13 @@
 
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import Select, func, or_, select, text, update
+from sqlalchemy.orm import Session
 
 from godfather_api.agents import manage_workspace
 from godfather_api.authentication import (
@@ -34,6 +35,15 @@ from godfather_api.scheduler import workspace_access
 router = APIRouter(prefix="/api/v1/administration")
 
 
+def page_rows(session: Session, query: Select[Any], offset: int, paged: bool) -> tuple[Any, int]:
+    total = session.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
+    return session.scalars(query.limit(25).offset(offset)), total
+
+
+def page_result(items: list[dict[str, object]], total: int, offset: int, paged: bool) -> Any:
+    return {"items": items, "total": total, "offset": offset, "limit": 25} if paged else items
+
+
 class RoleSelection(BaseModel):
     roles: list[str] = Field(min_length=1, max_length=10)
 
@@ -56,20 +66,25 @@ class InviteCreate(RoleSelection):
 
 @router.get("/users")
 def users(
-    request: Request, session: SessionDep, offset: Annotated[int, Query(ge=0)] = 0
-) -> list[dict[str, object]]:
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    paged: bool = False,
+    search: Annotated[str, Query(max_length=200)] = "",
+) -> Any:
     actor = authenticate(request, session, "human")
     require_permission(session, actor.owner_id, "platform.manage")
-    return [
-        user_data(u)
-        for u in session.scalars(
-            select(User)
-            .join(GoogleIdentity)
-            .order_by(User.created_at, User.id)
-            .limit(100)
-            .offset(offset)
+    query = select(User).join(GoogleIdentity)
+    if search:
+        query = query.where(
+            or_(
+                User.email.icontains(search, autoescape=True),
+                User.display_name.icontains(search, autoescape=True),
+            )
         )
-    ]
+    rows, total = page_rows(session, query.order_by(User.created_at, User.id), offset, paged)
+    items = [user_data(u) for u in rows]
+    return page_result(items, total, offset, paged)
 
 
 @router.post("/users/{user_id}")
@@ -140,19 +155,21 @@ def invitation_data(row: Invitation) -> dict[str, object]:
 
 @router.get("/invitations")
 def invitations(
-    request: Request, session: SessionDep, offset: Annotated[int, Query(ge=0)] = 0
-) -> list[dict[str, object]]:
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    paged: bool = False,
+) -> Any:
     actor = authenticate(request, session, "human")
     require_permission(session, actor.owner_id, "platform.manage")
-    return [
-        invitation_data(i)
-        for i in session.scalars(
-            select(Invitation)
-            .order_by(Invitation.created_at.desc(), Invitation.id)
-            .limit(100)
-            .offset(offset)
-        )
-    ]
+    rows, total = page_rows(
+        session,
+        select(Invitation).order_by(Invitation.created_at.desc(), Invitation.id),
+        offset,
+        paged,
+    )
+    items = [invitation_data(i) for i in rows]
+    return page_result(items, total, offset, paged)
 
 
 @router.post("/invitations", status_code=201)
@@ -251,13 +268,26 @@ def create_workspace(
 
 
 @router.get("/workspaces/{workspace_id}/members")
-def members(workspace_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
+def members(
+    workspace_id: UUID,
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, object]:
     actor = authenticate(request, session, "human")
     if not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found")
     workspace = session.get(Workspace, workspace_id)
     assert workspace is not None
     return {
+        "offset": offset,
+        "limit": 25,
+        "total": session.scalar(
+            select(func.count())
+            .select_from(WorkspaceMember)
+            .where(WorkspaceMember.workspace_id == workspace_id)
+        )
+        or 0,
         "owner_id": str(workspace.owner_id),
         "allowed_models": workspace.allowed_models,
         "allowed_tools": workspace.allowed_tools,
@@ -265,7 +295,11 @@ def members(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
         "members": [
             {"user_id": str(m.user_id), "role": m.role}
             for m in session.scalars(
-                select(WorkspaceMember).where(WorkspaceMember.workspace_id == workspace_id)
+                select(WorkspaceMember)
+                .where(WorkspaceMember.workspace_id == workspace_id)
+                .order_by(WorkspaceMember.user_id)
+                .limit(25)
+                .offset(offset)
             )
         ],
     }
@@ -324,24 +358,30 @@ class NodeCreate(BaseModel):
 
 @router.get("/node-credentials")
 def owned_credentials(
-    request: Request, session: SessionDep, offset: Annotated[int, Query(ge=0)] = 0
-) -> list[dict[str, object]]:
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    paged: bool = False,
+) -> Any:
     actor = authenticate(request, session, "human")
-    return [
+    rows, total = page_rows(
+        session,
+        select(AccessCredential)
+        .where(AccessCredential.owner_id == actor.owner_id, AccessCredential.kind == "worker")
+        .order_by(AccessCredential.created_at.desc(), AccessCredential.id),
+        offset,
+        paged,
+    )
+    items = [
         {
             "id": str(c.id),
             "name": c.name,
             "revoked": c.revoked,
             "node_id": str(c.node_id) if c.node_id else None,
         }
-        for c in session.scalars(
-            select(AccessCredential)
-            .where(AccessCredential.owner_id == actor.owner_id, AccessCredential.kind == "worker")
-            .order_by(AccessCredential.created_at.desc())
-            .limit(100)
-            .offset(offset)
-        )
+        for c in rows
     ]
+    return page_result(items, total, offset, paged)
 
 
 @router.post("/node-credentials/{credential_id}/revoke")
@@ -392,8 +432,11 @@ def node_credential(payload: NodeCreate, request: Request, session: SessionDep) 
 
 @router.get("/audit")
 def security_audit(
-    request: Request, session: SessionDep, offset: Annotated[int, Query(ge=0)] = 0
-) -> list[dict[str, object]]:
+    request: Request,
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    paged: bool = False,
+) -> Any:
     actor = authenticate(request, session, "human")
     require_permission(session, actor.owner_id, "platform.manage")
     visible = select(Workspace.id).where(
@@ -416,7 +459,10 @@ def security_audit(
         ),
         or_(Event.workspace_id.is_(None), Event.workspace_id.in_(visible)),
     )
-    return [
+    rows, total = page_rows(
+        session, query.order_by(Event.created_at.desc(), Event.id), offset, paged
+    )
+    items = [
         {
             "id": str(e.id),
             "actor_id": str(e.actor_id) if e.actor_id else None,
@@ -425,7 +471,6 @@ def security_audit(
             "details": human_event_details(e, actor.owner_id),
             "correlation_id": e.correlation_id,
         }
-        for e in session.scalars(
-            query.order_by(Event.created_at.desc(), Event.id).limit(100).offset(offset)
-        )
+        for e in rows
     ]
+    return page_result(items, total, offset, paged)
