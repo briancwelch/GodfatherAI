@@ -55,8 +55,9 @@ installation changes were made. Pending invitation roles/expiry were preserved.
 
 ## Recipient acceptance
 
-The original invitation remained active and unused at the post-deployment check.
-The recipient was asked through the user to refresh the Command Center, leave
-the optional code empty and choose the exact invited Google email. Real recipient
-acceptance is pending that retry; mocked Google tests do not prove that a
-particular person's real account has signed in.
+The original invitation remained active and unused at the initial post-deployment
+check. The recipient retried through the normal Google sign-in flow, without an
+invitation code. The user subsequently confirmed that sign-in worked ("All good").
+This closes real recipient acceptance through user confirmation, separately from
+the automated tests that mock Google's network. No recipient credentials or
+private account details were collected.
