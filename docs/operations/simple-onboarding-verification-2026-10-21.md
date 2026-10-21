@@ -1,8 +1,9 @@
 # Simple onboarding candidate verification — 2026-10-21
 
-Candidate **0.3.0-rc.4** is built and locally verified. Deployment was not performed
-in this milestone. The new public HTTPS worker routes and installer downloads are
-not activated by committing this source.
+Candidate **0.3.0-rc.4** is built and locally verified. The build checks below
+preceded deployment. The user subsequently approved activation; it was deployed
+on 2026-10-21 with public HTTPS worker routes and installer downloads. See the
+separate [live deployment report](simple-onboarding-deployment-2026-10-21.md).
 
 Coordinator source: `4e87eb5d4a043ef5d712001a1c049a36db996e39`.
 Windows and both Mac workers: `3226193310e2e68b264b006b8c94b752597b34f0`.
@@ -113,17 +114,18 @@ upgrade/backup path instead of overwriting configuration.
 The original local CLI worker was not stopped or reconfigured by these tests.
 Owners switching to the desktop app should quit their old CLI worker first.
 
-## Next authorized action
+## Activation and remaining acceptance
 
-Approval is needed before activating this candidate on the existing coordinator.
-AGENTS.md rule 3 requires explicit authorization for external changes; this upgrade
-enables authenticated worker routes on the public HTTPS address and publishes the
-candidate installers. Use the existing backup-based upgrade, preserve operator
-configuration and data, add a fresh private proxy token, then verify anonymous
-worker rejection, private-route isolation, download hashes, signed-in job history
-and a real owner-approved worker connection. No DNS, Google Cloud or Tailscale
-administration change is required by this candidate's design.
+The user explicitly approved activation, and the existing backup-based upgrade
+completed on 2026-10-21. Operator configuration and existing records were preserved;
+a fresh private proxy token was added. Live anonymous worker rejection,
+private-route isolation and all three download hashes passed. The administrator
+confirmed the deployed version, existing job results and download panel. The
+existing CLI worker reconnected; a real owner-approved connection from the new
+desktop app still requires recipient acceptance. No DNS, Google Cloud or Tailscale
+administration changes were made. Details are in the
+[deployment report](simple-onboarding-deployment-2026-10-21.md).
 
-After activation and recipient acceptance, complete publisher signing before
+After recipient acceptance, complete publisher signing before
 claiming frictionless worldwide production installation. Do not advance into a
 new workload phase as part of this usability milestone.

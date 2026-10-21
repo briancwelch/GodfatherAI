@@ -1,12 +1,12 @@
 # Install and connect
 
 This usability milestone replaces manual worker credential files and mandatory
-Tailscale setup. Its candidate must be activated on the coordinator before public
-HTTPS worker pairing works. Production status is recorded separately; existing
-deployments do not change just because this source is checked in.
-
-Prepared candidate: **0.3.0-rc.4**. See the
-[executed checks and artifact hashes](simple-onboarding-verification-2026-10-21.md).
+Tailscale setup. Release **0.3.0-rc.4** was activated on the existing coordinator
+on 2026-10-21. Open [Command Center](https://app.the-godfather.ai), then
+**Nodes → Connect a computer** for the Windows/Mac candidate installers.
+See [live deployment verification](simple-onboarding-deployment-2026-10-21.md)
+and the [build checks and artifact hashes](simple-onboarding-verification-2026-10-21.md).
+Publisher signing and physical recipient pairing remain pending.
 
 ## Contributor
 
@@ -66,8 +66,9 @@ mounts its Caddy configuration and worker downloads. Upgrade and backup procedur
 remain in [production-release.md](production-release.md).
 
 This is a one-command **verified local release install**, not a published curl URL
-or container-registry service. Public binary hosting and signed release publishing
-are separate deployment actions; no nonexistent download URL is advertised.
+or container-registry service. The existing coordinator now hosts the Windows/Mac
+candidate downloads. A public coordinator bootstrap URL and signed release
+publishing remain separate work.
 
 One hostname serves the dashboard, downloads and authenticated worker routes.
 PostgreSQL, Redis, model servers and node administration remain private. Tailscale

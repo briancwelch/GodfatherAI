@@ -4,18 +4,21 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Release `0.2.0-rc.5` includes the invitation onboarding repair; see [repair verification](docs/operations/onboarding-repair-2026-10-20.md) and [Phase 11 deployment verification](docs/operations/phase-11-deployment-2026-10-20.md). No paid API calls are authorized. The existing Windows worker reconnected after the upgrade; live coding acceptance still requires an updated worker with owner-approved repository configuration. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
+**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status, with the authorized install-and-connect usability milestone.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Release `0.3.0-rc.4` is deployed; see [deployment verification](docs/operations/simple-onboarding-deployment-2026-10-21.md). It retains the earlier [invitation onboarding repair](docs/operations/onboarding-repair-2026-10-20.md). No paid API calls are authorized. The existing Windows worker reconnected after the upgrade; live coding acceptance still requires an updated worker with owner-approved repository configuration. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
 
 ## Start here
 
 **Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
 The normal worker is a tray app with automatic browser pairing, saved OS credentials
-and outbound HTTPS. Tailscale is optional. Native installers and the guided
-coordinator setup are candidates until their recorded build and deployment checks
-pass; this source change does not activate new public routes on the existing server.
-Candidate **0.3.0-rc.4** and its Windows/Mac installers have passed the
+and outbound HTTPS. Tailscale is optional. Release **0.3.0-rc.4** is deployed at
+[Command Center](https://app.the-godfather.ai). Open **Nodes → Connect a computer**
+for Windows, Apple silicon and Intel Mac downloads. Its installers passed the
 [recorded local and native checks](docs/operations/simple-onboarding-verification-2026-10-21.md).
-Production activation and publisher signing remain separate.
+Live HTTPS, download checksums, access restrictions, preserved records and the
+existing worker's reconnection passed verification. The administrator confirmed
+the version, existing results and download panel. Publisher signing and physical
+recipient pairing remain pending; the Windows/Mac installers are unsigned/ad-hoc
+signed candidates.
 
 For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
 Invited users select Continue with Google using the exact invited email; no code
