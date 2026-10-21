@@ -1,5 +1,7 @@
 """Package rejection checks; native execution belongs to the macOS workflow."""
 
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -7,6 +9,27 @@ import pytest
 
 from scripts.check_macos_worker import inspect_bundle, verify_checksum
 from scripts.release import sha256
+
+
+def test_native_build_helpers_do_not_require_coordinator_dependencies() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """import importlib.abc, sys
+class BlockAPI(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path, target=None):
+        if fullname.startswith('godfather_api'):
+            raise ModuleNotFoundError('Coordinator unavailable in worker-only builds')
+sys.meta_path.insert(0, BlockAPI())
+from scripts.release import version
+from scripts.build_macos_worker import native_architecture
+version('0.3.0-rc.2')
+""",
+        ],
+        check=True,
+        capture_output=True,
+    )
 
 
 def test_checksum_detects_modified_package(tmp_path: Path) -> None:

@@ -13,8 +13,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from godfather_api.migrations import migration_head
-
 from scripts.dev import ROOT
 
 UPSTREAM = ("postgres", "redis", "caddy")
@@ -90,6 +88,9 @@ def assemble(
     worker_downloads: Path | None = None,
 ) -> None:
     """Allowlist package contents; never copy the checkout or operator environment."""
+    # Worker packaging reuses version/checksum helpers without coordinator dependencies.
+    from godfather_api.migrations import migration_head
+
     source = ROOT / "infrastructure/release"
     for relative in (
         "compose.production.yaml",
