@@ -10,6 +10,7 @@ import { AgentManagement, RepositorySelection } from "./agent-management";
 import { ModelInstaller } from "./model-installer";
 import { GoogleLogin } from "@/components/google-login";
 import { JobResult } from "./job-result";
+import { ConnectComputer } from "./connect-computer";
 import { Button } from "@/components/ui/button";
 import {
   ConfirmAction,
@@ -320,7 +321,12 @@ export default function CommandCenter({
                         <JobTable rows={data.jobs} />
                       </>
                     )}
-                    {section === "nodes" && <NodeTable data={data} />}
+                    {section === "nodes" && (
+                      <>
+                        <ConnectComputer />
+                        <NodeTable data={data} />
+                      </>
+                    )}
                     {section === "agents" && (
                       <AgentManagement
                         key={data.workspace_id}

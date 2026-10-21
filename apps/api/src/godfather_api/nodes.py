@@ -4,7 +4,7 @@ import hashlib
 import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from typing import Annotated, Literal, overload
+from typing import Annotated, Literal, NoReturn, overload
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -86,6 +86,13 @@ def authenticate(
 
 
 def authenticate(request: Request, session: Session, kind: str) -> AccessCredential | HumanSession:
+    def refused() -> NoReturn:
+        if kind == "worker":
+            from godfather_api.authentication import throttle
+
+            throttle(request, "worker-invalid-credential")
+        raise HTTPException(401, "A valid bearer credential is required")
+
     if kind == "human":
         from godfather_api.authentication import human
 
@@ -99,14 +106,14 @@ def authenticate(request: Request, session: Session, kind: str) -> AccessCredent
         kind = "admin"
     headers = request.headers.getlist("authorization")
     if len(headers) != 1:
-        raise HTTPException(401, "A valid bearer credential is required")
+        refused()
     scheme, _, token = headers[0].partition(" ")
     if (
         scheme.lower() != "bearer"
         or len(token) != 43
         or not all(c.isascii() and (c.isalnum() or c in "-_") for c in token)
     ):
-        raise HTTPException(401, "A valid bearer credential is required")
+        refused()
     # Serialize registration, heartbeat, and revocation for each identity.
     credential = session.scalar(
         select(AccessCredential)
@@ -114,7 +121,7 @@ def authenticate(request: Request, session: Session, kind: str) -> AccessCredent
         .with_for_update()
     )
     if credential is None or credential.revoked:
-        raise HTTPException(401, "A valid bearer credential is required")
+        refused()
     owner = session.get(User, credential.owner_id)
     if owner is None or not owner.enabled or (kind == "admin" and owner.role != "platform_admin"):
         raise HTTPException(403, "Credential owner is not permitted")

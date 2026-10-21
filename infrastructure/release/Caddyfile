@@ -3,29 +3,28 @@
 	# No access log: OAuth codes/cookies must not enter request logs.
 }
 
-app.the-godfather.ai {
+{$GODFATHER_PUBLIC_HOSTS:app.the-godfather.ai api.the-godfather.ai} {
 	request_body {
 		max_size 2MB
 	}
 	header Strict-Transport-Security "max-age=31536000"
-	reverse_proxy dashboard:3000 {
-		header_up Host app.the-godfather.ai
+	@downloads path /downloads/manifest.json /downloads/godfather-worker-*-setup.exe /downloads/godfather-worker-*-installer.dmg
+	handle @downloads {
+		root * /srv/godfather-downloads
+		uri strip_prefix /downloads
+		file_server
 	}
-}
-
-api.the-godfather.ai {
-	request_body {
-		max_size 2MB
-	}
-	header Strict-Transport-Security "max-age=31536000"
-	# Worker routes stay private over the approved Tailscale policy.
+	# Only authenticated worker operations and Google-approved pairing are public.
 	@worker path /api/v1/workers /api/v1/workers/*
 	handle @worker {
-		@tailnet remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48
-		handle @tailnet {
-			reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up X-Godfather-Proxy-Token {$GODFATHER_PROXY_TOKEN}
+			header_up X-Godfather-Peer {remote_host}
 		}
-		respond 403
+	}
+	@web host {$GODFATHER_APP_HOST:app.the-godfather.ai}
+	handle @web {
+		reverse_proxy dashboard:3000
 	}
 	# Browser sessions use the same-origin dashboard bridge. No public API bypass.
 	respond 404

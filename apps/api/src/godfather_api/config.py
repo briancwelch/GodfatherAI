@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     google_bootstrap_email: str = Field(default="", max_length=320, repr=False)
     session_seconds: int = Field(default=28800, ge=300, le=86400)
     authentication_limit: int = Field(default=20, ge=1, le=100)
+    proxy_token: SecretStr = SecretStr("")
     # Legacy credentials are accepted ONLY in explicitly isolated regression tests.
     test_legacy_credentials: bool = False
 
@@ -58,8 +59,9 @@ class Settings(BaseSettings):
         from urllib.parse import urlsplit
 
         url = urlsplit(value)
+        port = url.port
         local = url.scheme == "http" and url.hostname in ("localhost", "127.0.0.1")
-        production = value == "https://app.the-godfather.ai"
+        production = url.scheme == "https" and bool(url.hostname)
         if (
             not (local or production)
             or url.username
@@ -67,9 +69,11 @@ class Settings(BaseSettings):
             or url.path
             or url.query
             or url.fragment
+            or (port is not None and port < 1)
+            or re.search(r"[\s\\]", value)
         ):
             raise ValueError(
-                "Configure an exact loopback origin or the planned HTTPS Command Center origin"
+                "Configure an exact HTTPS Command Center origin or a loopback HTTP origin"
             )
         return value
 
@@ -82,7 +86,7 @@ class Settings(BaseSettings):
         if self.environment == "test" and self.database_name != "godfather_test":
             raise ValueError("Test authentication requires the isolated godfather_test database")
         if self.environment == "production" and (
-            self.web_origin != "https://app.the-godfather.ai"
+            not self.web_origin.startswith("https://")
             or not self.google_client_id
             or not self.google_client_secret.get_secret_value()
             or self.test_legacy_credentials

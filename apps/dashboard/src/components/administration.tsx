@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { ConfirmAction, DataTable, JsonDetails } from "./operational";
 import type { Snapshot } from "../lib/contracts";
+import { ConnectComputer } from "./connect-computer";
 
 export interface Account {
   id: string;
@@ -489,33 +490,38 @@ export default function Administration({
         {(user.permissions.includes("nodes.contribute") ||
           !!credentials?.length) && (
           <section className="panel">
-            <h2>Owned node onboarding</h2>
+            <ConnectComputer />
+            <h2>Owned computers and credentials</h2>
             <p>
-              Generate a machine credential for a worker you own. Configure
-              contribution limits and tool grants in the worker’s private local
-              configuration. Machine credentials are independent of Google
-              login.
+              The desktop app creates and saves its credential automatically
+              after your browser approval. Revoke a lost or retired computer
+              below.
             </p>
             {user.permissions.includes("nodes.contribute") && (
-              <form
-                method="post"
-                onSubmit={(e) => {
-                  const f = form(e);
-                  void operate(
-                    "administration/node-credentials",
-                    { name: f.get("name") },
-                    true,
-                  );
-                }}
-              >
-                <label>
-                  Unique node name
-                  <input name="name" required maxLength={100} />
-                </label>
-                <button className="action" disabled={busy}>
-                  Create worker credential
-                </button>
-              </form>
+              <details>
+                <summary>
+                  Advanced: manual command-line worker credential
+                </summary>
+                <form
+                  method="post"
+                  onSubmit={(e) => {
+                    const f = form(e);
+                    void operate(
+                      "administration/node-credentials",
+                      { name: f.get("name") },
+                      true,
+                    );
+                  }}
+                >
+                  <label>
+                    Unique node name
+                    <input name="name" required maxLength={100} />
+                  </label>
+                  <button className="action" disabled={busy}>
+                    Create worker credential
+                  </button>
+                </form>
+              </details>
             )}
             {credentials && (
               <DataTable

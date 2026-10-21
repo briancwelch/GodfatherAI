@@ -1,5 +1,7 @@
 """Google-only human authentication. Workers retain independent machine credentials."""
 
+import contextlib
+import ipaddress
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -154,9 +156,15 @@ def google_client(settings: Settings) -> Any:
 
 
 def throttle(request: Request, action: str) -> None:
-    # Peer identity only; do not trust forwarded headers. A dashboard bridge shares a
-    # conservative aggregate limit. PostgreSQL makes it consistent across API processes.
     peer = request.client.host if request.client else "unknown"
+    # Only our configured reverse proxy can supply a client IP. Its Caddy rule
+    # overwrites both headers; arbitrary X-Forwarded-For remains untrusted.
+    configured = request.app.state.settings.proxy_token.get_secret_value()
+    if configured and secrets.compare_digest(
+        request.headers.get("x-godfather-proxy-token", "").encode(), configured.encode()
+    ):
+        with contextlib.suppress(ValueError):
+            peer = str(ipaddress.ip_address(request.headers.get("x-godfather-peer", "")))
     key = token_digest(action + ":" + peer)
     window = int(datetime.now(UTC).timestamp()) // 60
     with request.app.state.database.sessions.begin() as session:

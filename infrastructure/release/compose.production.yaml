@@ -8,7 +8,8 @@ x-logging: &logging
 
 x-api-environment: &api-environment
   GODFATHER_ENVIRONMENT: production
-  GODFATHER_WEB_ORIGIN: https://app.the-godfather.ai
+  GODFATHER_WEB_ORIGIN: ${GODFATHER_WEB_ORIGIN:-https://app.the-godfather.ai}
+  GODFATHER_PROXY_TOKEN: ${GODFATHER_PROXY_TOKEN:-}
   GODFATHER_DATABASE_HOST: postgres
   GODFATHER_DATABASE_NAME: godfather
   GODFATHER_DATABASE_USER: godfather
@@ -84,7 +85,7 @@ services:
     platform: linux/amd64
     environment:
       GODFATHER_API_URL: http://api:8000
-      GODFATHER_WEB_ORIGIN: https://app.the-godfather.ai
+      GODFATHER_WEB_ORIGIN: ${GODFATHER_WEB_ORIGIN:-https://app.the-godfather.ai}
       NODE_OPTIONS: --max-old-space-size=384
     init: true
     restart: unless-stopped
@@ -118,10 +119,14 @@ services:
     platform: linux/amd64
     environment:
       ACME_EMAIL: ${ACME_EMAIL:?Set certificate contact email}
+      GODFATHER_PUBLIC_HOSTS: ${GODFATHER_PUBLIC_HOSTS:-app.the-godfather.ai api.the-godfather.ai}
+      GODFATHER_APP_HOST: ${GODFATHER_APP_HOST:-app.the-godfather.ai}
+      GODFATHER_PROXY_TOKEN: ${GODFATHER_PROXY_TOKEN:-}
     restart: unless-stopped
     ports: ["80:80", "443:443", "443:443/udp"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./downloads:/srv/godfather-downloads:ro
       - caddy-data:/data
       - caddy-config:/config
     read_only: true

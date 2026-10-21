@@ -29,6 +29,13 @@ Development is led by one developer. Both founding members are platform administ
 
 
 ## Architecture
+
+Owner-approved usability milestone (2026-10-21): workers may connect directly to
+the configured Command Center over authenticated outbound HTTPS. Tailscale is
+optional. This supersedes mandatory private-network/DNS setup for worker transport
+in the historical diagram and Phase 10 text below. Authentication, node-owner
+consent, permissions and private database/model/admin endpoints remain mandatory.
+See docs/decisions/0016-simple-install-and-connect.md.
 ```text
 Browser clients: Vegas admin / LA admin / future contributors
                            |

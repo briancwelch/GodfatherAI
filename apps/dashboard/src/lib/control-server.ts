@@ -8,7 +8,7 @@ export function webOrigin(): string {
   const value = process.env.GODFATHER_WEB_ORIGIN ?? "http://127.0.0.1:3000";
   const url = new URL(value);
   if (
-    value !== "https://app.the-godfather.ai" &&
+    url.protocol !== "https:" &&
     !(
       url.protocol === "http:" &&
       ["127.0.0.1", "localhost"].includes(url.hostname)
@@ -34,7 +34,7 @@ export function apiBase(): string {
     !(
       (url.protocol === "http:" &&
         ["127.0.0.1", "localhost", "api"].includes(url.hostname)) ||
-      value === "https://api.the-godfather.ai"
+      url.protocol === "https:"
     ) ||
     url.username ||
     url.password ||
@@ -42,7 +42,9 @@ export function apiBase(): string {
     url.hash ||
     url.pathname !== "/"
   ) {
-    throw new Error("Only the local development API is supported");
+    throw new Error(
+      "Configure an exact HTTPS API origin or an allowed internal API origin",
+    );
   }
   return url.origin;
 }

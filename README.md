@@ -8,6 +8,12 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
+**Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
+The normal worker is a tray app with automatic browser pairing, saved OS credentials
+and outbound HTTPS. Tailscale is optional. Native installers and the guided
+coordinator setup are candidates until their recorded build and deployment checks
+pass; this source change does not activate new public routes on the existing server.
+
 For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
 Invited users select Continue with Google using the exact invited email; no code
 is required. Email delivery is manual, and Tailscale access is separate.

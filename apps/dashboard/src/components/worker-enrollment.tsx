@@ -18,7 +18,7 @@ export default function WorkerEnrollment() {
         if (/^[a-f0-9]{64}$/.test(value)) setChallenge(value);
         if (!r.ok) {
           setStatus(
-            "Sign in with your invited Google account to approve this Mac.",
+            "Sign in with your invited Google account to approve this computer.",
           );
           return;
         }
@@ -54,7 +54,7 @@ export default function WorkerEnrollment() {
       setApproved(true);
       setNodeName(name);
       setStatus(
-        "Approved for five minutes. Return to the app, finish connecting, then choose your contribution settings.",
+        "Approved. Your worker will connect automatically. You can close this page and return to the app.",
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Approval failed.");
@@ -87,10 +87,10 @@ export default function WorkerEnrollment() {
   }
   return (
     <main className="panel connect-panel">
-      <h1>Connect your Mac</h1>
+      <h1>Connect your computer</h1>
       <p>
         Only approve a connection you started in The Godfather Worker on your
-        own Mac.
+        own computer.
       </p>
       {status && <p role="status">{status}</p>}
       {approved && (
@@ -113,7 +113,12 @@ export default function WorkerEnrollment() {
           </p>
           <label>
             Node display name
-            <input name="name" required maxLength={100} defaultValue="My Mac" />
+            <input
+              name="name"
+              required
+              maxLength={100}
+              defaultValue="My computer"
+            />
           </label>
           <p>
             Registration grants no shell, private files, repositories, paid
@@ -122,10 +127,10 @@ export default function WorkerEnrollment() {
           </p>
           <label>
             <input type="checkbox" required />
-            The code matches my Mac, and I approve its registration.
+            The code matches my computer, and I approve its registration.
           </label>
           <button className="action" disabled={busy}>
-            {busy ? "Approving…" : "Approve this Mac"}
+            {busy ? "Approving…" : "Approve this computer"}
           </button>
         </form>
       )}

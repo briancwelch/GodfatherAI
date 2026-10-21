@@ -69,7 +69,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         ) from None
     entry = workspace / "macos-entry.py"
     entry.write_text(
-        "from godfather_worker.macos_app import main\nraise SystemExit(main())\n", encoding="utf-8"
+        "from godfather_worker.desktop_app import main\nraise SystemExit(main())\n",
+        encoding="utf-8",
     )
     arguments = [
         str(python),
@@ -101,6 +102,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         "fcntl",
         "--hidden-import",
         "keyring.backends.macOS",
+        "--collect-submodules",
+        "pystray",
     ]
     if identity:
         arguments += ["--codesign-identity", identity]
@@ -109,6 +112,7 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
     output.mkdir(parents=True)
     app = output / source.name
     shutil.copytree(source, app, symlinks=True)
+    (output / "Applications").symlink_to("/Applications", target_is_directory=True)
     info = app / "Contents/Info.plist"
     metadata = plistlib.loads(info.read_bytes())
     metadata.update(
@@ -139,6 +143,9 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
     )
     manifest = {
         "version": release,
+        "source_revision": json.loads(
+            (ROOT / "dist" / f"godfather-worker-{release}-{suffix}" / "manifest.json").read_text()
+        )["source_revision"],
         "architecture": architecture,
         "minimum_macos": "13.0",
         "worker_protocol": 1,

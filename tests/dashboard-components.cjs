@@ -144,7 +144,7 @@ test("Google sign-in has invitation-only onboarding and truthful unavailable sta
   assert.match(html, /Continue with Google/);
   assert.match(html, /Invitation token/);
   assert.match(html, /No invitation code is needed/);
-  assert.match(html, /Tailscale invitation/);
+  assert.match(html, /Tailscale is optional/);
   assert.match(html, /unavailable or not configured/);
   assert.ok(!html.includes("Administrator credential"));
 });
@@ -181,7 +181,12 @@ test("administration renders backend account identity and hides platform control
     React.createElement(administration.default, { initialUser: user }),
   );
   assert.match(html, /&lt;Test contributor&gt;/);
-  assert.match(html, /Owned node onboarding/);
+  assert.match(html, /Owned computers and credentials/);
+  assert.match(html, /Connect a computer/);
+  assert.match(
+    html,
+    /<details><summary>Advanced: manual command-line worker credential/,
+  );
   assert.ok(!html.includes("<h2>Users</h2>"));
   assert.ok(!html.includes("<h2>Invitations</h2>"));
   assert.match(html, /Loading authorized workspaces/);
@@ -264,10 +269,47 @@ test("local credential bridge rejects foreign hosts, CSRF and nonallowlisted wri
   );
   const before = process.env.GODFATHER_API_URL;
   try {
-    process.env.GODFATHER_API_URL = "https://outside.invalid";
+    process.env.GODFATHER_API_URL = "http://outside.invalid";
     assert.throws(() => server.apiBase());
+    process.env.GODFATHER_API_URL = "https://selfhosted.example.invalid";
+    assert.equal(server.apiBase(), "https://selfhosted.example.invalid");
   } finally {
     if (before === undefined) delete process.env.GODFATHER_API_URL;
     else process.env.GODFATHER_API_URL = before;
+  }
+});
+
+test("self-hosted HTTPS uses the configured origin and still rejects foreign requests", () => {
+  const before = process.env.GODFATHER_WEB_ORIGIN;
+  try {
+    process.env.GODFATHER_WEB_ORIGIN = "https://cluster.example.invalid";
+    assert.equal(server.webOrigin(), "https://cluster.example.invalid");
+    const request = (host, origin) => ({
+      headers: new Headers({ host, origin }),
+    });
+    assert.equal(
+      server.localRequest(
+        request("cluster.example.invalid", "https://cluster.example.invalid"),
+        true,
+      ),
+      true,
+    );
+    assert.equal(
+      server.localRequest(
+        request("cluster.example.invalid", "https://attacker.invalid"),
+        true,
+      ),
+      false,
+    );
+    assert.equal(
+      server.localRequest(
+        request("attacker.invalid", "https://cluster.example.invalid"),
+        true,
+      ),
+      false,
+    );
+  } finally {
+    if (before === undefined) delete process.env.GODFATHER_WEB_ORIGIN;
+    else process.env.GODFATHER_WEB_ORIGIN = before;
   }
 });

@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal, Protocol
 from urllib.error import HTTPError
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from godfather_contracts import Contract, Heartbeat, Registration, Resources
@@ -24,13 +25,38 @@ API_ORIGIN = "https://api.the-godfather.ai"
 AGENT_LABEL = "ai.the-godfather.worker"
 
 
+def coordinator_origin(value: str) -> str:
+    """One explicit origin; never follow a redirect with machine credentials."""
+    value = value.strip().rstrip("/")
+    url = urlsplit(value)
+    local = url.scheme == "http" and url.hostname in ("127.0.0.1", "localhost", "::1")
+    if (
+        not (url.scheme == "https" or local)
+        or not url.hostname
+        or url.username
+        or url.password
+        or url.path
+        or url.query
+        or url.fragment
+    ):
+        raise ValueError("Enter an HTTPS Command Center address, for example https://example.com")
+    _ = url.port  # Reject malformed ports before any request.
+    return value
+
+
 class SecretStore(Protocol):
     def read(self) -> str | None: ...
     def write(self, value: str) -> None: ...
     def delete(self) -> None: ...
 
 
+class Exchange(Contract):
+    secret: str = Field(repr=False)
+    machine_secret: str = Field(repr=False)
+
+
 class Pairing(Contract):
+    origin: str = Field(default=WEB_ORIGIN, exclude=True)
     secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32), repr=False)
     machine_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32), repr=False)
 
@@ -40,18 +66,24 @@ class Pairing(Contract):
 
     @property
     def browser_url(self) -> str:
-        return WEB_ORIGIN + "/worker-enrollment#challenge=" + self.challenge
+        return coordinator_origin(self.origin) + "/worker-enrollment#challenge=" + self.challenge
 
     def exchange(self, store: SecretStore, client: WorkerClient | None = None) -> dict[str, str]:
-        transport = client or WorkerClient(API_ORIGIN, "")
+        transport = client or WorkerClient(coordinator_origin(self.origin), "")
         # Use the bounded no-redirect transport; no bearer secret exists before enrollment.
-        result = transport.post_document("/api/v1/workers/enrollment/exchange", self)
+        # Origin is local metadata, not part of the versioned enrollment payload.
+        result = transport.post_document(
+            "/api/v1/workers/enrollment/exchange",
+            Exchange(secret=self.secret, machine_secret=self.machine_secret),
+        )
         if not isinstance(result, dict):
             raise ValueError("Invalid enrollment response")
         for key in ("credential_id", "owner_id"):
             UUID(result[key])
         identity = {str(k): str(v) for k, v in result.items()}
-        identity.update(kind="worker", token=self.machine_secret)
+        identity.update(
+            kind="worker", token=self.machine_secret, origin=coordinator_origin(self.origin)
+        )
         store.write(json.dumps(identity))
         return identity
 
@@ -78,8 +110,8 @@ class Contribution(Contract):
 
 
 class LimitedClient(WorkerClient):
-    def __init__(self, token: str, contribution: Contribution) -> None:
-        super().__init__(API_ORIGIN, token)
+    def __init__(self, token: str, contribution: Contribution, origin: str = API_ORIGIN) -> None:
+        super().__init__(coordinator_origin(origin), token)
         self.contribution = contribution
 
     def post_document(self, path: str, payload: Contract) -> object:
@@ -130,6 +162,8 @@ class Controller:
         self, identity: dict[str, str], folder: Path, observer: Callable[..., None]
     ) -> None:
         self.identity, self.folder, self.observer = identity, folder, observer
+        # Existing app identities without an origin retain the old private API endpoint.
+        self.origin = coordinator_origin(identity.get("origin", API_ORIGIN))
         self.stop_event = threading.Event()
         self.thread: threading.Thread | None = None
 
@@ -147,7 +181,7 @@ class Controller:
         save_settings(self.folder / "settings.json", settings)
         arguments = [
             "--url",
-            API_ORIGIN,
+            self.origin,
             "--primary",
             settings.primary,
             "--concurrency",
@@ -165,7 +199,7 @@ class Controller:
         for workspace in settings.allowed_workspace_ids:
             arguments += ["--allow-workspace", str(workspace)]
         self.stop_event = threading.Event()
-        client = LimitedClient(self.identity["token"], settings)
+        client = LimitedClient(self.identity["token"], settings, self.origin)
 
         def run() -> None:
             try:
@@ -191,15 +225,17 @@ class Controller:
 def connection_error(error: Exception) -> str:
     if isinstance(error, HTTPError):
         return {
-            401: "This Mac's credential was revoked. Contact the owner before reconnecting.",
-            403: "Access refused. Ask your administrator to check invitation, Tailscale and DNS.",
+            401: "This computer's credential was revoked. Contact your administrator.",
+            403: "Access refused. Ask your administrator to check invitation and node permissions.",
             404: "Approval unavailable, expired or used. Check the browser or reconnect.",
             409: "Name used or approval consumed. Revoke the pending entry and try a new name.",
             429: "Too many attempts. Wait one minute before trying again.",
         }.get(error.code, "The coordinator is unavailable. Try again shortly.")
     if isinstance(error, OSError) and "Keychain" in str(error):
         return str(error)
-    return "Cannot connect securely. Ask your administrator to check internet, Tailscale and DNS."
+    if isinstance(error, OSError) and "OS credential store" in str(error):
+        return "Unlock your operating system credential store, then reconnect."
+    return "Cannot connect securely. Check the coordinator address and internet connection."
 
 
 def open_tailscale_setup() -> None:

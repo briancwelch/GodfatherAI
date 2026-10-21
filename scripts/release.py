@@ -87,6 +87,7 @@ def assemble(
     images: dict[str, dict[str, Any]],
     revision: str,
     built_at: str | None = None,
+    worker_downloads: Path | None = None,
 ) -> None:
     """Allowlist package contents; never copy the checkout or operator environment."""
     source = ROOT / "infrastructure/release"
@@ -98,6 +99,7 @@ def assemble(
         "scripts/common.sh",
         "scripts/backup.sh",
         "scripts/install.sh",
+        "scripts/setup.sh",
     ):
         path = source / relative
         destination = folder / relative
@@ -111,6 +113,24 @@ def assemble(
         ("worker-distribution.md", "WORKERS.md"),
     ):
         shutil.copyfile(ROOT / "docs/operations" / name, folder / target)
+    downloads = folder / "downloads"
+    downloads.mkdir()
+    if worker_downloads is None:
+        (downloads / "manifest.json").write_text('{"artifacts": []}\n', encoding="utf-8")
+    else:
+        listing = json.loads((worker_downloads / "manifest.json").read_text())
+        for item in listing["artifacts"]:
+            name = item["filename"]
+            if (
+                not re.fullmatch(
+                    r"godfather-worker-[a-z0-9.-]+-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
+                    name,
+                )
+                or sha256(worker_downloads / name) != item["sha256"]
+            ):
+                raise RuntimeError("Unverified worker download")
+            shutil.copyfile(worker_downloads / name, downloads / name)
+        (downloads / "manifest.json").write_text(json.dumps(listing, indent=2) + "\n")
     (folder / "release.env").write_text(
         "".join(f"{name.upper()}_IMAGE={info['tag']}\n" for name, info in images.items()),
         encoding="utf-8",
@@ -142,7 +162,7 @@ def assemble(
     )
 
 
-def build(release: str) -> Path:
+def build(release: str, worker_downloads: Path | None = None) -> Path:
     folder = ROOT / "dist" / f"godfather-{release}-linux-amd64"
     archive = Path(str(folder) + ".tar.gz")
     if folder.exists() or archive.exists():
@@ -205,7 +225,7 @@ def build(release: str) -> Path:
     )
     if source_revision() != revision:
         raise RuntimeError("Git revision changed during build; release refused")
-    assemble(folder, release, images, revision, built_at)
+    assemble(folder, release, images, revision, built_at, worker_downloads)
     if source_revision() != revision:
         raise RuntimeError("Git revision changed during assembly; release refused")
     with tarfile.open(archive, "w:gz", compresslevel=6) as bundle:
@@ -229,8 +249,9 @@ def tar_permissions(info: tarfile.TarInfo) -> tarfile.TarInfo:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, type=version)
+    parser.add_argument("--worker-downloads", type=Path, help="Verified staged worker installers")
     args = parser.parse_args()
-    build(args.version)
+    build(args.version, args.worker_downloads)
     return 0
 
 

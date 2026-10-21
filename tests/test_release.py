@@ -57,6 +57,7 @@ def test_bundle_allowlist_excludes_operator_secrets(
         "scripts/common.sh",
         "scripts/backup.sh",
         "scripts/install.sh",
+        "scripts/setup.sh",
     ):
         path = source / name
         path.parent.mkdir(parents=True, exist_ok=True)

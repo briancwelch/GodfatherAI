@@ -1,4 +1,13 @@
-# Separate worker distribution and enrollment plan
+# Worker distribution
+
+**Current implementation:** follow [Install and connect](simple-onboarding.md) and
+[ADR 0016](../decisions/0016-simple-install-and-connect.md). Windows has a per-user
+setup executable; the Mac app shares the guided tray window and automatic pairing.
+Worker credentials live in the OS store. The coordinator bundle can include
+verified installers for the Command Center download panel. Source implementation
+does not imply production activation, code signing or physical acceptance.
+
+The remainder records the earlier distribution plan and its historical limits.
 
 **macOS update:** The [Mac candidate](../../packages/worker/macos/README.md) now has
 local desktop, Keychain and owner-approved browser pairing source, an additive

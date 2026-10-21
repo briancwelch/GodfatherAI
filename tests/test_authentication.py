@@ -26,16 +26,24 @@ def test_production_session_is_secure_httponly_and_host_only() -> None:
 @pytest.mark.parametrize(
     "origin",
     [
-        "https://attacker.invalid",
+        "http://attacker.invalid",
         "http://127.0.0.1:3000/path",
         "http://user@127.0.0.1:3000",
-        "https://app.the-godfather.ai.attacker.invalid",
+        "https://user@app.the-godfather.ai.attacker.invalid",
         "http://127.0.0.1:3000?next=evil",
+        "https://example.invalid:bad",
+        "https://example.invalid:0",
+        "https://bad host.invalid",
     ],
 )
-def test_only_exact_reviewed_origins_are_configurable(origin: str) -> None:
+def test_only_exact_secure_origins_are_configurable(origin: str) -> None:
     with pytest.raises(ValidationError):
         Settings(database_password="test", web_origin=origin)
+
+
+def test_self_hosted_origin_is_explicit_configuration_not_request_input() -> None:
+    settings = Settings(database_password="test", web_origin="https://cluster.example.invalid")
+    assert settings.google_redirect_uri == "https://cluster.example.invalid/api/auth/callback"
 
 
 def test_test_authentication_cannot_target_application_database() -> None:

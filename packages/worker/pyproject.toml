@@ -9,10 +9,13 @@ dependencies = [
     "godfather-agent-runtime",
     "psutil>=7.2,<8",
     "keyring>=25,<26",
+    "pystray>=0.19.5,<0.20",
+    "Pillow>=12,<13",
 ]
 
 [project.scripts]
-godfather-worker = "godfather_worker.cli:main"
+godfather-worker = "godfather_worker.launcher:main"
+godfather-worker-cli = "godfather_worker.cli:main"
 godfather-worker-provider = "godfather_worker.provider_credentials:main"
 
 [tool.uv.sources]

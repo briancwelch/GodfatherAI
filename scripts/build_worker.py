@@ -91,13 +91,16 @@ def build(release: str) -> Path:
     )
     entry = workspace / "entry.py"
     entry.write_text(
-        "from godfather_worker.cli import main\nraise SystemExit(main())\n", encoding="utf-8"
+        "from godfather_worker.launcher import main\nraise SystemExit(main())\n", encoding="utf-8"
     )
     execute(
         str(python),
         "-m",
         "PyInstaller",
         "--onedir",
+        *(["--windowed"] if os.name == "nt" else []),
+        "--collect-submodules",
+        "pystray",
         "--hidden-import",
         {
             "Windows": "keyring.backends.Windows",
@@ -136,8 +139,8 @@ def build(release: str) -> Path:
                 "target": native,
                 "source_revision": revision,
                 "pyinstaller": PYINSTALLER,
-                "status": "unsigned candidate; installer and single-use enrollment pending",
-                "validation": "native --help only; no clean-host/service/inference acceptance",
+                "status": "unsigned desktop candidate; automatic pairing and OS secret store",
+                "validation": "native startup smoke; clean-host acceptance recorded separately",
             },
             indent=2,
         )

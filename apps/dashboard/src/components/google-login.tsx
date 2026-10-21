@@ -42,8 +42,8 @@ export function GoogleLogin({
       <h2>Sign in to The Godfather</h2>
       <p>
         Continue with the exact Google account email your administrator invited.
-        No invitation code is needed. A Google account or Tailscale invitation
-        alone does not grant platform access.
+        No invitation code is needed. Your administrator must invite this
+        account. Tailscale is optional.
       </p>
       {error && (
         <p role="alert">

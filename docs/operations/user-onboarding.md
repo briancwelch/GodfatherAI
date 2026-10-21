@@ -2,6 +2,8 @@
 
 Tailscale access, The Godfather account access and paid-provider credentials are
 separate. A Tailscale invitation does not create a Godfather user.
+For the new [tray worker](simple-onboarding.md), authenticated HTTPS is the normal
+transport and Tailscale is optional once the coordinator candidate is activated.
 
 ## Administrator
 
