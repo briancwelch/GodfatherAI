@@ -161,6 +161,12 @@ new coding assignments require separately advertised capabilities.
 
 ## Results and release status
 
+The owner-authorized **0.3.2-rc.1** update is deployed with accomplishment-first
+coding previews and a separate, locally opted-in application action. Follow the
+[Run → Preview → Apply guide](results-and-apply.md) and
+[deployment verification](results-apply-verification-2026-10-21.md). This needs
+one updated worker; future presentation changes remain Command Center-only.
+
 Job detail prioritizes sanitized Markdown, highlighted code/diffs, readable JSON,
 tables, chart data and supported authorized document/media envelopes. Copy and
 download controls use persisted output; artifact downloads recheck workspace access

@@ -1,6 +1,6 @@
 # Result previews and project application — 2026-10-21
 
-Owner-authorized Phase 11 usability update, candidate **0.3.2-rc.1**. The owner
+Owner-authorized Phase 11 usability update, deployed **0.3.2-rc.1**. The owner
 initially requested Command Center-only changes, then explicitly authorized a
 worker update after inspection showed that existing workers had no apply action.
 See the [user guide](results-and-apply.md) and
@@ -69,13 +69,43 @@ database/artifact restore and restart checks passed; evidence is
 including native Python/dashboard matrices and Linux PostgreSQL, worker-process,
 100-job scheduler, inference and interrupted-workflow recovery gates.
 
-Preflight confirmed the existing rc.4 target healthy at migration
-`0011_worker_reconnection`, with no active jobs. Automatic approval review rejected
-transfer because exact destination/payload approval was required. No upload or
-activation occurred from that rejected call. The concrete approval request names
-the existing `root@137.184.227.74` deployment at `/opt/the-godfather`, the verified
-coordinator/worker packages and a read-only preservation-check script. Production
-activation remains pending that approval; all build and source CI gates passed.
+## Authorized production activation
+
+The owner explicitly approved uploading and activating this exact package on the
+existing `root@137.184.227.74` deployment at `/opt/the-godfather`, including the
+worker installers, read-only preservation script and backup-based upgrade. This
+resolved the initial automatic approval-review rejection; the rejected call itself
+had uploaded nothing.
+
+The uploaded archive and all internal checksums matched. Staging verified an
+unchanged PostgreSQL image. The installer created a paired backup and activated
+rc.1 successfully; all five services were healthy. The schema remains
+`0011_worker_reconnection`; PostgreSQL/Redis have no published host ports. The
+private environment, including vault and proxy keys, remained byte-identical and
+mode 600. The running API reports version `0.3.2-rc.1` and source `c3b7450191ff812c163c83698018b80e4e7b2597`.
+
+Before/after fingerprints matched for 2 users, 2 Google identities, 2 workspaces,
+3 credentials, 1 node ownership/policy, 4 jobs, 4 artifacts, 2 checkpoints and
+1 provider connection. No account keys or production test jobs were seeded.
+The existing worker returned online with no active jobs; its saved identity was
+preserved. The paired backup at
+`/opt/the-godfather/state/backups/20261021T213616-685586` passed checksums,
+`pg_restore --list` and artifact gzip validation. Local evidence is
+`.cache/result-actions/upgrade.log` and `postflight.log`.
+
+Fresh public TLS checks downloaded and verified all three new installer hashes,
+confirmed anonymous denial of the new apply/input/begin endpoints and existing
+worker/account APIs, rejected foreign-origin mutation and kept internal health,
+node and administration routes hidden. A fresh Edge context verified the login
+page, pairing sign-in gate and real Google redirect with PKCE and identity-only
+scopes, without browser errors. These checks used the verified deployed host with
+explicit host resolution; no DNS or cloud configuration was changed. Evidence is
+`.cache/result-actions/public-result.json` and `live-browser-result.json`.
+
+The worker installers are now available under **Nodes → Connect a computer**.
+Users install this update once, retain their saved connection, then explicitly
+enable applying reviewed changes for each local project. Existing worker builds
+continue their previous capabilities and cannot receive apply jobs.
 
 Normal owner project acceptance still requires installing the new worker and
 opting in locally. Keep affected files idle during application: editor writes

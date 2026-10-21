@@ -8,12 +8,14 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
-The current result usability update adds accomplishment-first coding results and
+Deployed **0.3.2-rc.1** adds accomplishment-first coding results and
 **Run agent → Preview changes → Apply to my project**. See the
 [result/application guide](docs/operations/results-and-apply.md). Application
 requires the updated worker and explicit local project permission. The versioned
 [result action design](docs/decisions/0018-result-preview-and-actions.md) keeps
 future presentation changes independent of worker builds.
+The [deployment report](docs/operations/results-apply-verification-2026-10-21.md)
+records native installer checks, source CI, data preservation and public checks.
 
 Usability release **0.3.1-rc.3** adds account API key entry with
 provider-managed billing, local coding-project setup and tray/window improvements.
@@ -29,7 +31,7 @@ The normal worker is a tray app with automatic browser pairing, saved OS credent
 and outbound HTTPS. Tailscale is optional. Open
 [Command Center](https://app.the-godfather.ai) → **Nodes → Connect a computer**
 for Windows, Apple silicon and Intel Mac downloads. The updated installers passed
-the [recorded local and native checks](docs/operations/coding-account-verification-2026-10-21.md).
+the [recorded local and native checks](docs/operations/results-apply-verification-2026-10-21.md).
 The [reconnection report](docs/operations/worker-reconnection-2026-10-21.md) records
 coordinator activation and public checks. Publisher signing and physical recipient
 acceptance remain pending; the Windows/Mac installers are unsigned/ad-hoc signed
