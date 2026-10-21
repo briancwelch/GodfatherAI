@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current assignment: Phase 12 images, analytics and reporting.** See the
+**Current release: 0.4.0-rc.3 — Phase 12 images, analytics and reporting.** See the
 [Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
 bounded dataset uploads, deterministic calculations and downloadable reports.
 No real dataset or paid image call is authorized; live customer acceptance remains
@@ -14,15 +14,15 @@ Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is pr
 ## Start here
 
 **Consigliere** is the new name of The Godfather AI desktop worker. The current
-UI update adds 25-item AJAX pages, tabbed administration and job diagnostics,
-neutral dark surfaces and replacement installers. See the
+UI update adds normal window resizing, an embedded Projects tab, a compact
+navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Command Center **0.3.3-rc.3** and Consigliere **0.3.3-rc.2** are deployed;
-see the [verification report](docs/operations/consigliere-verification-2026-10-21.md).
+configured. Command Center and Consigliere **0.4.0-rc.3** are deployed;
+see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
-Deployed **0.3.2-rc.1** adds accomplishment-first coding results and
+Earlier release **0.3.2-rc.1** added accomplishment-first coding results and
 **Run agent → Preview changes → Apply to my project**. See the
 [result/application guide](docs/operations/results-and-apply.md). Application
 requires the updated worker and explicit local project permission. The versioned
@@ -45,9 +45,9 @@ The normal worker is a tray app with automatic browser pairing, saved OS credent
 and outbound HTTPS. Tailscale is optional. Open
 [Command Center](https://app.the-godfather.ai) → **Nodes → Connect a computer**
 for Windows, Apple silicon and Intel Mac downloads. The updated installers passed
-the [recorded local and native checks](docs/operations/results-apply-verification-2026-10-21.md).
-The [reconnection report](docs/operations/worker-reconnection-2026-10-21.md) records
-coordinator activation and public checks. Publisher signing and physical recipient
+the [recorded local and native checks](docs/operations/phase-12-verification-2026-10-21.md).
+That report also records coordinator activation and public checks.
+Publisher signing and physical recipient
 acceptance remain pending; the Windows/Mac installers are unsigned/ad-hoc signed
 candidates.
 

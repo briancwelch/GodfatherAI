@@ -147,7 +147,8 @@ real sandbox test using `GODFATHER_CODING_TEST_IMAGE` set to an **existing** loc
 image digest. Integration tests cover prefix recovery, stale fencing, restart,
 download authorization, input contracts and withdrawn node-owner permission.
 
-Deployment and actual executed results are recorded separately after validation.
+The deployed 0.4.0-rc.3 release and actual executed results are recorded in the
+[verification report](phase-12-verification-2026-10-21.md).
 Real customer analytics/reporting acceptance awaits an owner-submitted authorized
 dataset. No fictional production records or paid/live image calls may be created
 to manufacture acceptance. Cross-platform packaging is evidence of native builds,
