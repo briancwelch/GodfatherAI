@@ -4,7 +4,7 @@ import json
 import plistlib
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from godfather_worker import tailscale, windows_setup
@@ -51,6 +51,31 @@ def test_windows_running_app_blocks_upgrade(
         windows_setup.install(
             payload(tmp_path / "new", "0.3.3-rc.1"), tmp_path / "local", tmp_path / "programs"
         )
+
+
+@pytest.mark.parametrize("registered", ["owned", "unrelated", "absent"])
+def test_upgrade_preserves_existing_startup_consent(
+    registered: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    registry = MagicMock()
+    base = tmp_path / "The Godfather/Desktop Worker"
+    old = (
+        base / "versions/0.3.2-rc.1/godfather-worker.exe"
+        if registered == "owned"
+        else tmp_path / "other.exe"
+    )
+    registry.QueryValueEx.return_value = (f'"{old}" --login', 1)
+    if registered == "absent":
+        registry.QueryValueEx.side_effect = FileNotFoundError
+    monkeypatch.setattr(
+        "godfather_worker.windows_setup.importlib.import_module", lambda _: registry
+    )
+    replacement = base / "app/consigliere.exe"
+    windows_setup.update_startup(base, replacement)
+    if registered == "owned":
+        assert registry.SetValueEx.call_args.args[-1] == f'"{replacement}" --login'
+    else:
+        registry.SetValueEx.assert_not_called()
 
 
 def test_windows_unknown_legacy_folder_is_never_deleted(tmp_path: Path) -> None:

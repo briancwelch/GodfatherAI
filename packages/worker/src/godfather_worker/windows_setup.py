@@ -1,5 +1,6 @@
 """Per-user desktop setup. Copies only bundled application files, never credentials."""
 
+import importlib
 import json
 import os
 import shutil
@@ -57,21 +58,21 @@ def install(payload: Path, local: Path, programs: Path) -> Path:
 
 
 def update_startup(base: Path, executable: Path) -> None:
-    import winreg
+    registry = importlib.import_module("winreg")
 
-    with winreg.CreateKey(
-        winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"
+    with registry.CreateKey(
+        registry.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"
     ) as key:
         try:
-            value, _ = winreg.QueryValueEx(key, "The Godfather Worker")
+            value, _ = registry.QueryValueEx(key, "The Godfather Worker")
         except FileNotFoundError:
             return
         # Preserve the user's existing opt-in; never add autostart during installation.
         if isinstance(value, str) and value.startswith('"'):
             old = Path(value.split('"')[1])
             if old.resolve().is_relative_to(base.resolve()):
-                winreg.SetValueEx(
-                    key, "The Godfather Worker", 0, winreg.REG_SZ, f'"{executable}" --login'
+                registry.SetValueEx(
+                    key, "The Godfather Worker", 0, registry.REG_SZ, f'"{executable}" --login'
                 )
 
 
