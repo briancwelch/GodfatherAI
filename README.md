@@ -14,7 +14,8 @@ neutral dark surfaces and replacement installers. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Release verification is recorded separately after activation.
+configured. Command Center **0.3.3-rc.3** and Consigliere **0.3.3-rc.2** are deployed;
+see the [verification report](docs/operations/consigliere-verification-2026-10-21.md).
 
 Deployed **0.3.2-rc.1** adds accomplishment-first coding results and
 **Run agent → Preview changes → Apply to my project**. See the
