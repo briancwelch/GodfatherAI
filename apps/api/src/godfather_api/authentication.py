@@ -256,9 +256,25 @@ def onboard(
         # explicitly bind its UUID to a verified Google subject with the offline CLI.
         if session.scalar(select(User.id).where(func.lower(User.email) == email.lower())):
             raise ValueError("Identity refused")
-        invitation = (
-            session.get(Invitation, invitation_id, with_for_update=True) if invitation_id else None
-        )
+        if invitation_id:
+            invitation = session.get(Invitation, invitation_id, with_for_update=True)
+        else:
+            # A verified Google email may redeem its explicit administrator grant.
+            # Never guess between conflicting pending invitations or link old users.
+            pending = list(
+                session.scalars(
+                    select(Invitation)
+                    .where(
+                        func.lower(Invitation.email) == email.lower(),
+                        Invitation.revoked.is_(False),
+                        Invitation.used_by.is_(None),
+                        Invitation.expires_at > datetime.now(UTC),
+                    )
+                    .limit(2)
+                    .with_for_update()
+                )
+            )
+            invitation = pending[0] if len(pending) == 1 else None
         bootstrap_state = session.get(AdministratorBootstrap, 1, with_for_update=True)
         if bootstrap_state is None:
             # Missing durable state is never permission to bootstrap again.

@@ -59,10 +59,12 @@ const wait = async (predicate, timeout = 180000) => {
         throw e;
       });
       await page.goto(origin);
-      if (invitation)
+      if (invitation) {
         await page
-          .getByLabel("Invitation token (first sign-in only)")
-          .fill(invitation);
+          .getByText("Have an invitation code?", { exact: true })
+          .click();
+        await page.getByLabel("Invitation token (optional)").fill(invitation);
+      }
       await page.getByRole("button", { name: "Continue with Google" }).click();
       if (subject !== "outsider-sub") {
         try {
@@ -117,7 +119,8 @@ const wait = async (predicate, timeout = 180000) => {
       email: "second@example.invalid",
       roles: ["platform_admin"],
     });
-    const second = await login("second-sub", invite2.invitation_token);
+    assert.equal(invite2.delivery, "manual");
+    const second = await login("second-sub");
     const secondUser = await api(second.context, "auth/me");
     assert.deepEqual(secondUser.permissions, account.permissions);
     const invite3 = await api(first.context, "administration/invitations", {

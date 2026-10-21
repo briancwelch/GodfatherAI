@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import func, or_, select, text, update
 
 from godfather_api.agents import manage_workspace
 from godfather_api.authentication import (
@@ -159,6 +159,21 @@ def invitations(
 def invite(payload: InviteCreate, request: Request, session: SessionDep) -> dict[str, object]:
     actor = authenticate(request, session, "human")
     require_permission(session, actor.owner_id, "platform.manage")
+    # Keep code-free activation unambiguous, including simultaneous admin requests.
+    session.execute(text("SELECT pg_advisory_xact_lock(909001)"))
+    if session.scalar(
+        select(Invitation.id).where(
+            func.lower(Invitation.email) == payload.email.lower(),
+            Invitation.revoked.is_(False),
+            Invitation.used_by.is_(None),
+            Invitation.expires_at > datetime.now(UTC),
+        )
+    ):
+        raise HTTPException(
+            409,
+            "An active invitation already exists. Share its sign-in instructions "
+            "or revoke it before creating another.",
+        )
     secret = secrets.token_urlsafe(32)
     row = Invitation(
         actor_id=actor.owner_id,
@@ -171,7 +186,7 @@ def invite(payload: InviteCreate, request: Request, session: SessionDep) -> dict
     session.flush()
     audit(session, "invitation_created", actor.owner_id, row.id)
     # One-time delivery only. Never included in list responses or audit details.
-    return {**invitation_data(row), "invitation_token": secret}
+    return {**invitation_data(row), "invitation_token": secret, "delivery": "manual"}
 
 
 @router.post("/invitations/{invitation_id}/revoke")

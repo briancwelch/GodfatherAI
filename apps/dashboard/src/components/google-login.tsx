@@ -41,29 +41,33 @@ export function GoogleLogin({
     <section className="panel connect-panel">
       <h2>Sign in to The Godfather</h2>
       <p>
-        Use your invited Google account. A Google account alone does not grant
-        platform access.
+        Continue with the exact Google account email your administrator invited.
+        No invitation code is needed. A Google account or Tailscale invitation
+        alone does not grant platform access.
       </p>
       {error && (
         <p role="alert">
           {error === "unavailable"
             ? "Google Sign-In is unavailable or not configured."
             : error === "denied"
-              ? "Sign-in was not authorized. Check your invitation or contact an administrator."
+              ? "Sign-in was not authorized. Choose the exact invited Google email. Ask your administrator to check that one invitation is active and unexpired."
               : "Sign in again. Your session may have expired or been revoked."}
         </p>
       )}
       {failure && <p role="alert">{failure}</p>}
       <form onSubmit={start} action="/api/auth/start" method="post">
-        <label>
-          Invitation token (first sign-in only)
-          <input
-            name="invitation"
-            type="password"
-            autoComplete="off"
-            maxLength={43}
-          />
-        </label>
+        <details>
+          <summary>Have an invitation code?</summary>
+          <label>
+            Invitation token (optional)
+            <input
+              name="invitation"
+              type="password"
+              autoComplete="off"
+              maxLength={43}
+            />
+          </label>
+        </details>
         <button className="action" type="submit" disabled={busy}>
           {busy ? "Connecting…" : "Continue with Google"}
         </button>

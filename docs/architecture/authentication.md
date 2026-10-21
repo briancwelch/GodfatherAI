@@ -53,10 +53,15 @@ Protected API responses and the dashboard bridge use `Cache-Control: no-store`.
 ## Invitations and existing identities
 
 A valid Google account alone grants nothing. Administrators create an email-bound,
-time-limited invitation containing initial roles. A random token is returned once;
-only its digest is stored. Administrators deliver it through an approved private
-channel; this phase sends no messages automatically. Activation requires a verified
-Google email matching the invitation, consumes it under a database lock and binds
+time-limited invitation containing initial roles. No email is sent automatically;
+the administrator copies sign-in instructions from the invitation row and shares
+them privately. A first-time user selects Continue with Google without a code.
+After token verification, exactly one active, unused invitation for that verified
+email authorizes activation. Duplicate pending grants fail closed; new duplicate
+creation is refused. A legacy random token remains an optional compatible route;
+only its digest is stored, and an invalid supplied token never falls back to email.
+Activation requires a verified Google email matching the invitation, consumes it
+under a database lock and binds
 the new UUID to `sub`. Expired/revoked/used invitations cannot activate another user.
 An invitation never changes the roles of an existing linked account.
 

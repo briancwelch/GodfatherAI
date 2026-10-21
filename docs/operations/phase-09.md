@@ -120,9 +120,12 @@ origin and API URL and avoid running two dashboards on port 3000.
 ## Invitations, administration and recovery
 
 In **Account / Administration**, create an invitation for the second founder's
-Google email with role **platform administrator**. Deliver the one-time invitation
-token privately. They enter it in the first-login form and authenticate with their
-own Google account. Both receive identical platform privileges. Future invitations
+Google email with role **platform administrator**. No email is sent automatically.
+Use **Copy sign-in instructions** on the invitation row and share them privately.
+The recipient opens the Command Center and selects **Continue with Google** using
+the exact invited Google email; no code is required. Exactly one active, unused,
+unexpired invitation must match the verified email. Tailscale membership and Google
+OAuth test-user settings are separate. Both receive identical platform privileges. Future invitations
 can grant multiple contributor/member/administrator roles without account-count
 or location limits. Invitations expire in 1–168 hours and can be revoked. Only
 token digests appear in the database; lists/audit never return the original token.

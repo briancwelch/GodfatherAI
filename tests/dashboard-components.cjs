@@ -143,8 +143,28 @@ test("Google sign-in has invitation-only onboarding and truthful unavailable sta
   );
   assert.match(html, /Continue with Google/);
   assert.match(html, /Invitation token/);
+  assert.match(html, /No invitation code is needed/);
+  assert.match(html, /Tailscale invitation/);
   assert.match(html, /unavailable or not configured/);
   assert.ok(!html.includes("Administrator credential"));
+});
+
+test("invitation delivery describes manual sharing and provides usable instructions", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(administration.InvitationDelivery, {
+      invitation: {
+        id: "fixture",
+        email: "invited@example.invalid",
+        roles: ["member"],
+        expires_at: "2099-01-01T00:00:00Z",
+        revoked: false,
+        used_by: null,
+      },
+    }),
+  );
+  assert.match(html, /No email sent/);
+  assert.match(html, /Copy sign-in instructions/);
+  assert.ok(!html.includes("invitation_token"));
 });
 
 test("administration renders backend account identity and hides platform controls for contributors", () => {

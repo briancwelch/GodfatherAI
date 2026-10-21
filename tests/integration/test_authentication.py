@@ -487,6 +487,161 @@ def test_invitations_expiration_revocation_reuse_and_email_binding(
     assert browser.get("/api/v1/auth/me").status_code == 401
 
 
+def test_verified_invitee_signs_in_without_code_and_keeps_subject_identity(
+    auth: AuthHarness,
+) -> None:
+    auth.login(auth.client)
+    response = auth.post(
+        auth.client,
+        "administration/invitations",
+        {
+            "email": "second@example.invalid",
+            "roles": ["platform_admin"],
+        },
+    )
+    assert response.status_code == 201 and response.json()["delivery"] == "manual"
+    invitation_id = UUID(response.json()["id"])
+    browser = auth.browser()
+    assert (
+        auth.login(browser, "second-sub", "SECOND@example.invalid")
+        .headers["location"]
+        .endswith("/")
+    )
+    account = browser.get("/api/v1/auth/me").json()
+    assert account["roles"] == ["platform_admin"]
+    with auth.database.sessions() as session:
+        invitation = session.get(Invitation, invitation_id)
+        assert invitation is not None and str(invitation.used_by) == account["id"]
+    # A used grant cannot bind another subject, and an existing identity can return.
+    other = auth.browser()
+    assert (
+        auth.login(other, "different-sub", "second@example.invalid")
+        .headers["location"]
+        .endswith("?auth=denied")
+    )
+    assert (
+        auth.login(browser, "second-sub", "second@example.invalid")
+        .headers["location"]
+        .endswith("/")
+    )
+    assert browser.get("/api/v1/auth/me").json()["id"] == account["id"]
+
+
+@pytest.mark.parametrize(
+    "mode", ["expired", "revoked", "used", "wrong_email", "unverified", "ambiguous"]
+)
+def test_code_free_login_still_requires_one_active_matching_verified_invitation(
+    auth: AuthHarness, mode: str
+) -> None:
+    auth.login(auth.client)
+    token = auth.invite("invited@example.invalid", ["member"])
+    with auth.database.sessions.begin() as session:
+        invitation = session.scalar(
+            select(Invitation).where(Invitation.token_hash == token_digest(token))
+        )
+        assert invitation is not None
+        if mode == "expired":
+            invitation.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        elif mode == "revoked":
+            invitation.revoked = True
+        elif mode == "used":
+            invitation.used_by = session.scalar(select(User.id))
+        elif mode == "ambiguous":
+            session.add(
+                Invitation(
+                    actor_id=invitation.actor_id,
+                    email=invitation.email,
+                    roles=["platform_admin"],
+                    token_hash=token_digest("another-fixture-token"),
+                    expires_at=invitation.expires_at,
+                )
+            )
+    browser = auth.browser()
+    parameters = auth.begin_login(
+        browser,
+        "new-sub",
+        "wrong@example.invalid" if mode == "wrong_email" else "invited@example.invalid",
+    )
+    if mode == "unverified":
+        auth.provider.codes[parameters["code"]]["email_verified"] = False
+    response = browser.get("/api/v1/auth/callback", params=parameters, follow_redirects=False)
+    assert response.headers["location"].endswith("?auth=denied")
+    assert browser.get("/api/v1/auth/me").status_code == 401
+    with auth.database.sessions() as session:
+        assert (
+            session.scalar(select(GoogleIdentity).where(GoogleIdentity.subject == "new-sub"))
+            is None
+        )
+
+
+def test_duplicate_pending_invitation_refused_but_revoked_one_can_be_replaced(
+    auth: AuthHarness,
+) -> None:
+    auth.login(auth.client)
+    first = auth.post(
+        auth.client,
+        "administration/invitations",
+        {"email": "second@example.invalid", "roles": ["member"]},
+    )
+    duplicate = auth.post(
+        auth.client,
+        "administration/invitations",
+        {"email": "SECOND@example.invalid", "roles": ["platform_admin"]},
+    )
+    assert duplicate.status_code == 409
+    assert (
+        auth.post(
+            auth.client, f"administration/invitations/{first.json()['id']}/revoke"
+        ).status_code
+        == 200
+    )
+    assert (
+        auth.post(
+            auth.client,
+            "administration/invitations",
+            {"email": "second@example.invalid", "roles": ["platform_admin"]},
+        ).status_code
+        == 201
+    )
+
+
+def test_concurrent_code_free_callbacks_consume_invitation_once(auth: AuthHarness) -> None:
+    auth.login(auth.client)
+    auth.invite("invited@example.invalid", ["member"])
+    barrier = Barrier(2)
+
+    def activate(subject: str) -> str:
+        barrier.wait(timeout=10)
+        try:
+            with auth.database.sessions.begin() as session:
+                user = authentication.onboard(
+                    session,
+                    {"sub": subject, "email": "invited@example.invalid", "email_verified": True},
+                    None,
+                    auth.settings,
+                )
+                return str(user.id)
+        except ValueError:
+            return "denied"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(activate, ["first-invite-sub", "second-invite-sub"]))
+    assert outcomes.count("denied") == 1
+    with auth.database.sessions() as session:
+        invitation = session.scalar(select(Invitation))
+        assert invitation is not None and str(invitation.used_by) in outcomes
+        assert len(session.scalars(select(GoogleIdentity)).all()) == 2
+
+
+def test_invalid_supplied_code_never_falls_back_to_email_grant(auth: AuthHarness) -> None:
+    auth.login(auth.client)
+    auth.invite("invited@example.invalid", ["member"])
+    response = auth.browser().post(
+        "/api/v1/auth/start", json={"invitation": "x" * 43}, headers=ORIGIN, follow_redirects=False
+    )
+    assert response.headers["location"].endswith("?auth=denied")
+
+
 def test_state_browser_binding_expiration_and_replay(auth: AuthHarness) -> None:
     start = auth.client.post("/api/v1/auth/start", json={}, headers=ORIGIN, follow_redirects=False)
     state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]

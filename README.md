@@ -8,6 +8,10 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
+For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
+Invited users select Continue with Google using the exact invited email; no code
+is required. Email delivery is manual, and Tailscale access is separate.
+
 1. Read [AGENTS.md](AGENTS.md) and the [UI/UX specification](docs/design/UI-UX.md).
 2. Follow the [Windows, macOS, and Linux setup guide](docs/operations/setup.md).
 3. Review [Phase 01 validation](docs/operations/phase-01.md) and [Phase 02 setup and results](docs/operations/phase-02.md).

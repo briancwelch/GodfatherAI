@@ -22,6 +22,29 @@ interface Invitation {
   revoked: boolean;
   used_by: string | null;
 }
+export function InvitationDelivery({ invitation }: { invitation: Invitation }) {
+  const [message, setMessage] = useState("");
+  return (
+    <div>
+      <span>No email sent · Share sign-in instructions</span>{" "}
+      <button
+        type="button"
+        onClick={async () => {
+          const instructions = `You are invited to The Godfather. Open ${window.location.origin}/ and select Continue with Google using ${invitation.email}. No invitation code is needed. Accept before ${new Date(invitation.expires_at).toLocaleString()}. Tailscale access is separate.`;
+          try {
+            await navigator.clipboard.writeText(instructions);
+            setMessage("Sign-in instructions copied.");
+          } catch {
+            setMessage(instructions);
+          }
+        }}
+      >
+        Copy sign-in instructions
+      </button>
+      {message && <p role="status">{message}</p>}
+    </div>
+  );
+}
 interface Membership {
   owner_id: string;
   shared: boolean;
@@ -82,6 +105,7 @@ export default function Administration({
   const [tools, setTools] = useState<string[]>([]);
   const [membership, setMembership] = useState<Membership | null>(null);
   const [secret, setSecret] = useState<unknown>(null);
+  const [invited, setInvited] = useState<Invitation | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -149,8 +173,11 @@ export default function Administration({
     setBusy(true);
     setError("");
     setSecret(null);
+    setInvited(null);
     try {
       const result = await call(path, body);
+      if (path === "administration/invitations")
+        setInvited(result as Invitation);
       if (oneTime) setSecret(result);
       await load();
       if (workspace)
@@ -560,19 +587,22 @@ export default function Administration({
           <>
             <section className="panel">
               <h2>Invitations</h2>
+              <p>
+                Create access for an exact Google account email. No email is
+                sent automatically. Share the sign-in instructions; the
+                recipient can select Continue with Google without entering a
+                code. Tailscale invitations are separate from application
+                access.
+              </p>
               <form
                 method="post"
                 onSubmit={(e) => {
                   const f = form(e);
-                  void operate(
-                    "administration/invitations",
-                    {
-                      email: f.get("email"),
-                      roles: f.getAll("roles"),
-                      hours: Number(f.get("hours")),
-                    },
-                    true,
-                  );
+                  void operate("administration/invitations", {
+                    email: f.get("email"),
+                    roles: f.getAll("roles"),
+                    hours: Number(f.get("hours")),
+                  });
                 }}
               >
                 <label>
@@ -595,6 +625,15 @@ export default function Administration({
                   Create invitation
                 </button>
               </form>
+              {invited && (
+                <div role="status">
+                  <p>
+                    Invitation created for {invited.email}. Email delivery is
+                    manual.
+                  </p>
+                  <InvitationDelivery invitation={invited} />
+                </div>
+              )}
               {invitations === null ? (
                 <p>Loading invitations…</p>
               ) : (
@@ -617,6 +656,17 @@ export default function Administration({
                             : new Date(i.expires_at) <= new Date()
                               ? "Expired"
                               : `Expires ${new Date(i.expires_at).toLocaleString()}`,
+                    },
+                    {
+                      label: "Delivery",
+                      cell: (i) =>
+                        !i.revoked &&
+                        !i.used_by &&
+                        new Date(i.expires_at) > new Date() ? (
+                          <InvitationDelivery invitation={i} />
+                        ) : (
+                          "Unavailable"
+                        ),
                     },
                     {
                       label: "Control",
