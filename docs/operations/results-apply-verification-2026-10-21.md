@@ -44,10 +44,38 @@ production coordinator images do not gain Git or execute generated code.
 
 ## Build and deployment status
 
-Native Windows/Apple silicon/Intel Mac packages, coordinator package validation,
-cross-platform CI and authorized production activation are recorded after they
-complete. Preflight confirmed the existing rc.4 target healthy at migration
-`0011_worker_reconnection`, with no active jobs. No schema change is required.
+All three native installers were built from clean source
+`c3b7450191ff812c163c83698018b80e4e7b2597`. Windows temporary install/reinstall,
+packaged Tk/tray and isolated Credential Manager checks passed. Both native Mac
+builds, real Git protection checks, tray/window lifecycle and DMG checks
+[passed on GitHub runners](https://github.com/briancwelch/GodfatherAI/actions/runs/39677909286).
+The existing unsigned/ad-hoc signing status remains; no Developer ID/notarization
+or physical recipient acceptance is claimed.
+
+| Package                                                 | SHA-256                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------ |
+| `godfather-worker-0.3.2-rc.1-windows-x64-setup.exe`     | `4b8acc218b4f85aadae2df7a3a4cbfcfac99b6c1b9478c51e6a088697644722b` |
+| `godfather-worker-0.3.2-rc.1-macos-arm64-installer.dmg` | `1ad1db19fb262593edfefd708225307f776fdfea7e9f1fb8ef60be36325a58d1` |
+| `godfather-worker-0.3.2-rc.1-macos-x64-installer.dmg`   | `4563b2a2ed506c4b1270f8ba81969e1e6c55e20ec36c98e59d3fe037bb60f029` |
+
+The coordinator archive is `godfather-0.3.2-rc.1-linux-amd64.tar.gz`, SHA-256
+`b16324b15b1516b3fc206222a1343545e985eab75986093b566cc78e2d5346a9`.
+It contains those checksum-verified downloads and the same clean source revision.
+Saved-package image/config, migration, health, anonymous-denial, paired
+database/artifact restore and restart checks passed; evidence is
+`.cache/release-tests/189ae42ccd2d/result.json`.
+
+[All source CI jobs passed](https://github.com/briancwelch/GodfatherAI/actions/runs/39677909626),
+including native Python/dashboard matrices and Linux PostgreSQL, worker-process,
+100-job scheduler, inference and interrupted-workflow recovery gates.
+
+Preflight confirmed the existing rc.4 target healthy at migration
+`0011_worker_reconnection`, with no active jobs. Automatic approval review rejected
+transfer because exact destination/payload approval was required. No upload or
+activation occurred from that rejected call. The concrete approval request names
+the existing `root@137.184.227.74` deployment at `/opt/the-godfather`, the verified
+coordinator/worker packages and a read-only preservation-check script. Production
+activation remains pending that approval; all build and source CI gates passed.
 
 Normal owner project acceptance still requires installing the new worker and
 opting in locally. Keep affected files idle during application: editor writes

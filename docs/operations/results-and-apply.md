@@ -45,3 +45,11 @@ that application needs an updated worker and local project permission. Preview,
 summary and report/image/table rendering improvements can subsequently ship as
 Command Center-only changes. New local operations still need matching advertised
 worker support; see [the action design](../decisions/0018-result-preview-and-actions.md).
+
+For operators: the database schema stays at `0011_worker_reconnection`, but
+`result.action` adds a new durable job payload. An older coordinator cannot read
+that payload. Image rollback to rc.4 is only suitable before any result-action
+jobs have been created; afterward use a compatible forward fix or a separately
+reviewed, data-preserving recovery. Matching migration heads alone do not prove
+behavioral rollback compatibility. Never delete action history to make a rollback
+pass.
