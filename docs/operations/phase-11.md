@@ -2,8 +2,10 @@
 
 The user explicitly authorized this assignment, including routine deployment to the
 existing environment. This supersedes earlier planning-only BYOK notes. No frontier
-credentials or billable calls have been authorized or supplied. Production access
-is currently blocked by automatic approval review; live validation is pending.
+credentials or billable calls have been authorized or supplied. The user separately
+approved SSH access and deployment of `0.2.0-rc.4`; the upgrade and preservation
+checks passed. See [deployment verification](phase-11-deployment-2026-10-20.md)
+for executed checks and remaining live coding/provider acceptance.
 
 ## Identity and billing
 

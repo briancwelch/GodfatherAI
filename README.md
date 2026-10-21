@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Routine deployment to the existing environment is authorized by this assignment, but production SSH is currently blocked by automatic approval review. No paid API calls are authorized. The operator reports the existing Command Center and first Windows worker operational; see [first-worker evidence](docs/operations/first-production-worker-2026-10-20.md). Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
+**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Release `0.2.0-rc.4` was deployed with explicit host-access approval; see [deployment verification](docs/operations/phase-11-deployment-2026-10-20.md). No paid API calls are authorized. The existing Windows worker reconnected after the upgrade; live coding acceptance still requires an updated worker with owner-approved repository configuration. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
 
 ## Start here
 

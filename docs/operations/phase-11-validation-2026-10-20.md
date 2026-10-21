@@ -73,11 +73,13 @@ behavior, backups/restores and durable volumes in a separately owned local proje
 Packaging and its generated evidence occur after this source commit; consult those
 manifests/results for the exact artifact identity rather than hardcoding it here.
 
-Automatic approval review rejected even the read-only SSH inspection of the existing
-production Droplet, stating that authorization for that specific private host was not
-explicit in its trusted transcript. No workaround or indirect connection was used.
-Deployment, live version/results/authentication checks and production coding acceptance
-therefore remain pending exact host-access approval.
+Automatic approval review initially rejected production SSH inspection. The user
+then explicitly approved SSH access and deployment of this candidate. Release
+`0.2.0-rc.4` at `538df376740632faf806d8bb6a832c2cd7cdb5ef` was deployed;
+the migration, service health, backup integrity and preservation checks passed.
+The user confirmed the signed-in version and existing results after refresh.
+See [deployment verification](phase-11-deployment-2026-10-20.md) for the exact
+live checks and remaining coding/provider acceptance.
 
 Real OpenAI/Anthropic acceptance requires owner-local API credentials plus explicit
 authorization for billable calls. OS credential-store behavior was mocked, not tested
