@@ -41,6 +41,7 @@ class FileEdit(Contract):
         }
         if (
             value.startswith("/")
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)
             or "\\" in value
             or ":" in value
             or any(p in ("", ".", "..") or p.endswith((".", " ")) for p in parts)
@@ -81,6 +82,7 @@ class CodingRepository(Contract):
     id: UUID
     name: str = Field(default="Approved repository", min_length=1, max_length=100)
     path: Path = Field(repr=False)
+    allow_apply: bool = False
     image: str = Field(pattern=r"^(?:[a-zA-Z0-9][a-zA-Z0-9._:/-]*@)?sha256:[0-9a-f]{64}$")
     allowed_user_ids: list[UUID] = Field(min_length=1, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(min_length=1, max_length=128)

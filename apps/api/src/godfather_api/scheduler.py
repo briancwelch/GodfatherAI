@@ -49,6 +49,17 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
     if not allowed(session, job, node):
         return False
 
+    if job.type == "result.action":
+        from godfather_contracts.result_actions import ResultActionInput
+
+        from godfather_api.result_actions import can_apply
+
+        action = ResultActionInput.model_validate(job.input_refs)
+        if node.id != action.node_id or not can_apply(
+            session, node, job.owner_id, job.workspace_id, action.repository_id
+        ):
+            return False
+
     if job.type == "model.install":
         payload = ModelInstallInput.model_validate(job.input_refs)
         if node.id != payload.node_id or node.owner_id != job.owner_id:
@@ -115,7 +126,11 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
 
 def matches(requirements: Requirements, node: NodeView, reserved: list[Requirements]) -> bool:
     """Fail closed on unknown required resources, with conservative reservations."""
-    if requirements.model_selection is not None or INSTALL_RUNTIME in requirements.runtimes:
+    if (
+        requirements.model_selection is not None
+        or INSTALL_RUNTIME in requirements.runtimes
+        or "result-actions-v1" in requirements.runtimes
+    ):
         if node.inference_protocol_version != 1:
             return False
     elif node.job_protocol_version != 1 or node.resources.source != "simulated":
@@ -265,6 +280,8 @@ def finish_failure(
     from godfather_api.workflow_service import end_attempt
 
     selection = Requirements.model_validate(job.requirements).model_selection
+    if job.type == "result.action":
+        retryable = False  # A lost side effect is always inspected, never reassigned/replayed.
     if selection and selection.connection_id:
         retryable = False
     end_attempt(session, job, attempt, code, retryable and job.attempt_count <= job.retry_limit)
@@ -380,6 +397,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                         "inference.text",
                         "agent.workflow",
                         "model.install",
+                        "result.action",
                     )
                 ),
             )

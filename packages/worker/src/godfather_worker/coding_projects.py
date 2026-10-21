@@ -39,9 +39,20 @@ class Projects:
         ttk.Button(frame, text="Remove selected project", command=self.remove).pack(
             anchor="w", pady=6
         )
+        ttk.Button(
+            frame,
+            text="Toggle applying reviewed changes for selected project",
+            command=self.toggle_apply,
+        ).pack(anchor="w", pady=6)
         self.name, self.folder = tk.StringVar(), tk.StringVar()
         self.workspace, self.image = tk.StringVar(), tk.StringVar()
         self.patterns, self.command = tk.StringVar(), tk.StringVar()
+        self.allow_apply = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frame,
+            text="Allow me to apply reviewed changes from Command Center",
+            variable=self.allow_apply,
+        ).pack(anchor="w", pady=6)
         self.status = tk.StringVar(
             value="Loading your workspaces and installed test environments..."
         )
@@ -163,7 +174,19 @@ class Projects:
     def refresh_projects(self) -> None:
         self.projects.delete(0, tk.END)
         for repo in self.app.settings.repositories:
-            self.projects.insert(tk.END, repo.name)
+            self.projects.insert(
+                tk.END, repo.name + (" — Apply enabled" if repo.allow_apply else " — Preview only")
+            )
+
+    def toggle_apply(self) -> None:
+        selected = self.projects.curselection()  # type: ignore[no-untyped-call]
+        if selected and self.editable():
+            repositories = list(self.app.settings.repositories)
+            repo = repositories[selected[0]]
+            repositories[selected[0]] = repo.model_copy(
+                update={"allow_apply": not repo.allow_apply}
+            )
+            self.persist(repositories)
 
     def persist(self, repositories: list[CodingRepository]) -> None:
         if not self.editable():
@@ -200,6 +223,7 @@ class Projects:
                 patterns=self.patterns.get(),
                 test_command=self.command.get(),
             )
+            repository = repository.model_copy(update={"allow_apply": self.allow_apply.get()})
             if any(r.path == repository.path for r in self.app.settings.repositories):
                 raise ValueError(
                     "That project is already configured. Remove it before changing its scope."

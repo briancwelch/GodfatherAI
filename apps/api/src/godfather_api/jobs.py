@@ -203,6 +203,10 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
     ):
         raise HTTPException(403, "Only the job owner or workspace administrator may retry")
     previous = current_attempt(session, job)
+    if job.type == "result.action":
+        raise HTTPException(
+            409, "Result actions cannot be replayed; inspect the project and its apply receipt"
+        )
     selection = view(session, job).requirements.model_selection
     if selection and selection.connection_id:
         raise HTTPException(
@@ -403,6 +407,8 @@ def report(
     elif job.type == "model.install":
         if INSTALL_RUNTIME not in node_view(session, node).runtimes:
             raise HTTPException(403, "Node owner has not enabled model installation")
+    elif job.type == "result.action":
+        pass  # lock_execution rechecks exact node, project, runtime and local owner consent.
     elif (
         node.runtimes.get("job_protocol_version") != 1
         or node.resources.get("source") != "simulated"
@@ -493,6 +499,25 @@ def report(
                 raise HTTPException(
                     422, "Installation result must match the approved model/provider"
                 )
+        elif job.type == "result.action":
+            from godfather_contracts.result_actions import ResultActionInput, ResultActionOutput
+
+            expected_action = ResultActionInput.model_validate(job.input_refs)
+            if (
+                not isinstance(payload.result, ResultActionOutput)
+                or payload.result.source_job_id != expected_action.source_job_id
+            ):
+                raise HTTPException(422, "Result must match the approved action")
+            if (
+                payload.result.state == "applied"
+                and session.scalar(
+                    select(Event.id).where(
+                        Event.job_id == job.id, Event.type == "job.result_action_started"
+                    )
+                )
+                is None
+            ):
+                raise HTTPException(409, "Apply must be authorized before publishing success")
         elif not isinstance(payload.result, SyntheticResult):
             raise HTTPException(422, "A synthetic result is required")
         if attempt.lease_expires_at <= datetime.now(UTC) or attempt.deadline_at <= datetime.now(
@@ -509,7 +534,7 @@ def report(
             raise HTTPException(422, "Running execution and a classified error are required")
         if (
             not inference
-            and job.type not in ("agent.workflow", "model.install")
+            and job.type not in ("agent.workflow", "model.install", "result.action")
             and payload.error_code not in ("transient_error", "permanent_error")
         ):
             raise HTTPException(422, "Synthetic failures require synthetic error codes")

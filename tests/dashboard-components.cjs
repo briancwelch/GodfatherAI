@@ -25,6 +25,174 @@ const login = require("../apps/dashboard/src/components/google-login.tsx");
 const administration = require("../apps/dashboard/src/components/administration.tsx");
 const shell = require("../apps/dashboard/src/components/application-shell.tsx");
 const results = require("../apps/dashboard/src/components/job-result.tsx");
+const outcomes = require("../apps/dashboard/src/lib/job-outcome.ts");
+
+function codingDetail(overrides = {}) {
+  return {
+    can_control: true,
+    job: {
+      id: "coding-fixture",
+      type: "agent.workflow",
+      status: "COMPLETED",
+      input: { instruction: "Fix plugin compatibility" },
+      result: { final_output: { id: "artifact", checksum: "a".repeat(64) } },
+    },
+    output: {
+      output: {
+        summary: "Updated the compatibility check.",
+        diff: "diff --git a/plugin.php b/plugin.php\n--- a/plugin.php\n+++ b/plugin.php\n@@ -1 +1 @@\n-old\n+new\n",
+        files_changed: ["plugin.php"],
+        base_commit: "b".repeat(40),
+        tests: [
+          {
+            command: ["php", "tests.php"],
+            exit_code: 0,
+            output: "12 tests passed",
+          },
+        ],
+      },
+    },
+    context: {
+      agent_name: "Coding Agent",
+      node_name: "My computer",
+      apply_enabled: true,
+    },
+    workflow: { agent_version: 1 },
+    attempts: [],
+    steps: [],
+    ...overrides,
+  };
+}
+
+test("coding outcome leads with accomplishments and verified per-file evidence", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail: codingDetail() }),
+  );
+  assert.ok(
+    html.indexOf("Updated the compatibility check") <
+      html.indexOf("Test evidence and source"),
+  );
+  for (const text of [
+    "Fix plugin compatibility",
+    "Run agent",
+    "Preview changes",
+    "Apply to my project",
+    "plugin.php",
+    "1 test command passed",
+    "1 file changed",
+    "Patch ready for review",
+  ])
+    assert.ok(html.includes(text), text);
+  assert.match(html, /class="diff-added"/);
+  assert.match(html, /class="diff-removed"/);
+  assert.match(html, /disabled="">Apply to my project/);
+  assert.deepEqual(
+    outcomes
+      .fileChanges(codingDetail().output.output.diff, ["plugin.php"])
+      .map(({ path, additions, deletions }) => ({
+        path,
+        additions,
+        deletions,
+      })),
+    [{ path: "plugin.php", additions: 1, deletions: 1 }],
+  );
+});
+
+test("coding results distinguish produced, blocked, uncertain and actually applied changes", () => {
+  for (const [status, state, expected] of [
+    ["COMPLETED", "blocked", "Application blocked"],
+    ["FAILED", null, "Application needs inspection"],
+    ["RUNNING", null, "Applying changes"],
+    ["COMPLETED", "applied", "Changes applied"],
+  ]) {
+    const html = renderToStaticMarkup(
+      React.createElement(results.JobResult, {
+        detail: codingDetail({
+          result_action: {
+            job_id: "action",
+            status,
+            result: state ? { state, summary: "Worker response" } : null,
+          },
+        }),
+      }),
+    );
+    assert.ok(html.includes(expected));
+    if (state !== "applied") assert.ok(!html.includes("Applied to project"));
+  }
+  const partial = codingDetail();
+  partial.job.status = "FAILED";
+  const html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail: partial }),
+  );
+  assert.match(html, /job has not completed/);
+  assert.match(html, /disabled="">Apply to my project/);
+});
+
+test("coding tests are never invented and missing output is not a reference object", () => {
+  const detail = codingDetail();
+  detail.output.output.tests = [];
+  let html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail }),
+  );
+  assert.match(html, /No tests were run/);
+  detail.output.output.tests = [
+    { command: ["test"], exit_code: 1, output: "failure" },
+  ];
+  html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail }),
+  );
+  assert.match(html, /0 test commands passed.*1 failed/);
+  assert.match(html, /Tests need attention/);
+  detail.job.status = "RUNNING";
+  detail.output = {
+    output: null,
+    result: { final_output: { id: "reference-only" } },
+  };
+  html = renderToStaticMarkup(
+    React.createElement(results.JobResult, { detail }),
+  );
+  assert.match(html, /No committed output is available yet/);
+  assert.ok(!html.includes("reference-only"));
+});
+
+test("results retain image, report and analysis renderers without worker coupling", () => {
+  const html = (value) =>
+    renderToStaticMarkup(React.createElement(results.ReadableValue, { value }));
+  assert.match(
+    html({
+      title: "Report",
+      media_type: "application/pdf",
+      base64: "Zml4dHVyZQ==",
+    }),
+    /Download report/,
+  );
+  assert.match(
+    html({ title: "Image", media_type: "image/png", base64: "Zml4dHVyZQ==" }),
+    /alt="Image"/,
+  );
+  assert.match(
+    html({ title: "Analysis", columns: ["Value"], rows: [[42]] }),
+    /<td>42<\/td>/,
+  );
+  assert.match(
+    html({ title: "Chart", series: [{ label: "Sales", value: 42 }] }),
+    /<svg/,
+  );
+  assert.equal(
+    server.allowedPath(
+      "jobs/00000000-0000-0000-0000-000000000000/result-actions",
+      "POST",
+    ),
+    true,
+  );
+  assert.equal(
+    server.allowedPath(
+      "workers/00000000-0000-0000-0000-000000000000/jobs/00000000-0000-0000-0000-000000000000/result-action/begin",
+      "POST",
+    ),
+    false,
+  );
+});
 
 test("account provider bridge allows only scoped account operations", () => {
   assert.equal(server.allowedPath("account/providers", "GET"), true);

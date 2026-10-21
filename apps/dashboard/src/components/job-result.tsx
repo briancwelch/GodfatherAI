@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import rehypeHighlight from "rehype-highlight";
 import type { JobDetail, Json } from "../lib/contracts";
+import { fileChanges } from "../lib/job-outcome";
+import { control } from "../lib/control-client";
 
 function object(value: Json | undefined): Record<string, Json> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -282,12 +284,301 @@ export function ReadableValue({ value }: { value: Json }) {
   );
 }
 
+export function CodingResult({
+  data,
+  detail,
+}: {
+  data: Record<string, Json>;
+  detail: JobDetail;
+}) {
+  const [reviewed, setReviewed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [queued, setQueued] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const files = Array.isArray(data.files_changed)
+    ? data.files_changed.filter((p): p is string => typeof p === "string")
+    : [];
+  const tests = Array.isArray(data.tests) ? data.tests.map(object) : [];
+  const passed = tests.filter((t) => t.exit_code === 0).length;
+  const failed = tests.filter((t) => t.exit_code !== 0).length;
+  const changes = fileChanges(String(data.diff || ""), files);
+  const completed = detail.job.status === "COMPLETED";
+  const action = detail.result_action;
+  const applied =
+    action?.status === "COMPLETED" && object(action.result).state === "applied";
+  const blocked =
+    action?.status === "COMPLETED" && object(action.result).state === "blocked";
+  const uncertain = !!action && ["FAILED", "CANCELLED"].includes(action.status);
+  const pending =
+    (!!queued && action?.job_id !== queued) ||
+    (!!action &&
+      ["PENDING", "ASSIGNED", "RUNNING", "RETRY_WAIT"].includes(action.status));
+  const artifact = object(object(detail.job.result).final_output);
+  const canApply =
+    completed &&
+    detail.context?.apply_enabled !== false &&
+    detail.can_control &&
+    files.length > 0 &&
+    !applied &&
+    !pending &&
+    !uncertain &&
+    typeof artifact.id === "string" &&
+    typeof artifact.checksum === "string";
+  return (
+    <div className="coding-outcome">
+      <ol className="result-workflow" aria-label="Coding workflow">
+        <li data-current={!completed}>1. Run agent</li>
+        <li data-current={completed && !applied}>2. Preview changes</li>
+        <li data-current={applied}>3. Apply to my project</li>
+      </ol>
+      <SafeMarkdown
+        text={String(data.summary || "No result summary was returned.")}
+      />
+      <div className="outcome-facts" aria-label="Verified results">
+        <span className={failed ? "outcome-warning" : ""}>
+          {tests.length
+            ? `${passed} test command${passed === 1 ? "" : "s"} passed${failed ? ` · ${failed} failed` : ""}`
+            : "No tests were run"}
+        </span>
+        <span>
+          {files.length} file{files.length === 1 ? "" : "s"} changed
+        </span>
+        <span>
+          {applied
+            ? "Applied to project"
+            : pending
+              ? "Application in progress"
+              : uncertain
+                ? "Application unconfirmed"
+                : "Patch ready for review"}
+        </span>
+      </div>
+      {failed > 0 && (
+        <p className="notice">
+          Tests need attention. Review the failures before applying this patch.
+        </p>
+      )}
+      {!tests.length && (
+        <p className="notice">
+          This patch is untested. Review it carefully before applying.
+        </p>
+      )}
+      <section aria-label="Preview changes" className="change-preview">
+        <h4>Files changed</h4>
+        {changes.length ? (
+          changes.map((change, index) => (
+            <details
+              className="file-change"
+              key={change.path}
+              open={index === 0}
+            >
+              <summary>
+                <code>{change.path}</code>
+                <span className="diff-count">
+                  <span>+{change.additions}</span> /{" "}
+                  <span>−{change.deletions}</span>
+                </span>
+              </summary>
+              {change.diff ? (
+                <pre
+                  className="patch-preview"
+                  tabIndex={0}
+                  aria-label={`Changes in ${change.path}`}
+                >
+                  <code>
+                    {change.diff.split("\n").map((line, i) => (
+                      <span
+                        key={i}
+                        className={
+                          line.startsWith("+")
+                            ? "diff-added"
+                            : line.startsWith("-")
+                              ? "diff-removed"
+                              : "diff-context"
+                        }
+                      >
+                        {line}
+                        {"\n"}
+                      </span>
+                    ))}
+                  </code>
+                </pre>
+              ) : (
+                <p>
+                  Per-file preview unavailable. Inspect the complete patch below
+                  before applying.
+                </p>
+              )}
+            </details>
+          ))
+        ) : (
+          <p>No file changes were produced.</p>
+        )}
+        <details>
+          <summary>Complete patch</summary>
+          <pre tabIndex={0}>{String(data.diff || "No changes")}</pre>
+        </details>
+        {files.length > 0 && (
+          <DownloadText
+            text={String(data.diff || "")}
+            filename={`job-${detail.job.id}.patch`}
+            label="Download patch"
+          />
+        )}
+      </section>
+      <div className="apply-result">
+        <h4>
+          {applied
+            ? "Changes applied"
+            : pending
+              ? "Applying changes"
+              : blocked
+                ? "Application blocked"
+                : uncertain
+                  ? "Application needs inspection"
+                  : "Apply to my project"}
+        </h4>
+        {action && (
+          <p role="status">
+            {String(
+              object(action.result).summary ||
+                (pending
+                  ? "Waiting for the original computer to check your project and apply the reviewed patch."
+                  : "Completion was not confirmed. Inspect your project and the worker's local apply receipt before taking another action."),
+            )}{" "}
+            <a href={`/jobs/${action.job_id}`}>Application details</a>
+          </p>
+        )}
+        {!applied && !pending && !uncertain && files.length > 0 && (
+          <>
+            <p>
+              The worker checks the original project and stops if an affected
+              file has existing edits or conflicts. Changes stay unstaged. Pause
+              editing affected files while it applies.
+            </p>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={reviewed}
+                onChange={(e) => setReviewed(e.target.checked)}
+              />{" "}
+              I reviewed the changes
+              {failed
+                ? " and the failed test commands"
+                : !tests.length
+                  ? " and understand that no tests were run"
+                  : ""}
+              .
+            </label>
+            <button
+              className="action"
+              disabled={!canApply || !reviewed || busy}
+              onClick={() => setConfirm(true)}
+            >
+              Apply to my project
+            </button>
+            {!detail.can_control && (
+              <p>
+                Only the job and computer owner can approve applying changes.
+              </p>
+            )}
+            {detail.context?.apply_enabled === false && (
+              <p className="notice">{detail.context.apply_reason}</p>
+            )}
+            {confirm && (
+              <div
+                className="apply-confirm"
+                role="group"
+                aria-label="Confirm project changes"
+              >
+                <p>
+                  Apply this reviewed patch on{" "}
+                  {detail.context?.node_name || "the original worker"}? Your
+                  worker needs local project permission. Existing edits in
+                  affected files will block application.
+                </p>
+                <div className="actions">
+                  <button
+                    className="action"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        const response = await control<{ job_id: string }>(
+                          `jobs/${detail.job.id}/result-actions`,
+                          {
+                            artifact_id: artifact.id,
+                            checksum: artifact.checksum,
+                          },
+                        );
+                        setQueued(response.job_id);
+                        setConfirm(false);
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : "Application was not confirmed. Refresh before trying again.",
+                        );
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    {busy ? "Requesting application…" : "Confirm and apply"}
+                  </button>
+                  <button
+                    className="action secondary"
+                    disabled={busy}
+                    onClick={() => setConfirm(false)}
+                  >
+                    Keep previewing
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <details className="result-evidence">
+        <summary>Test evidence and source</summary>
+        <p>
+          Base commit: <code>{String(data.base_commit || "Unavailable")}</code>
+        </p>
+        {tests.map((t, i) => (
+          <details key={i}>
+            <summary>
+              {t.exit_code === 0 ? "Passed" : "Failed"} ·{" "}
+              {Array.isArray(t.command)
+                ? t.command.join(" ")
+                : "Command unavailable"}{" "}
+              · exit {String(t.exit_code)}
+            </summary>
+            <pre>{String(t.output || "No output")}</pre>
+          </details>
+        ))}
+        {Array.isArray(data.search_matches) &&
+          data.search_matches.length > 0 && (
+            <details>
+              <summary>Code search matches</summary>
+              <ReadableValue value={data.search_matches} />
+            </details>
+          )}
+      </details>
+    </div>
+  );
+}
+
 export function JobResult({ detail }: { detail: JobDetail }) {
   const [message, setMessage] = useState("");
   const snapshot = object(detail.output);
   const result = object(detail.job.result);
   const selection = object(detail.job.requirements?.model_selection);
-  const final = snapshot.output ?? snapshot.result ?? detail.job.result;
+  const final = detail.workflow
+    ? snapshot.output
+    : (snapshot.output ?? snapshot.result ?? detail.job.result);
   const data =
     detail.job.type === "inference.text"
       ? snapshot.valid
@@ -313,9 +604,18 @@ export function JobResult({ detail }: { detail: JobDetail }) {
       : usage.duration_seconds;
   const artifact = object(result.final_output);
   const hasOutput = data !== null && data !== undefined && data !== "";
+  const coding =
+    typeof object(data).diff === "string" &&
+    typeof object(data).summary === "string";
+  const instruction = detail.job.input?.instruction ?? detail.job.input?.prompt;
   return (
     <section className="job-result" aria-label="Task result">
       <h3>{completed ? "Result" : "Output so far"}</h3>
+      {typeof instruction === "string" && (
+        <p className="result-task">
+          <strong>Task:</strong> {instruction}
+        </p>
+      )}
       {detail.workflow?.status === "REVIEW_REQUIRED" && (
         <p className="notice">
           Recovery requires review:{" "}
@@ -324,18 +624,6 @@ export function JobResult({ detail }: { detail: JobDetail }) {
           . Commands are not replayed automatically.
         </p>
       )}
-      <p className="muted">
-        {completed
-          ? "Completed"
-          : "Partial or unavailable; the job has not completed"}
-        {typeof deployment.identifier === "string"
-          ? ` · Model: ${deployment.identifier}`
-          : ""}
-        {detail.workflow ? ` · Agent v${detail.workflow.agent_version}` : ""}
-        {typeof duration === "number"
-          ? ` · ${duration.toFixed(2)} seconds`
-          : ""}
-      </p>
       {typeof snapshot.output_error === "string" && (
         <p role="alert">{snapshot.output_error}</p>
       )}
@@ -357,7 +645,20 @@ export function JobResult({ detail }: { detail: JobDetail }) {
           <ReadableValue value={result.tool_calls} />
         </>
       )}
-      {hasOutput ? (
+      {detail.job.type === "result.action" && hasOutput ? (
+        <>
+          <p>
+            {String(object(data).summary || "Application result unavailable")}
+          </p>
+          <p>
+            <a href={`/jobs/${String(detail.job.input?.source_job_id || "")}`}>
+              Return to coding result
+            </a>
+          </p>
+        </>
+      ) : coding ? (
+        <CodingResult key={detail.job.id} data={object(data)} detail={detail} />
+      ) : hasOutput ? (
         <ReadableValue value={data} />
       ) : (
         <p>
@@ -368,6 +669,20 @@ export function JobResult({ detail }: { detail: JobDetail }) {
               : "No committed output is available yet."}
         </p>
       )}
+      <p className="muted result-provenance">
+        {detail.context?.agent_name ? `${detail.context.agent_name} · ` : ""}
+        {completed
+          ? "Completed"
+          : "Partial or unavailable; the job has not completed"}
+        {typeof deployment.identifier === "string"
+          ? ` · Model: ${deployment.identifier}`
+          : ""}
+        {detail.workflow ? ` · Agent v${detail.workflow.agent_version}` : ""}
+        {typeof duration === "number"
+          ? ` · ${duration.toFixed(2)} seconds`
+          : ""}
+        {detail.context?.node_name ? ` · ${detail.context.node_name}` : ""}
+      </p>
       {hasOutput && (
         <div className="actions">
           <button

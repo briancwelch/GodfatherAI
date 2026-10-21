@@ -759,7 +759,11 @@ function JobInspection({
   const [error, setError] = useState("");
   return (
     <>
-      <h2>Job {short(j.id)}</h2>
+      <h2>
+        {detail.context?.agent_name ||
+          (j.type === "result.action" ? "Apply changes" : "Agent task")}{" "}
+        · Job {short(j.id)}
+      </h2>
       <div className="state-strip">
         <StatusBadge value={j.status} />
         {detail.workflow && detail.workflow.status !== j.status && (
@@ -835,7 +839,7 @@ function JobInspection({
         )}
       </div>
       <details className="technical-details">
-        <summary>Technical Details</summary>
+        <summary>Technical details: logs, attempts, checkpoints</summary>
         <JsonDetails
           label="Execution requirements and retry policy"
           value={{ requirements: j.requirements, retry: j.retry }}

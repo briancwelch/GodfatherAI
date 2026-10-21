@@ -411,7 +411,62 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
     agent = session.get(Agent, job.agent_id) if job.agent_id else None
     workspace = session.get(Workspace, job.workspace_id)
     assert workspace is not None
+    attempt = jobs.current_attempt(session, job)
+    visible_node = (
+        session.scalar(
+            select(Node).where(Node.id == attempt.node_id, node_visibility(session, actor.owner_id))
+        )
+        if attempt
+        else None
+    )
+    action = session.scalar(
+        select(Job)
+        .where(Job.type == "result.action", Job.input_refs["source_job_id"].astext == str(job.id))
+        .order_by(Job.created_at.desc(), Job.id.desc())
+        .limit(1)
+    )
+    from godfather_contracts.result_actions import ACTION_RUNTIME, PATCH_RUNTIME, TARGET_PREFIX
+
+    apply_enabled = bool(
+        visible_node
+        and visible_node.owner_id == actor.owner_id
+        and job.owner_id == actor.owner_id
+        and visible_node.state != "disabled"
+        and {
+            ACTION_RUNTIME,
+            PATCH_RUNTIME,
+            TARGET_PREFIX + str(job.input_refs.get("repository_id")),
+        }
+        <= set(node_view(session, visible_node).runtimes)
+    )
     return {
+        "context": {
+            "agent_name": agent.name if agent else None,
+            "workspace_name": workspace.name,
+            "node_name": visible_node.name if visible_node else None,
+            "apply_enabled": apply_enabled,
+            "apply_reason": None
+            if apply_enabled
+            else (
+                "Applying requires the job and computer owner, an updated worker, and local "
+                "project permission. In Coding projects, select the project, enable applying "
+                "reviewed changes, then Resume."
+            ),
+            "coding": bool(
+                agent
+                and any(
+                    s.kind == "coding"
+                    for s in workflow_service.agent_view(agent).definition.workflow.steps
+                )
+            ),
+        },
+        "result_action": {
+            "job_id": str(action.id),
+            "status": action.status,
+            "result": action.result_refs,
+        }
+        if action
+        else None,
         "can_control": job.owner_id == actor.owner_id
         or manages(session, workspace, actor.owner_id),
         "job": jobs.view(session, job).model_dump(mode="json"),

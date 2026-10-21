@@ -8,6 +8,13 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
+The current result usability update adds accomplishment-first coding results and
+**Run agent → Preview changes → Apply to my project**. See the
+[result/application guide](docs/operations/results-and-apply.md). Application
+requires the updated worker and explicit local project permission. The versioned
+[result action design](docs/decisions/0018-result-preview-and-actions.md) keeps
+future presentation changes independent of worker builds.
+
 Usability release **0.3.1-rc.3** adds account API key entry with
 provider-managed billing, local coding-project setup and tray/window improvements.
 See its [verification](docs/operations/coding-account-verification-2026-10-21.md)

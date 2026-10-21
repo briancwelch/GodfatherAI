@@ -17,6 +17,9 @@ RUN mkdir -p /var/lib/godfather/artifacts && chown -R 10001:10001 /var/lib/godfa
 ENV GODFATHER_ARTIFACT_DIRECTORY=/var/lib/godfather/artifacts
 
 FROM base AS development
+# Real patch/conflict tests require Git; production stages never install it.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 RUN uv sync --locked --all-packages
 COPY scripts ./scripts
 COPY tests ./tests

@@ -21,6 +21,7 @@ from godfather_contracts import Heartbeat, Registration, ToolReference
 from godfather_contracts.coding import CODING_RUNTIME, REPOSITORY_PREFIX, CodingRepository
 from godfather_contracts.jobs import JobPoll, PollResponse
 from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
+from godfather_contracts.result_actions import ACTION_RUNTIME, PATCH_RUNTIME, TARGET_PREFIX
 from godfather_model_gateway import ProviderConfig
 from pydantic import ValidationError
 
@@ -30,6 +31,7 @@ from godfather_worker.discovery import discover, discover_resources
 from godfather_worker.inference import discover_models, execute_inference
 from godfather_worker.jobs import execute
 from godfather_worker.model_management import execute_installation
+from godfather_worker.result_actions import execute_action
 from godfather_worker.simulated import profile
 
 logger = logging.getLogger("godfather.worker")
@@ -244,6 +246,13 @@ def main(
                     ]
                 )
             )
+        if any(r.allow_apply for r in repositories):
+            values["runtimes"] = [
+                *values["runtimes"],
+                ACTION_RUNTIME,
+                PATCH_RUNTIME,
+                *(TARGET_PREFIX + str(r.id) for r in repositories if r.allow_apply),
+            ]
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
         registration = Registration.model_validate({**values, "session_id": uuid4()})
@@ -337,6 +346,18 @@ def main(
                                     configs,
                                     args.pause_after_checkpoint,
                                     repositories=repositories,
+                                )
+                            )
+                        elif polled.assignment.job.type == "result.action":
+                            asyncio.run(
+                                execute_action(
+                                    client,
+                                    node_id,
+                                    registration,
+                                    polled.assignment,
+                                    stop,
+                                    repositories,
+                                    result.heartbeat_interval_seconds,
                                 )
                             )
                         elif (

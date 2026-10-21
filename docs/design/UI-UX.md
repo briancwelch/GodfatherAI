@@ -19,6 +19,10 @@ This document governs the design and interaction of the browser-based Command Ce
 6. Performance: minimize unnecessary animation, expensive polling, and dashboard clutter.
 7. Responsive layout: desktop-first for dense administration, graceful narrow-screen behavior.
 8. Security in the UI: clearly show scope, ownership, permissions, and consequences before sensitive actions. Enforce permissions in the backend, never only in the UI.
+9. Accomplishments first. Show what the agent produced and its verified evidence;
+   keep execution logs behind progressive disclosure. Coding follows Run agent →
+   Preview changes → Apply to my project. Producing a patch and applying it are
+   separate, explicitly labeled outcomes.
 
 ## Design system
 - Current authorized desktop direction: navy Core `#14283D` application bar, Ion

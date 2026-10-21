@@ -104,6 +104,7 @@ export function allowedPath(path: string, method: string): boolean {
     `administration/invitations/${uuid}/revoke`,
     `administration/workspaces/${uuid}/(members|policy)`,
     `jobs/${uuid}/(cancel|retry)`,
+    `jobs/${uuid}/result-actions`,
     `nodes/${uuid}/control`,
     `agents/${uuid}/versions/[0-9]+/control`,
     "workflow/jobs",

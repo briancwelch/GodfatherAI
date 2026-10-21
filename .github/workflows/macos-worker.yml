@@ -71,6 +71,7 @@ jobs:
         run: |
           uv run --no-sync ruff check scripts/build_macos_worker.py scripts/check_macos_worker.py tests/test_macos_worker_package.py
           uv run --no-sync pytest tests/test_desktop_worker.py tests/test_simple_onboarding.py tests/test_coding_setup.py tests/test_macos_worker_package.py
+          uv run --no-sync pytest tests/test_result_actions.py tests/test_coding.py
       - name: Native tray and guided window lifecycle
         run: uv run --no-sync python -m scripts.check_desktop_ui
       - name: Build standalone app and DMG using existing packaging

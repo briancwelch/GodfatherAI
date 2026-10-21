@@ -149,6 +149,13 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                         UUID(identity["owner_id"])
                     ]
                     project.projects.selection_set(0)
+                    assert not app.settings.repositories[0].allow_apply
+                    project.toggle_apply()
+                    assert app.settings.repositories[0].allow_apply
+                    project.projects.selection_set(0)
+                    project.toggle_apply()
+                    assert not app.settings.repositories[0].allow_apply
+                    project.projects.selection_set(0)
                     project.remove()
                     assert not app.settings.repositories
                     project.window.destroy()

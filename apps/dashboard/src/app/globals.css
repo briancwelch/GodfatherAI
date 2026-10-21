@@ -1248,10 +1248,20 @@ legend {
 }
 /* Persisted task outputs use the same compact application workspace. */
 .job-result {
+  font-size: 14px;
+  line-height: 1.6;
   padding: 1rem;
   border: 1px solid var(--border, #cbd5e1);
   margin-block: 1rem;
   overflow-wrap: anywhere;
+}
+.job-result h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.job-result h4 {
+  font-size: 15px;
+  font-weight: 600;
 }
 .job-result pre {
   overflow: auto;
@@ -1339,4 +1349,101 @@ legend {
 }
 .hljs-deletion {
   color: #ffa8a8;
+}
+
+.result-task {
+  white-space: pre-wrap;
+  margin-block: 0.8rem;
+}
+.result-workflow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  padding: 10px 0;
+  margin-bottom: 16px;
+  border-block: 1px solid var(--border);
+  list-style: none;
+  color: var(--muted-foreground);
+}
+.result-workflow [data-current="true"] {
+  color: var(--foreground);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: #087f8c;
+  text-underline-offset: 6px;
+}
+.outcome-facts {
+  display: flex;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+  font-weight: 600;
+}
+.outcome-warning {
+  color: var(--foreground);
+  border-bottom: 2px solid #bb7711;
+}
+.change-preview,
+.apply-result,
+.result-evidence {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.file-change {
+  margin-block: 10px;
+  border: 1px solid var(--border);
+}
+.file-change > summary {
+  padding: 10px;
+  cursor: pointer;
+}
+.diff-count {
+  float: right;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.job-result .patch-preview {
+  margin: 0;
+  padding: 10px 0;
+  max-height: 420px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.patch-preview code > span {
+  display: block;
+  min-width: max-content;
+  padding-inline: 12px;
+  height: 1.7em;
+}
+.diff-added {
+  background: #16453a;
+  color: #c4f9d4;
+}
+.diff-removed {
+  background: #542c36;
+  color: #ffd3d7;
+}
+.apply-confirm {
+  border: 1px solid var(--border);
+  background: var(--background);
+  padding: 12px;
+  margin-top: 12px;
+}
+.apply-result .check-label {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  margin-block: 12px;
+}
+.apply-result input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.file-change > summary code {
+  overflow-wrap: anywhere;
+}
+.coding-outcome {
+  min-width: 0;
 }

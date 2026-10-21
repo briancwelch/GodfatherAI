@@ -64,6 +64,7 @@ export interface ModelInfo {
   deployment: Deployment;
 }
 export interface JobInfo {
+  input?: Record<string, Json>;
   id: string;
   owner_id: string;
   workspace_id: string;
@@ -197,6 +198,15 @@ export interface CheckpointInfo {
   artifact: { id: string; checksum: string; size_bytes: number };
 }
 export interface JobDetail {
+  context?: {
+    agent_name: string | null;
+    workspace_name: string;
+    node_name: string | null;
+    coding: boolean;
+    apply_enabled?: boolean;
+    apply_reason?: string | null;
+  };
+  result_action?: { job_id: string; status: string; result: Json } | null;
   can_control: boolean;
   job: JobInfo;
   attempts: AttemptInfo[];
@@ -244,6 +254,7 @@ export function localTime(value: string | null): string {
 export function retryEligible(detail: JobDetail): boolean {
   const last = detail.attempts.at(-1);
   return (
+    detail.job.type !== "result.action" &&
     !(
       detail.job.requirements?.model_selection as
         Record<string, Json> | undefined
