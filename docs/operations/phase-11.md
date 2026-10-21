@@ -11,7 +11,7 @@ for executed checks and remaining live coding/provider acceptance.
 
 **Current usability revision:** the owner subsequently authorized encrypted
 account key entry and provider-managed billing on 2026-10-21. For candidate
-`0.3.1-rc.2`, follow [account connections and project setup](coding-and-account-setup.md).
+`0.3.1-rc.3`, follow [account connections and project setup](coding-and-account-setup.md).
 The local-key commands and spending-policy instructions below document the legacy
 compatible path; they are not required by the new account flow.
 

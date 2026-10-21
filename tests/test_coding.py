@@ -109,6 +109,25 @@ def test_code_search_returns_bounded_literal_matches_from_the_snapshot() -> None
     assert len(search_files({"many.py": "needle\n" * 1000}, ["needle"])) == 32
 
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="Requires local Git")
+def test_approved_project_handles_git_ownership_without_global_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = repository(tmp_path)
+    target = tmp_path / "snapshot"
+    target.mkdir()
+    spawn = asyncio.create_subprocess_exec
+
+    async def different_owner(*args: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        kwargs["env"]["GIT_TEST_ASSUME_DIFFERENT_OWNER"] = "1"
+        return await spawn(*args, **kwargs)
+
+    monkeypatch.setattr("godfather_worker.coding.asyncio.create_subprocess_exec", different_owner)
+    revision, files = asyncio.run(snapshot(config, target))
+    assert len(revision) == 40 and set(files) == {"calc.py", "test_calc.py"}
+    assert not (target / ".git").exists() and not (target / ".env").exists()
+
+
 def test_real_container_has_no_host_secrets_or_writable_host_mount(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

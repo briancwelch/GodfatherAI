@@ -37,6 +37,8 @@ async def command(
             args[0],
             "--no-optional-locks",
             "-c",
+            f"safe.directory={cwd.resolve().as_posix()}",
+            "-c",
             "protocol.allow=never",
             "-c",
             "core.fsmonitor=false",

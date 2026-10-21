@@ -1,6 +1,6 @@
 # Coding projects and account API connections
 
-Candidate **0.3.1-rc.2** requires its coordinator migration and an updated worker.
+Candidate **0.3.1-rc.3** requires its coordinator migration and an updated worker.
 The deployed `0.3.0-rc.4` app lacks these settings. Build and activation status are
 recorded separately in the candidate verification report.
 
@@ -44,6 +44,10 @@ tools and paths. Coding requires existing Git, a committed repository and local
 Docker. Its selected Linux image must contain `/bin/sh`, `cp`, test tools and
 offline dependencies. Merely connecting a worker requires none of those tools.
 Setup does not install them or execute commands on the host.
+
+Git trust is limited to the approved project directory for each worker Git
+command. No global Git setting is changed. Network fetches, optional locks and
+filesystem-monitor commands remain disabled.
 
 Test commands become literal arguments in the existing isolated environment.
 Choose a focused scope; snapshot limits and secret/path exclusions remain.
