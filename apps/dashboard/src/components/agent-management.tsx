@@ -384,6 +384,7 @@ function AgentEditor({
     models.find((m) => modelKey(m) === modelChoice)?.deployment.connection_id ||
     (modelChoice === existingModel && existingSelection?.connection_id)
   );
+  const chosenOwner = models.find((m) => modelKey(m) === modelChoice)?.owner_id;
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -583,20 +584,18 @@ function AgentEditor({
                 to request paid API inference and send task data to the selected
                 provider. Each run requires confirmation.
               </label>
-              <label>
-                Owner-issued spending grant (for a shared connection)
-                <input
-                  name="grant"
-                  defaultValue={String(existingSelection?.grant_id || "")}
-                />
-              </label>
+              {chosenOwner && chosenOwner !== data.actor_id && (
+                <label>
+                  Owner-issued access grant (shared connection)
+                  <input
+                    name="grant"
+                    defaultValue={String(existingSelection?.grant_id || "")}
+                  />
+                </label>
+              )}
               <p>
-                Usage is charged to the selected connection owner, within their
-                grants and safeguards.{" "}
-                <a href="/providers">
-                  Inspect provider policies and estimated costs
-                </a>
-                .
+                Billing and spending limits are managed in the provider account.{" "}
+                <a href="/providers">Manage AI connections</a>.
               </p>
             </>
           )}

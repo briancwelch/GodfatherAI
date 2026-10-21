@@ -1,6 +1,6 @@
 # Coding projects and account API connections
 
-Candidate **0.3.1-rc.1** requires its coordinator migration and an updated worker.
+Candidate **0.3.1-rc.2** requires its coordinator migration and an updated worker.
 The deployed `0.3.0-rc.4` app lacks these settings. Build and activation status are
 recorded separately in the candidate verification report.
 

@@ -24,7 +24,7 @@ The app does not install Ollama or download models. With local AI off, the node
 connects for availability only. Paid AI, repository access and other tools retain
 their separate owner-controlled configuration and permissions.
 
-Candidate `0.3.1-rc.1` adds graphical project setup and encrypted account API
+Candidate `0.3.1-rc.2` adds graphical project setup and encrypted account API
 connections; see [coding and account setup](coding-and-account-setup.md). Its new
 features require both the updated coordinator and worker before use.
 

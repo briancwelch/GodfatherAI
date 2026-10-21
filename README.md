@@ -8,7 +8,7 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
-Next usability candidate **0.3.1-rc.1** adds account API key entry with
+Next usability candidate **0.3.1-rc.2** adds account API key entry with
 provider-managed billing, local coding-project setup and tray/window improvements.
 See its [verification](docs/operations/coding-account-verification-2026-10-21.md)
 and [setup guide](docs/operations/coding-and-account-setup.md). It requires a new

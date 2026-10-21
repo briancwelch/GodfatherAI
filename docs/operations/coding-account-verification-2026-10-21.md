@@ -1,6 +1,6 @@
 # Coding/account usability verification — 2026-10-21
 
-Candidate **0.3.1-rc.1** adds account API key entry, project setup, responsive native
+Candidate **0.3.1-rc.2** adds account API key entry, project setup, responsive native
 windows, default tray restore and corrected download layout. It is not deployed
 by committing this report. Production remains on `0.3.0-rc.4` until activation.
 
