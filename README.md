@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status, with the authorized install-and-connect usability milestone.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate worker-local OpenAI/Anthropic API keys authorize paid inference. Release `0.3.0-rc.4` is deployed; see [deployment verification](docs/operations/simple-onboarding-deployment-2026-10-21.md). It retains the earlier [invitation onboarding repair](docs/operations/onboarding-repair-2026-10-20.md). No paid API calls are authorized. The existing Windows worker reconnected after the upgrade; live coding acceptance still requires an updated worker with owner-approved repository configuration. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
+**Current assignment: Phase 11 coding agents, independent frontier-provider connections, readable results and release status, with the authorized install-and-connect usability milestone.** See the [Phase 11 runbook](docs/operations/phase-11.md). Google Sign-In authenticates users; separate OpenAI/Anthropic API connections authorize paid inference. Account keys are encrypted and require explicit owned-computer grants plus local worker opt-in. Providers manage billing. No paid API calls are authorized by this release work. Live coding and account-key acceptance require the owner to configure their project/key. Mac signing and physical recipient acceptance remain pending; see the [Mac user guide](packages/worker/macos/README.md).
 
 ## Start here
 
@@ -12,22 +12,21 @@ Usability release **0.3.1-rc.3** adds account API key entry with
 provider-managed billing, local coding-project setup and tray/window improvements.
 See its [verification](docs/operations/coding-account-verification-2026-10-21.md)
 and [setup guide](docs/operations/coding-and-account-setup.md). It requires a new
-coordinator migration and worker build; it is deployed. The next coordinator
-candidate **0.3.1-rc.4** adds explicit reconnection under the same computer name
+coordinator migration and worker build; it is deployed. Coordinator
+**0.3.1-rc.4** adds explicit reconnection under the same computer name
 and node history, using those unchanged worker installers. See the
 [reconnection report](docs/operations/worker-reconnection-2026-10-21.md).
 
 **Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
 The normal worker is a tray app with automatic browser pairing, saved OS credentials
-and outbound HTTPS. Tailscale is optional. Release **0.3.0-rc.4** is deployed at
-[Command Center](https://app.the-godfather.ai). Open **Nodes → Connect a computer**
-for Windows, Apple silicon and Intel Mac downloads. Its installers passed the
-[recorded local and native checks](docs/operations/simple-onboarding-verification-2026-10-21.md).
-Live HTTPS, download checksums, access restrictions, preserved records and the
-existing worker's reconnection passed verification. The administrator confirmed
-the version, existing results and download panel. Publisher signing and physical
-recipient pairing remain pending; the Windows/Mac installers are unsigned/ad-hoc
-signed candidates.
+and outbound HTTPS. Tailscale is optional. Open
+[Command Center](https://app.the-godfather.ai) → **Nodes → Connect a computer**
+for Windows, Apple silicon and Intel Mac downloads. The updated installers passed
+the [recorded local and native checks](docs/operations/coding-account-verification-2026-10-21.md).
+The [reconnection report](docs/operations/worker-reconnection-2026-10-21.md) records
+coordinator activation and public checks. Publisher signing and physical recipient
+acceptance remain pending; the Windows/Mac installers are unsigned/ad-hoc signed
+candidates.
 
 For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
 Invited users select Continue with Google using the exact invited email; no code
