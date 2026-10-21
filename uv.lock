@@ -288,6 +288,7 @@ source = { editable = "apps/api" }
 dependencies = [
     { name = "alembic" },
     { name = "authlib" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "godfather-agent-runtime" },
     { name = "godfather-contracts" },
@@ -303,6 +304,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2" },
     { name = "authlib", specifier = ">=1.9.1,<2" },
+    { name = "cryptography", specifier = ">=50,<51" },
     { name = "fastapi", specifier = ">=0.121,<1" },
     { name = "godfather-agent-runtime", editable = "packages/agent-runtime" },
     { name = "godfather-contracts", editable = "packages/shared-schemas" },

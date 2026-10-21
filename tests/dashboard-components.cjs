@@ -26,6 +26,27 @@ const administration = require("../apps/dashboard/src/components/administration.
 const shell = require("../apps/dashboard/src/components/application-shell.tsx");
 const results = require("../apps/dashboard/src/components/job-result.tsx");
 
+test("account provider bridge allows only scoped account operations", () => {
+  assert.equal(server.allowedPath("account/providers", "GET"), true);
+  assert.equal(server.allowedPath("account/providers/openai", "POST"), true);
+  assert.equal(
+    server.allowedPath("account/providers/anthropic/computers", "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("account/providers/anthropic/disconnect", "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("account/providers/openai/key", "GET"),
+    false,
+  );
+  assert.equal(
+    server.allowedPath("workers/fake/account-providers", "POST"),
+    false,
+  );
+});
+
 test("job results sanitize Markdown, disable tracking images and highlight code", () => {
   const html = renderToStaticMarkup(
     React.createElement(results.SafeMarkdown, {

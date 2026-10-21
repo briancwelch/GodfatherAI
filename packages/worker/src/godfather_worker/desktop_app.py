@@ -23,6 +23,7 @@ from godfather_worker.desktop import (
     connection_error,
     coordinator_origin,
 )
+from godfather_worker.desktop_layout import content_frame
 from godfather_worker.discovery import discover
 from godfather_worker.inference import discover_models
 from godfather_worker.native_desktop import (
@@ -57,18 +58,17 @@ class Application:
         self.inventory = tk.StringVar(value="Checking existing local AI models...")
         self.hardware = tk.StringVar(value="")
         self.inference = tk.BooleanVar(value=False)
+        self.account_connections = tk.BooleanVar(value=False)
         self.cpu, self.ram = tk.StringVar(value="1"), tk.StringVar(value="2")
         self.shared = tk.BooleanVar(value=False)
         self.owners, self.workspaces = tk.StringVar(), tk.StringVar()
         self.autostart = tk.BooleanVar(value=False)
         root.title("The Godfather Worker")
-        root.minsize(540, 430)
         root.configure(background="#F4F8FC")
         style = ttk.Style(root)
         style.configure("TFrame", background="#F4F8FC")
         style.configure("TLabel", background="#F4F8FC", foreground="#14283D")
-        frame = ttk.Frame(root, padding=24)
-        frame.pack(fill="both", expand=True)
+        frame = content_frame(root)
         ttk.Label(frame, text="The Godfather Worker", font=("Segoe UI", 20, "bold")).pack(
             anchor="w"
         )
@@ -91,9 +91,15 @@ class Application:
             command=self.apply_models,
         ).pack(anchor="w", pady=(12, 4))
         ttk.Label(frame, textvariable=self.inventory, wraplength=490).pack(anchor="w")
+        ttk.Checkbutton(
+            frame,
+            text="Use API connections from my account",
+            variable=self.account_connections,
+            command=self.apply_models,
+        ).pack(anchor="w", pady=6)
         ttk.Label(
             frame,
-            text="No downloads. Paid AI and access to files or tools require separate setup.",
+            text="Manage keys in Account settings. Add project access below.",
             wraplength=490,
         ).pack(anchor="w", pady=4)
         actions = ttk.Frame(frame)
@@ -101,11 +107,14 @@ class Application:
         self.resume_button = ttk.Button(
             actions, text="Resume", command=self.start, state="disabled"
         )
-        self.resume_button.pack(side="left")
+        self.resume_button.pack(side="left", fill="x", expand=True)
         self.pause_button = ttk.Button(actions, text="Pause", command=self.pause, state="disabled")
-        self.pause_button.pack(side="left", padx=8)
-        ttk.Button(actions, text="Open Command Center", command=self.open_center).pack(side="left")
+        self.pause_button.pack(side="left", padx=8, fill="x", expand=True)
+        ttk.Button(frame, text="Open Command Center", command=self.open_center).pack(
+            fill="x", pady=(0, 10)
+        )
         ttk.Button(frame, text="Advanced settings...", command=self.advanced).pack(anchor="w")
+        ttk.Button(frame, text="Coding projects...", command=self.projects).pack(anchor="w", pady=6)
         ttk.Label(
             frame,
             text="Closing this window keeps the worker in the tray. Use Quit to exit.",
@@ -147,7 +156,7 @@ class Application:
                 icon,
                 "The Godfather Worker",
                 pystray.Menu(
-                    item("Show worker", "show"),
+                    pystray.MenuItem("Show worker", lambda *_: self.event("show"), default=True),
                     item("Open Command Center", "open"),
                     item("Resume", "resume"),
                     item("Pause", "pause"),
@@ -214,7 +223,12 @@ class Application:
         if not self.identity or self.closing or (self.controller and self.controller.running):
             return
         try:
-            self.settings = self.settings.model_copy(update={"inference": self.inference.get()})
+            self.settings = self.settings.model_copy(
+                update={
+                    "inference": self.inference.get(),
+                    "account_providers": self.account_connections.get(),
+                }
+            )
             if self.settings.inference and not self.models:
                 raise ValueError(
                     "No local models found. Open your local AI runtime and restart the worker."
@@ -230,6 +244,7 @@ class Application:
     def apply_models(self) -> None:
         if self.controller and self.controller.running:
             self.inference.set(self.settings.inference)
+            self.account_connections.set(self.settings.account_providers)
             messagebox.showinfo(
                 "Pause first", "Pause the worker before changing contributions, then Resume."
             )
@@ -243,11 +258,20 @@ class Application:
         # Saved credentials always use their bound origin, regardless of textbox edits.
         webbrowser.open(coordinator_origin((self.identity or {}).get("origin", self.address.get())))
 
+    def projects(self) -> None:
+        if not self.identity:
+            messagebox.showinfo(
+                "Connect first", "Connect this computer before adding a coding project."
+            )
+            return
+        from godfather_worker.coding_projects import Projects
+
+        Projects(self)
+
     def advanced(self) -> None:
         window = tk.Toplevel(self.root)
         window.title("Worker settings")
-        frame = ttk.Frame(window, padding=20)
-        frame.pack(fill="both", expand=True)
+        frame = content_frame(window, maximum_width=740)
         ttk.Label(frame, textvariable=self.hardware, wraplength=470).pack(anchor="w")
         for label, variable in (
             ("CPU scheduling cores", self.cpu),
@@ -279,9 +303,11 @@ class Application:
                 return
             try:
                 self.settings = Contribution(
+                    repositories=self.settings.repositories,
                     cpu_cores=int(self.cpu.get()),
                     ram_gib=int(self.ram.get()),
                     inference=self.inference.get(),
+                    account_providers=self.account_connections.get(),
                     shared=self.shared.get(),
                     allowed_owner_ids=[
                         s.strip() for s in self.owners.get().split(",") if s.strip()
@@ -393,12 +419,13 @@ class Application:
                     "Local models: "
                     + (
                         ", ".join(self.models)
-                        or "None installed; connection only until local AI is configured."
+                        or "None installed. You can use an API connection from Account settings."
                     )
                 )
                 self.settings = values["settings"]
                 self.autostart.set(values["startup"])
                 self.inference.set(self.settings.inference)
+                self.account_connections.set(self.settings.account_providers)
                 self.cpu.set(str(self.settings.cpu_cores))
                 self.ram.set(str(self.settings.ram_gib))
                 self.shared.set(self.settings.shared)
@@ -451,6 +478,8 @@ class Application:
                     self.status.set("Paused")
             elif name == "error":
                 self.status.set(values["message"])
+            elif name == "project_update" and not self.closing:
+                values["apply"]()
             elif name in ("show", "open", "resume", "pause", "quit"):
                 {
                     "show": self.show,

@@ -843,9 +843,8 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
         )?.connection_id && (
           <label className="check-label">
             <input type="checkbox" name="paid_consent" required /> I authorize
-            paid API inference on this connection and sending this task to the
-            selected provider. Spending safeguards and estimates are shown in
-            Provider Connections.
+            using my selected API account and sending this task to the provider.
+            Billing and spending limits are managed at the provider.
           </label>
         )}
         <label>

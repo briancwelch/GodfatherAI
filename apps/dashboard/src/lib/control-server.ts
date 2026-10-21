@@ -72,6 +72,7 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
+    "account/providers",
     "agent-options",
     "coding/repositories",
     "tools",
@@ -88,6 +89,7 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "account/providers/(openai|anthropic)(/(disconnect|computers))?",
     "models/install",
     "provider-connections",
     `provider-connections/${uuid}/(policy|control|test|grants)`,

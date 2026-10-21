@@ -12,6 +12,16 @@ CODING_RUNTIME = "coding-sandbox-v1"
 REPOSITORY_PREFIX = "coding-repository/"
 
 
+class CodingWorkspace(Contract):
+    id: UUID
+    name: str = Field(min_length=1, max_length=200)
+
+
+class CodingSetupOptions(Contract):
+    owner_id: UUID
+    workspaces: list[CodingWorkspace] = Field(max_length=128)
+
+
 class FileEdit(Contract):
     path: str = Field(min_length=1, max_length=300)
     content: str = Field(max_length=32768)

@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from godfather_api.models import (
+    AccountProviderKey,
     Event,
     Job,
     Node,
@@ -67,7 +68,21 @@ def allowed(session: Session, job: Job, node: Node) -> bool:
     policy = ConnectionPolicy.model_validate(row.policy)
     if not policy.enabled or not selection.paid_consent or selection.provider != row.provider:
         return False
-    if selection.identifier not in {r.identifier for r in policy.rates}:
+    if row.account_key_id:
+        key = session.get(AccountProviderKey, row.account_key_id)
+        if (
+            key is None
+            or not key.enabled
+            or key.owner_id != job.owner_id
+            or key.owner_id != row.owner_id
+            or str(node.id) not in key.allowed_node_ids
+        ):
+            return False
+        if selection.identifier not in {m.get("identifier") for m in key.model_catalog}:
+            return False
+    if policy.billing != "provider" and selection.identifier not in {
+        r.identifier for r in policy.rates
+    }:
         return False
     if job.owner_id == row.owner_id:
         return True
@@ -429,8 +444,12 @@ def reserve(
     if not allowed(session, job, node):
         raise HTTPException(403, "Paid permission was withdrawn before reservation")
     settings = ConnectionPolicy.model_validate(row.policy)
-    rate = next(r for r in settings.rates if r.identifier == selected.identifier)
-    if (datetime.now(UTC) - rate.verified_at).days > 30 or rate.verified_at > datetime.now(UTC):
+    rate = next((r for r in settings.rates if r.identifier == selected.identifier), None)
+    if settings.billing != "provider" and (
+        rate is None
+        or (datetime.now(UTC) - rate.verified_at).days > 30
+        or rate.verified_at > datetime.now(UTC)
+    ):
         raise HTTPException(409, "Owner must verify current documented pricing")
     if session.scalar(
         select(ProviderInvocation.id).where(
@@ -442,9 +461,13 @@ def reserve(
             409,
             "Invocation already reserved; reconcile rather than repeat a possibly billable call",
         )
-    amount = estimated_cost(rate, payload.input_bytes + 4096, payload.max_output_tokens)
+    amount = (
+        estimated_cost(rate, payload.input_bytes + 4096, payload.max_output_tokens)
+        if rate is not None and settings.billing != "provider"
+        else 0
+    )
     spent, liability = totals(session, row.id)
-    if (
+    if settings.billing != "provider" and (
         amount <= 0
         or amount > settings.call_limit_microusd
         or spent + liability + amount > settings.lifetime_limit_microusd
@@ -466,7 +489,9 @@ def reserve(
         submitter_id=job.owner_id,
         call_key=payload.call_key,
         reserved_microusd=amount,
-        price=rate.model_dump(mode="json"),
+        price=rate.model_dump(mode="json")
+        if rate is not None and settings.billing != "provider"
+        else {"billing": "provider"},
     )
     session.add(call)
     session.flush()
@@ -513,6 +538,9 @@ def settle(
             raise HTTPException(409, "Usage was already settled")
         return {"saved": True}
     call.usage = usage_data
+    if call.price.get("billing") == "provider":
+        call.status = "settled"
+        return {"saved": True}
     if (
         payload.input_tokens is None
         or payload.output_tokens is None

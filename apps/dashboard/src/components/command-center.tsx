@@ -666,8 +666,8 @@ function SubmitJob({ data }: { data: Snapshot }) {
         )?.connection_id && (
           <label className="check-label">
             <input type="checkbox" name="paid_consent" required /> I authorize
-            paid inference and sending this task to the selected API provider.
-            Connection owner grants and spending safeguards apply.
+            using my selected API account and sending this task to the provider.
+            Billing and spending limits are managed at the provider.
           </label>
         )}
         <label>

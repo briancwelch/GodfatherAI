@@ -8,6 +8,12 @@ One developer builds the platform for both administrators. The second administra
 
 ## Start here
 
+Next usability candidate **0.3.1-rc.1** adds account API key entry with
+provider-managed billing, local coding-project setup and tray/window improvements.
+See its [verification](docs/operations/coding-account-verification-2026-10-21.md)
+and [setup guide](docs/operations/coding-and-account-setup.md). It requires a new
+coordinator migration and worker build; it is not activated merely by this source update.
+
 **Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
 The normal worker is a tray app with automatic browser pairing, saved OS credentials
 and outbound HTTPS. Tailscale is optional. Release **0.3.0-rc.4** is deployed at

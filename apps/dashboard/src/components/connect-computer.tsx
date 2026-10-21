@@ -49,7 +49,7 @@ export function ConnectComputer() {
       .finally(() => setAddress(window.location.origin));
   }, []);
   return (
-    <section className="panel">
+    <section className="panel connect-computer">
       <h2>Connect a computer</h2>
       <ol>
         <li>
@@ -61,35 +61,39 @@ export function ConnectComputer() {
           code. Your worker connects automatically.
         </li>
       </ol>
-      <label>
-        Command Center address
-        <input readOnly value={address} />
-      </label>
-      <button
-        className="action"
-        disabled={!address}
-        onClick={() => {
-          void navigator.clipboard
-            .writeText(address)
-            .then(() => setStatus("Address copied."))
-            .catch(() => setStatus("Select and copy the address above."));
-        }}
-      >
-        Copy address
-      </button>
+      <div className="connect-address">
+        <label>
+          Command Center address
+          <input readOnly value={address} />
+        </label>
+        <button
+          className="action"
+          disabled={!address}
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(address)
+              .then(() => setStatus("Address copied."))
+              .catch(() => setStatus("Select and copy the address above."));
+          }}
+        >
+          Copy address
+        </button>
+      </div>
       {status && <p role="status">{status}</p>}
-      {downloads.map((item) => (
-        <div key={item.filename}>
-          <a className="action" href={`/downloads/${item.filename}`} download>
-            Download for {item.platform}
-          </a>
-          <p>{item.signing}</p>
-          <details>
-            <summary>Verify download</summary>
-            <code>SHA-256: {item.sha256}</code>
-          </details>
-        </div>
-      ))}
+      <div className="worker-downloads" aria-label="Worker downloads">
+        {downloads.map((item) => (
+          <div className="worker-download" key={item.filename}>
+            <a className="action" href={`/downloads/${item.filename}`} download>
+              Download for {item.platform}
+            </a>
+            <p>{item.signing}</p>
+            <details>
+              <summary>Verify download</summary>
+              <code className="download-checksum">SHA-256: {item.sha256}</code>
+            </details>
+          </div>
+        ))}
+      </div>
       <p>
         HTTPS connects from anywhere. Tailscale is optional. Your computer keeps
         control of its files, tools and paid AI credentials.

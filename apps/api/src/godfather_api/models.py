@@ -68,6 +68,9 @@ class GoogleIdentity(Entity, Base):
 
 class ProviderConnection(Entity, Owned, Base):
     __tablename__ = "provider_connections"
+    __table_args__ = (
+        UniqueConstraint("account_key_id", "node_id", name="uq_provider_account_node"),
+    )
     node_id: Mapped[UUID] = mapped_column(ForeignKey("nodes.id", ondelete="RESTRICT"))
     provider: Mapped[str] = mapped_column(String(32))
     name: Mapped[str] = mapped_column(String(100))
@@ -75,6 +78,19 @@ class ProviderConnection(Entity, Owned, Base):
     revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
     test_id: Mapped[UUID | None]
     test_result: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    account_key_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("account_provider_keys.id", ondelete="RESTRICT")
+    )
+
+
+class AccountProviderKey(Entity, Owned, Base):
+    __tablename__ = "account_provider_keys"
+    __table_args__ = (UniqueConstraint("owner_id", "provider", name="uq_account_provider_owner"),)
+    provider: Mapped[str] = mapped_column(String(32))
+    encrypted_key: Mapped[str] = mapped_column(Text)
+    model_catalog: Mapped[list[dict[str, object]]] = mapped_column(JSONB, server_default="[]")
+    enabled: Mapped[bool] = mapped_column(Boolean, server_default="true")
+    allowed_node_ids: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")
 
 
 class ProviderConnectionGrant(Entity, Base):

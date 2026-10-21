@@ -62,6 +62,17 @@ The Godfather must support hybrid local and frontier AI inference using Bring Yo
 
 BYOK implementation was separately authorized in the user's Phase 11 assignment. Keep Google Sign-In independent of frontier API credentials and paid-use permissions. See `docs/operations/phase-11.md` and `docs/architecture/byok-plan.md`. Live billable calls still require separately supplied credentials and explicit spending authorization; historical Phase 06/07 boundaries remain unchanged.
 
+Account-key usability revision authorized by the owner, 2026-10-21: keys may be
+encrypted in the user's Godfather account independently of Google Sign-In. Only
+individually selected, owned computers with local API-connection opt-in may
+retrieve them. Plaintext keys must never enter scheduler state, jobs, logs or
+artifacts. The provider handles billing and spending limits; the normal account
+flow must not require Godfather prices, budgets or billing approvals. Explicit
+paid-model selection and provider data-egress confirmation remain mandatory.
+This supersedes worker-only storage and mandatory billing safeguards for the new
+account setup. Preserve existing local connections and historical usage records.
+See docs/decisions/0017-account-connections-and-coding-project-setup.md.
+
 ## Stack
 - **Editor / source:** VS Code, Codex, Git, GitHub.
 - **Frontend:** Next.js, React, strict TypeScript, Tailwind CSS, shadcn/ui.

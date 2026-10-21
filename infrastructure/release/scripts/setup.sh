@@ -31,6 +31,7 @@ env_file="$install_root/production.env"
 [[ ! -e "$env_file" && ! -e "$install_root/state/current" ]] || { echo 'An installation already exists. Use the documented upgrade command.' >&2; exit 1; }
 db_secret=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 proxy_secret=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+vault_secret=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 # noclobber prevents a concurrent setup from replacing credentials.
 (set -o noclobber; cat > "$env_file" <<EOF
 POSTGRES_PASSWORD=$db_secret
@@ -39,12 +40,13 @@ GODFATHER_WEB_ORIGIN=https://$hostname
 GODFATHER_APP_HOST=$hostname
 GODFATHER_PUBLIC_HOSTS=$hostname
 GODFATHER_PROXY_TOKEN=$proxy_secret
+GODFATHER_PROVIDER_VAULT_KEY=$vault_secret
 GODFATHER_GOOGLE_BOOTSTRAP_EMAIL=$founder
 GODFATHER_GOOGLE_CLIENT_ID=$client_id
 GODFATHER_GOOGLE_CLIENT_SECRET=$client_secret
 EOF
 )
-unset client_secret db_secret proxy_secret
+unset client_secret db_secret proxy_secret vault_secret
 chmod 600 "$env_file"
 echo "Installing at https://$hostname. Persistent settings: $env_file"
 GODFATHER_ENV_FILE="$env_file" GODFATHER_STATE_DIR="$install_root/state" \

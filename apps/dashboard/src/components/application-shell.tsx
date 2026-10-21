@@ -112,6 +112,7 @@ export function ApplicationShell({
             : "Environment unavailable"}
         </span>
         <div className="account-controls">
+          {account && <a href="/providers">Account settings</a>}
           {account && (
             <span>
               {account.display_name} · {account.roles.join(", ")}

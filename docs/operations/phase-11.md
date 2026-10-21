@@ -9,6 +9,12 @@ for executed checks and remaining live coding/provider acceptance.
 
 ## Identity and billing
 
+**Current usability revision:** the owner subsequently authorized encrypted
+account key entry and provider-managed billing on 2026-10-21. For candidate
+`0.3.1-rc.1`, follow [account connections and project setup](coding-and-account-setup.md).
+The local-key commands and spending-policy instructions below document the legacy
+compatible path; they are not required by the new account flow.
+
 Google OIDC remains the account/session system, with the existing invitation and
 workspace RBAC checks. Its tokens, scopes and client secret are not provider API
 credentials. OpenAI Responses and Anthropic Messages use separate, owner-local API

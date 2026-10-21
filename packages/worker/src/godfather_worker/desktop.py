@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from godfather_contracts import Contract, Heartbeat, Registration, Resources
+from godfather_contracts.coding import CodingRepository
 from pydantic import Field
 
 from godfather_worker import cli
@@ -92,10 +93,12 @@ class Contribution(Contract):
     cpu_cores: int = Field(default=1, ge=1, le=65536)
     ram_gib: int = Field(default=2, ge=1, le=1048576)
     inference: bool = False
+    account_providers: bool = False
     primary: Literal["cpu", "inference"] = "cpu"
     shared: bool = False
     allowed_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
+    repositories: list[CodingRepository] = Field(default_factory=list, max_length=8, repr=False)
 
     def resources(self, actual: Resources) -> Resources:
         values = actual.model_dump()
@@ -178,6 +181,16 @@ class Controller:
             raise ValueError("Shared work requires explicit owner and workspace IDs")
         if settings.primary == "inference" and not settings.inference:
             raise ValueError("Enable local inference before making it the primary capability")
+        if settings.repositories:
+            owner = UUID(self.identity["owner_id"])
+            if not settings.inference and not settings.account_providers:
+                raise ValueError(
+                    "Enable local AI or your account API connections before using coding projects"
+                )
+            if any(r.allowed_user_ids != [owner] for r in settings.repositories):
+                raise ValueError("Desktop coding projects must belong to the connected owner")
+            if len({r.id for r in settings.repositories}) != len(settings.repositories):
+                raise ValueError("Each coding project must have a distinct identity")
         save_settings(self.folder / "settings.json", settings)
         arguments = [
             "--url",
@@ -194,9 +207,26 @@ class Controller:
             provider.write_text('[{"id":"local-ollama","provider":"ollama"}]', encoding="utf-8")
             secondary = "inference" if settings.primary == "cpu" else "cpu"
             arguments += ["--secondary", secondary, "--inference-config", str(provider)]
+        if settings.repositories:
+            from godfather_worker.coding_setup import save_repositories
+
+            coding_path = self.folder / "coding.json"
+            save_repositories(coding_path, settings.repositories)
+            arguments += [
+                "--execute-workflows",
+                "--coding-config",
+                str(coding_path),
+                "--allow-tool-permission",
+                "coding.workspace",
+            ]
+        if settings.account_providers:
+            arguments += ["--account-providers"]
         for owner in settings.allowed_owner_ids:
             arguments += ["--allow-owner", str(owner)]
-        for workspace in settings.allowed_workspace_ids:
+        for workspace in dict.fromkeys(
+            [*settings.allowed_workspace_ids]
+            + [w for r in settings.repositories for w in r.allowed_workspace_ids]
+        ):
             arguments += ["--allow-workspace", str(workspace)]
         self.stop_event = threading.Event()
         client = LimitedClient(self.identity["token"], settings, self.origin)

@@ -7,7 +7,10 @@ import threading
 import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
+from uuid import UUID
 
+from godfather_contracts.coding import CodingSetupOptions, CodingWorkspace
+from godfather_worker.coding_projects import Projects
 from godfather_worker.desktop_app import Application
 from godfather_worker.simulated import profile
 
@@ -18,6 +21,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         "token": "synthetic-only",
         "origin": "https://example.invalid",
         "owner": "test@example.invalid",
+        "owner_id": "00000000-0000-0000-0000-000000000001",
         "name": "Test computer",
     }
     store = Mock()
@@ -42,6 +46,13 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
 
     root = tk.Tk()
     result: list[str] = []
+
+    async def images(*_: object) -> dict[str, str]:
+        return {"Fixture test environment": "sha256:" + "a" * 64}
+
+    async def project_check(*_: object) -> None:
+        pass
+
     with (
         tempfile.TemporaryDirectory() as folder,
         patch("godfather_worker.desktop_app.CredentialStore", return_value=store),
@@ -50,6 +61,19 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         patch("godfather_worker.desktop_app.Controller", side_effect=controller),
         patch("godfather_worker.desktop_app.await_approval", return_value=identity),
         patch("godfather_worker.desktop_app.webbrowser.open") as browser,
+        patch(
+            "godfather_worker.coding_projects.setup_options",
+            return_value=CodingSetupOptions(
+                owner_id=UUID(identity["owner_id"]),
+                workspaces=[
+                    CodingWorkspace(
+                        id=UUID("00000000-0000-0000-0000-000000000002"), name="Fixture workspace"
+                    )
+                ],
+            ),
+        ),
+        patch("godfather_worker.coding_projects.local_images", images),
+        patch("godfather_worker.coding_projects.check_project", project_check),
     ):
 
         async def models(*_: object) -> list[object]:
@@ -88,17 +112,55 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                         ImageGrab.grab(window=root.winfo_id()).save(screenshot)
                 app.hide()
                 assert root.state() == "withdrawn"
-                app.show()
+                app.tray()  # Native tray activation invokes the default Show action.
+                root.after(150, restored)
+
+            def restored() -> None:
+                assert root.state() == "normal"
+                root.geometry("540x580")
+                root.update()
+                assert root.winfo_width() <= 900
+                root.geometry("900x900")
+                root.update()
+                assert root.winfo_width() <= 900 and root.winfo_height() <= 900
                 app.pause()
                 root.after(130, paused)
 
             def paused() -> None:
                 assert app.status.get() == "Paused"
-                app.start()
-                assert len(controllers) == 2
-                result.append("automatic pairing, start, tray hide/show, pause and resume")
-                deadline.set()
-                app.quit()
+                project = Projects(app)
+
+                def add_project() -> None:
+                    if project.options is None:
+                        root.after(30, add_project)
+                        return
+                    project.name.set("Fixture project")
+                    project.folder.set(folder)
+                    project.patterns.set("src/*.py")
+                    project.command.set("python -m unittest")
+                    project.save()
+                    root.after(30, saved_project)
+
+                def saved_project() -> None:
+                    if not app.settings.repositories:
+                        root.after(30, saved_project)
+                        return
+                    assert app.settings.repositories[0].allowed_user_ids == [
+                        UUID(identity["owner_id"])
+                    ]
+                    project.projects.selection_set(0)
+                    project.remove()
+                    assert not app.settings.repositories
+                    project.window.destroy()
+                    app.start()
+                    assert len(controllers) == 2
+                    result.append(
+                        "pairing, tray restore, resize, scoped project add/remove and pause/resume"
+                    )
+                    deadline.set()
+                    app.quit()
+
+                root.after(30, add_project)
 
             def expired() -> None:
                 if not deadline.is_set():

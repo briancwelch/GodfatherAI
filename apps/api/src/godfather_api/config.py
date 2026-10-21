@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     session_seconds: int = Field(default=28800, ge=300, le=86400)
     authentication_limit: int = Field(default=20, ge=1, le=100)
     proxy_token: SecretStr = SecretStr("")
+    provider_vault_key: SecretStr = SecretStr("")
     # Legacy credentials are accepted ONLY in explicitly isolated regression tests.
     test_legacy_credentials: bool = False
 

@@ -17,6 +17,38 @@ from tests.integration.test_jobs import h as h
 pytestmark = pytest.mark.integration
 
 
+def test_provider_billing_needs_no_prices_or_godfather_budget(h: Harness) -> None:
+    identifier, _ = connection(h)
+    response = h.client.post(
+        f"/api/v1/provider-connections/{identifier}/policy",
+        headers=headers(h.admin),
+        json={"enabled": True, "billing": "provider"},
+    )
+    assert response.status_code == 200, response.text
+    job = paid_job(h, identifier)
+    assert h.tick() == 1
+    assignment = h.poll()
+    assert assignment is not None
+    h.start(assignment)
+    authorization = reserve(h, assignment)
+    assert authorization.status_code == 200 and authorization.json()["reserved_microusd"] == 0
+    assert reserve(h, assignment).status_code == 409
+    path = f"/api/v1/workers/{h.workers[0]['credential_id']}/jobs/{job['id']}/provider/settle"
+    body = {
+        "session_id": str(h.registrations[0].session_id),
+        "attempt_id": assignment["attempt_id"],
+        "fencing_token": assignment["fencing_token"],
+        "invocation_id": authorization.json()["invocation_id"],
+        "input_tokens": 10,
+        "output_tokens": 20,
+    }
+    assert h.client.post(path, headers=headers(h.workers[0]), json=body).status_code == 200
+    with h.database.sessions() as session:
+        call = session.get(ProviderInvocation, UUID(body["invocation_id"]))
+        assert call is not None and call.settled_microusd is None
+        assert call.status == "settled" and call.usage["input_tokens"] == 10
+
+
 def connection(h: Harness) -> tuple[str, dict[str, Any]]:
     model = enable(h)
     response = h.client.post(

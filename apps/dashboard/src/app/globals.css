@@ -269,6 +269,55 @@ select {
 .actions {
   align-items: center;
 }
+.connect-computer > ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  margin: 12px 0 16px;
+}
+.connect-address {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.connect-address label {
+  flex: 1 1 260px;
+  min-width: 0;
+  max-width: 580px;
+}
+.worker-downloads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.worker-download {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.worker-download .action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  text-decoration: none;
+  white-space: normal;
+}
+.worker-download p {
+  margin: 10px 0;
+}
+.worker-download summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.download-checksum {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
 .action {
   background: var(--primary);
   color: var(--primary-foreground);
@@ -729,6 +778,10 @@ body {
   align-items: center;
   gap: 14px;
   font-size: 12px;
+}
+.account-controls > a {
+  color: #58d5de;
+  text-decoration: underline;
 }
 .account-controls label {
   display: flex;
@@ -1234,6 +1287,17 @@ legend {
 }
 .provider-page > .record-split {
   grid-template-columns: minmax(190px, 1fr) minmax(0, 3fr);
+}
+.provider-page .worker-downloads form {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+.provider-page .worker-downloads form .action {
+  justify-self: start;
+}
+.provider-page .worker-downloads form + button {
+  margin-top: 10px;
 }
 .provider-page fieldset {
   display: grid;

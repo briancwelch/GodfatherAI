@@ -36,6 +36,7 @@ class ProviderConfig(Contract):
     connection_id: UUID | None = None
     model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
     _api_key: SecretStr | None = PrivateAttr(default=None)
+    _account_key: bool = PrivateAttr(default=False)
     url: str = Field(default="http://127.0.0.1:11434", max_length=2048, repr=False)
     api_key_env: str | None = Field(default=None, pattern=r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
     timeout_seconds: float = Field(default=120, ge=0.1, le=3600, allow_inf_nan=False)
@@ -101,8 +102,13 @@ class ProviderConfig(Contract):
             raise GatewayError("provider_auth")
         return {"Authorization": "Bearer " + key}
 
-    def set_api_key(self, key: str) -> None:
+    def set_api_key(self, key: str, *, account: bool = False) -> None:
         self._api_key = SecretStr(key)
+        self._account_key = account
+
+    @property
+    def has_account_api_key(self) -> bool:
+        return self._api_key is not None and self._account_key
 
 
 class GatewayError(Exception):

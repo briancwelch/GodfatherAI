@@ -67,6 +67,11 @@ def main(
     parser.add_argument("--execute-synthetic", action="store_true")
     parser.add_argument("--execute-workflows", action="store_true")
     parser.add_argument(
+        "--account-providers",
+        action="store_true",
+        help="Owner opt-in to explicitly authorized account API connections",
+    )
+    parser.add_argument(
         "--allow-model-installation",
         action="store_true",
         help="Owner opt-in: accept approved local Ollama catalog downloads",
@@ -97,7 +102,7 @@ def main(
             raise ValueError("Synthetic execution requires a simulated profile")
         if args.inference_config and args.execute_synthetic:
             raise ValueError("Choose synthetic execution or inference per worker process")
-        if args.execute_workflows and not args.inference_config:
+        if args.execute_workflows and not args.inference_config and not args.account_providers:
             raise ValueError("Workflow execution requires an inference configuration")
         if args.pause_after_checkpoint is not None and (
             not args.simulate
@@ -183,7 +188,7 @@ def main(
         if args.concurrency is not None:
             values["concurrency_limit"] = args.concurrency
         values["job_protocol_version"] = 1 if args.execute_synthetic else None
-        if configs:
+        if configs or args.account_providers:
             if args.concurrency not in (None, 1):
                 raise ValueError("Phase 05 inference workers execute one attempt at a time")
             values["concurrency_limit"] = 1
@@ -191,6 +196,12 @@ def main(
             values["model_deployments"] = asyncio.run(discover_models(configs))
             if any(c.provider in ("openai", "anthropic") for c in configs):
                 values["runtimes"] = [*values["runtimes"], "provider-connections-v1"]
+        if args.account_providers:
+            values["runtimes"] = [
+                *values["runtimes"],
+                "account-provider-keys-v1",
+                "provider-connections-v1",
+            ]
         if args.execute_workflows:
             tools = []
             for grant in args.allow_tool:
@@ -244,10 +255,28 @@ def main(
     node_id = None
     delay = 1
     refresh_at = monotonic() + 30
+    local_configs = list(configs)
+    account_refresh = args.account_providers
     try:
         while not stop.is_set():
             try:
-                if configs and monotonic() >= refresh_at:
+                if (
+                    args.account_providers
+                    and node_id is not None
+                    and (account_refresh or monotonic() >= refresh_at)
+                ):
+                    from godfather_worker.account_providers import fetch
+
+                    try:
+                        configs = [*local_configs, *fetch(client, node_id, registration.session_id)]
+                    except HTTPError as error:
+                        if error.code not in (404, 503):
+                            raise
+                        configs = list(local_configs)
+                        notify("worker.account_connections_unavailable")
+                    account_refresh = False
+                    refresh_at = 0
+                if (configs or args.account_providers) and monotonic() >= refresh_at:
                     deployments = asyncio.run(discover_models(configs))
                     registration = registration.model_copy(
                         update={"model_deployments": deployments}
@@ -257,6 +286,8 @@ def main(
                 if not registered:
                     result = client.post("/api/v1/workers/register", registration)
                     node_id = result.node_id
+                    if account_refresh:
+                        continue
                     registered = True
                     notify(
                         "worker.registered",

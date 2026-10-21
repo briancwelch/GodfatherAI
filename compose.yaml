@@ -1,6 +1,7 @@
 name: godfather-local
 
 x-api-environment: &api-environment
+  GODFATHER_PROVIDER_VAULT_KEY: ${GODFATHER_PROVIDER_VAULT_KEY:-}
   GODFATHER_ENVIRONMENT: ${GODFATHER_ENVIRONMENT:-local}
   GODFATHER_DATABASE_HOST: postgres
   GODFATHER_DATABASE_NAME: godfather

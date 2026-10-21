@@ -28,7 +28,7 @@ def store() -> KeyringBackend:
 
 
 def load(config: ProviderConfig) -> None:
-    if config.provider not in ("openai", "anthropic"):
+    if config.provider not in ("openai", "anthropic") or config.has_account_api_key:
         return
     try:
         key = store().get_password(

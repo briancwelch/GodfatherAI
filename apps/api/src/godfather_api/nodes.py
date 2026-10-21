@@ -18,6 +18,7 @@ from godfather_contracts import (
     Registration,
     WorkerAck,
 )
+from godfather_contracts.coding import CodingSetupOptions, CodingWorkspace
 from sqlalchemy import delete, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -35,6 +36,8 @@ from godfather_api.models import (
     Node,
     NodeCapability,
     User,
+    Workspace,
+    WorkspaceMember,
 )
 
 logger = logging.getLogger("godfather.nodes")
@@ -136,6 +139,25 @@ def authenticate(request: Request, session: Session, kind: str) -> AccessCredent
         ):
             raise HTTPException(403, "Worker owner requires an explicitly linked Google identity")
     return credential
+
+
+@router.post("/workers/coding/options", response_model=CodingSetupOptions)
+def coding_setup_options(request: Request, session: SessionDep) -> CodingSetupOptions:
+    """Read-only owner workspace names for local consent; no host permissions granted."""
+    credential = authenticate(request, session, "worker")
+    member_ids = select(WorkspaceMember.workspace_id).where(
+        WorkspaceMember.user_id == credential.owner_id
+    )
+    workspaces = session.scalars(
+        select(Workspace)
+        .where((Workspace.owner_id == credential.owner_id) | Workspace.id.in_(member_ids))
+        .order_by(Workspace.name, Workspace.id)
+        .limit(128)
+    )
+    return CodingSetupOptions(
+        owner_id=credential.owner_id,
+        workspaces=[CodingWorkspace(id=w.id, name=w.name) for w in workspaces],
+    )
 
 
 def record(

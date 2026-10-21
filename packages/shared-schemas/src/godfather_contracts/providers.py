@@ -48,6 +48,7 @@ class ConnectionCreate(Contract):
 
 
 class ConnectionPolicy(Contract):
+    billing: Literal["legacy_safeguards", "provider"] = "legacy_safeguards"
     enabled: bool = False
     sharing: Literal["private", "approval_required", "limited"] = "private"
     allowed_user_ids: list[UUID] = Field(default_factory=list, max_length=128)
@@ -63,6 +64,10 @@ class ConnectionPolicy(Contract):
             raise ValueError("Model prices must be unique")
         if any(r.verified_at.tzinfo is None for r in self.rates):
             raise ValueError("Price verification requires an explicit timezone")
+        if self.billing == "provider":
+            if self.sharing != "private":
+                raise ValueError("Account API keys are private to their owner")
+            return self
         if self.enabled and (
             not self.rates or not self.call_limit_microusd or not self.lifetime_limit_microusd
         ):

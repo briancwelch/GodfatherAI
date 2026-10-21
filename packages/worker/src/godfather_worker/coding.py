@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from uuid import uuid4
@@ -77,6 +78,7 @@ async def command(
         env=environment,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     data = bytearray()
     try:
