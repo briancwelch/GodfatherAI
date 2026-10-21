@@ -2,7 +2,7 @@
 
 Candidate **0.3.1-rc.3** requires its coordinator migration and an updated worker.
 The deployed `0.3.0-rc.4` app lacks these settings. Build and activation status are
-recorded separately in the candidate verification report.
+recorded separately in the [candidate verification report](coding-account-verification-2026-10-21.md).
 
 ## Connect an API account
 
