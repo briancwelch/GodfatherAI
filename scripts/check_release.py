@@ -7,6 +7,7 @@ Google, changes the normal application database, obtains TLS certificates or use
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import secrets
@@ -241,6 +242,7 @@ console.log('Dashboard standalone content passed');
             ("/api/control/command-center?section=nodes", "app.the-godfather.ai", 401),
             ("/api/v1/workers/register", "api.the-godfather.ai", 405),
             ("/health/ready", "api.the-godfather.ai", 404),
+            ("/downloads/production.env", "app.the-godfather.ai", 404),
         ):
             request = Request(f"http://127.0.0.1:{port}{path}", headers={"Host": host})
             try:
@@ -249,6 +251,22 @@ console.log('Dashboard standalone content passed');
             except HTTPError as error:
                 actual_status = error.code
             assert actual_status == status, (path, actual_status)
+        downloads = json.loads((folder / "downloads/manifest.json").read_text(encoding="utf-8"))
+        for host in ("app.the-godfather.ai", "api.the-godfather.ai"):
+            request = Request(
+                f"http://127.0.0.1:{port}/downloads/manifest.json", headers={"Host": host}
+            )
+            with urlopen(request, timeout=15) as response:
+                assert json.load(response) == downloads
+            for artifact in downloads["artifacts"]:
+                request = Request(
+                    f"http://127.0.0.1:{port}/downloads/{artifact['filename']}",
+                    headers={"Host": host},
+                )
+                with urlopen(request, timeout=30) as response:
+                    assert response.status == 200
+                    assert hashlib.file_digest(response, "sha256").hexdigest() == artifact["sha256"]
+                print(f"Verified proxy download: {host}/{artifact['filename']}", flush=True)
         from godfather_contracts import Registration, Resources
 
         registration = Registration(
@@ -408,6 +426,7 @@ console.log('Dashboard standalone content passed');
                         "durable founder singleton and no seeded application identities",
                         "healthy private services",
                         "real HTTP proxy and anonymous denial",
+                        "all published installer downloads through both proxy hostnames",
                         "database and artifact restore",
                         "volume persistence and restart",
                     ],

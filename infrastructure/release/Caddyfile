@@ -8,7 +8,7 @@
 		max_size 2MB
 	}
 	header Strict-Transport-Security "max-age=31536000"
-	@downloads path /downloads/manifest.json /downloads/godfather-worker-*-setup.exe /downloads/godfather-worker-*-installer.dmg
+	@downloads path /downloads/manifest.json /downloads/godfather-worker-*-setup.exe /downloads/godfather-worker-*-installer.dmg /downloads/consigliere-*-setup.exe /downloads/consigliere-*-installer.dmg
 	handle @downloads {
 		root * /srv/godfather-downloads
 		uri strip_prefix /downloads
