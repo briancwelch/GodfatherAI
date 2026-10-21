@@ -45,6 +45,8 @@ class Application:
         self.controller: Controller | None = None
         self.pairing_busy = False
         self.closing = False
+        self.destroyed = False
+        self.timer: str | None = None
         self.tray: Any = None
         self.settings = Contribution()
         self.models: list[str] = []
@@ -112,7 +114,7 @@ class Application:
         root.protocol("WM_DELETE_WINDOW", self.hide)
         self.setup_tray()
         self.background(self.load)
-        root.after(100, self.pump)
+        self.timer = root.after(100, self.pump)
 
     def event(self, name: str, **values: Any) -> None:
         self.events.put((name, values))
@@ -347,6 +349,8 @@ class Application:
             self.quit()
 
     def quit(self) -> None:
+        if self.closing:
+            return
         self.closing = True
         self.cancel.set()
         self.pause()
@@ -359,6 +363,10 @@ class Application:
             if self.tray:
                 self.tray.visible = False
                 self.tray.stop()
+            if self.timer is not None:
+                self.root.after_cancel(self.timer)
+                self.timer = None
+            self.destroyed = True
             self.root.destroy()
 
     def show_identity(self, identity: dict[str, str]) -> None:
@@ -376,6 +384,7 @@ class Application:
             self.resume_button.configure(state="normal")
 
     def pump(self) -> None:
+        self.timer = None
         while not self.events.empty():
             name, values = self.events.get_nowait()
             if name == "loaded":
@@ -450,6 +459,8 @@ class Application:
                     "pause": self.pause,
                     "quit": self.quit,
                 }[name]()
+                if self.destroyed:
+                    return
             elif name in (
                 "worker.unexpected_error",
                 "worker.configuration_invalid",
@@ -460,7 +471,8 @@ class Application:
                 )
             if self.tray:
                 self.tray.title = "The Godfather Worker: " + self.status.get()[:80]
-        self.root.after(100, self.pump)
+        if not self.destroyed:
+            self.timer = self.root.after(100, self.pump)
 
 
 def main() -> int:
