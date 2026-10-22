@@ -1,6 +1,7 @@
 # Worker readiness and workspace experience
 
-Accepted for the owner-authorized milestone, 2026-10-22. Deployment remains separate.
+Accepted for the owner-authorized milestone, 2026-10-22. The owner separately
+authorized publishing downloads and deploying Command Center after validation.
 
 Workers check their configured coordinator's HTTPS download catalog, compare native
 platform semantic versions, prompt by default, and verify SHA-256 before handing

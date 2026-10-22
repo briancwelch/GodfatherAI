@@ -85,13 +85,14 @@ is required. Email delivery is manual, and Tailscale access is separate.
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
-Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. Coordinator and Windows/Apple silicon/Intel worker builds **0.4.2-rc.2** are now published. See the [onboarding repair and release verification](docs/operations/worker-onboarding-2026-10-22.md) for pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
+Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. The previous **0.4.2-rc.2** [onboarding repair](docs/operations/worker-onboarding-2026-10-22.md) introduced pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
 
 ## Local development
 
-The next owner-authorized milestone prepares in-app worker updates and local Ollama
-setup, a system Overview and Workspaces directory, personal profiles, and separate
-Images / Analytics and Reports workflows. It is **not deployed**. See the
+Coordinator **0.5.0-rc.2** and Windows/Apple silicon/Intel workers **0.5.0-rc.1**
+are published with in-app worker updates and local Ollama setup, a system Overview
+and Workspaces directory, personal profiles, and separate Images / Analytics and
+Reports workflows. See the
 [milestone guide](docs/operations/worker-readiness-and-workspaces-2026-10-22.md).
 Existing workers need one normal installer upgrade to acquire the updater.
 
