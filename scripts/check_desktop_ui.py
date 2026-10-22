@@ -284,7 +284,9 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     app.quit()
 
             root.after(30, connected if saved else loaded)
-            root.after(15000, expired)
+            # Intel hosted Macs can spend >15s in Cocoa window/tray activation.
+            # This is an overall safety deadline, never a sleep or success condition.
+            root.after(60000, expired)
             root.mainloop()
     assert result, "Native desktop lifecycle did not complete"
     print("Passed native UI smoke: " + result[0] + "; quit")

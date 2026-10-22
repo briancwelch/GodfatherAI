@@ -405,7 +405,7 @@ class Application:
         pairing = Pairing(origin=origin)
         self.cancel = threading.Event()
         self.pairing_busy = True
-        self.connect_button.configure(text="Cancel connection", state="normal")
+        self.connect_button.configure(text="Cancel", state="normal")
         self.address_entry.configure(state="disabled")
         self.code.set("Match this code in your browser: " + pairing.challenge[:12].upper())
         self.status.set("Approve this computer in your browser. Connecting automatically...")

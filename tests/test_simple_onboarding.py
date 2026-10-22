@@ -13,7 +13,6 @@ from urllib.request import HTTPSHandler
 import pytest
 from godfather_worker.client import WorkerClient
 from godfather_worker.desktop import Pairing, connection_error, coordinator_origin
-from godfather_worker.desktop_app import Application
 from godfather_worker.native_desktop import CredentialStore, login_startup_enabled
 from godfather_worker.pairing import await_approval, check_connection
 
@@ -129,6 +128,9 @@ def test_frozen_connection_probe_requires_unapproved_response(
 def test_failed_pairing_preserves_code_and_never_claims_connected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip("tkinter", reason="GUI adapter check requires Tk; core worker does not")
+    from godfather_worker.desktop_app import Application
+
     app = Application.__new__(Application)
     app.root = Mock()
     app.address = Mock()
