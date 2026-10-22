@@ -4,7 +4,10 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current release: 0.4.0-rc.3 — Phase 12 images, analytics and reporting.** See the
+**Current coordinator release: 0.4.1-rc.2** - [Command Center bulk management and archives](docs/operations/command-center-management-verification-2026-10-21.md).
+Consigliere remains **0.4.0-rc.3**; no worker upgrade is required.
+
+**Workload release: 0.4.0-rc.3 — Phase 12 images, analytics and reporting.** See the
 [Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
 bounded dataset uploads, deterministic calculations and downloadable reports.
 No real dataset or paid image call is authorized; live customer acceptance remains
@@ -17,7 +20,7 @@ The authorized [Command Center management update](docs/operations/command-center
 adds AJAX bulk deletion, optional workspace ZIP archives with animated progress,
 top/bottom pagination and saved-user permission editing. It requires only the
 coordinator/dashboard update; existing Consigliere installers are unchanged.
-Deployment verification is recorded separately after activation.
+The [deployment verification](docs/operations/command-center-management-verification-2026-10-21.md) records activation and preservation checks.
 
 **Consigliere** is the new name of The Godfather AI desktop worker. The current
 UI update adds normal window resizing, an embedded Projects tab, a compact
@@ -25,7 +28,8 @@ navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Command Center and Consigliere **0.4.0-rc.3** are deployed;
+configured. Consigliere **0.4.0-rc.3** remains the current worker. The previous coordinator
+release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
 Earlier release **0.3.2-rc.1** added accomplishment-first coding results and
