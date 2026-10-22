@@ -74,6 +74,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
             "Build Python needs working Tcl/Tk. Set GODFATHER_BUILD_PYTHON to a native Python 3.14 "
             "with Tk support. No installer produced."
         ) from None
+    build_info = workspace / "build-info.json"
+    build_info.write_text(json.dumps({"version": release}), encoding="utf-8")
     entry = workspace / "macos-entry.py"
     entry.write_text(
         "from godfather_worker.desktop_app import main\nraise SystemExit(main())\n",
@@ -93,6 +95,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.icns"),
         "--collect-data",
         "godfather_worker",
+        "--add-data",
+        str(build_info) + os.pathsep + "godfather_worker",
         "--add-data",
         (
             str(ROOT / "packages/worker/src/godfather_worker/data_program.py")

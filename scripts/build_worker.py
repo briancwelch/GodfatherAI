@@ -89,6 +89,8 @@ def build(release: str) -> Path:
         str(ROOT / "packages/agent-runtime"),
         str(ROOT / "packages/worker"),
     )
+    build_info = workspace / "build-info.json"
+    build_info.write_text(json.dumps({"version": release}), encoding="utf-8")
     entry = workspace / "entry.py"
     entry.write_text(
         "from godfather_worker.launcher import main\nraise SystemExit(main())\n", encoding="utf-8"
@@ -103,6 +105,8 @@ def build(release: str) -> Path:
         "pystray",
         "--collect-data",
         "godfather_worker",
+        "--add-data",
+        str(build_info) + os.pathsep + "godfather_worker",
         "--add-data",
         (
             str(ROOT / "packages/worker/src/godfather_worker/data_program.py")

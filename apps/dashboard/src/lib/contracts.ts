@@ -17,6 +17,8 @@ export interface Resource {
   }[];
 }
 export interface NodeInfo {
+  owner_name?: string | null;
+  worker_version?: string | null;
   node_id: string;
   owner_id: string;
   name: string;
@@ -117,6 +119,7 @@ export interface AgentInfo {
   };
 }
 export interface AuditEvent {
+  actor_name?: string | null;
   id: string;
   type: string;
   created_at: string;

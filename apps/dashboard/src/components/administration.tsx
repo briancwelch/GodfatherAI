@@ -15,6 +15,8 @@ import {
   Pager,
   SectionTabs,
 } from "./operational";
+import { UserName } from "./node-identity";
+import { AppearanceSettings } from "./appearance-settings";
 import { BulkTable } from "./bulk-table";
 import type { Page, Snapshot } from "../lib/contracts";
 import { ConnectComputer } from "./connect-computer";
@@ -100,11 +102,16 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 
 export default function Administration({
   initialUser,
+  initialTab,
 }: {
+  initialTab?: string;
   initialUser: Account;
 }) {
   const [tab, setTab] = useState(
-    initialUser.permissions.includes("platform.manage") ? "Users" : "Settings",
+    initialTab ||
+      (initialUser.permissions.includes("platform.manage")
+        ? "Users"
+        : "Settings"),
   );
   const [pages, setPages] = useState<Record<string, number>>({});
   const [page, setPage] = useState<{ total: number; limit: number } | null>(
@@ -124,6 +131,7 @@ export default function Administration({
     | {
         id: string;
         actor_id: string | null;
+        actor_name?: string | null;
         action: string;
         timestamp: string;
         details: unknown;
@@ -148,7 +156,7 @@ export default function Administration({
     "Permissions",
     "Computers",
     ...(user.permissions.includes("platform.manage")
-      ? ["Users", "Invitations", "Audit"]
+      ? ["Users", "Invitations", "Appearance", "Audit"]
       : []),
   ];
   const platform = user.permissions.includes("platform.manage");
@@ -310,6 +318,9 @@ export default function Administration({
           </p>
         )}
         {busy && <p role="status">Waiting for backend confirmation…</p>}
+        {platform && (
+          <a href="/administration/appearance">Configure site appearance</a>
+        )}
         <SectionTabs
           label="Administration sections"
           tabs={tabs}
@@ -620,7 +631,16 @@ export default function Administration({
                 </details>
               )}
               {credentials && (
-                <DataTable
+                <BulkTable
+                  kind="node-credentials"
+                  scope={`computers:${user.id}:${offset}`}
+                  deleteKey={(c: MachineCredential) => c.id}
+                  label={(c: MachineCredential) => c.name}
+                  eligible={() => !busy && !loading}
+                  onDeleted={async () => {
+                    await load();
+                    if (offset) setOffset(0);
+                  }}
                   caption="Owned worker credentials"
                   rows={credentials}
                   rowKey={(c) => c.id}
@@ -645,21 +665,35 @@ export default function Administration({
                     },
                     {
                       label: "Control",
-                      cell: (c) =>
-                        c.revoked ? (
-                          "Unavailable"
-                        ) : (
+                      cell: (c) => (
+                        <div className="actions">
                           <ConfirmAction
-                            label="Revoke worker credential"
-                            description="Permanently invalidate this owned machine credential, including one not yet registered."
-                            onConfirm={() =>
-                              operate(
-                                `administration/node-credentials/${c.id}/revoke`,
-                                {},
-                              )
-                            }
+                            label="Delete credential"
+                            disabled={busy || loading}
+                            description={`Delete ${c.name}? Access is permanently revoked; node and audit history and local files are retained.`}
+                            onConfirm={async () => {
+                              await call("administration/bulk-delete", {
+                                kind: "node-credentials",
+                                ids: [c.id],
+                              });
+                              await load();
+                              if (offset) setOffset(0);
+                            }}
                           />
-                        ),
+                          {!c.revoked && (
+                            <ConfirmAction
+                              label="Revoke worker credential"
+                              description="Permanently invalidate this owned machine credential, including one not yet registered."
+                              onConfirm={() =>
+                                operate(
+                                  `administration/node-credentials/${c.id}/revoke`,
+                                  {},
+                                )
+                              }
+                            />
+                          )}
+                        </div>
+                      ),
                     },
                   ]}
                 />
@@ -669,6 +703,13 @@ export default function Administration({
           )}
           {platform && (
             <>
+              <section
+                role="tabpanel"
+                aria-label="Appearance"
+                hidden={tab !== "Appearance"}
+              >
+                {tab === "Appearance" && <AppearanceSettings />}
+              </section>
               <section
                 role="tabpanel"
                 aria-label="Invitations"
@@ -869,8 +910,16 @@ export default function Administration({
                       },
                       {
                         label: "Actor / action",
-                        cell: (e) =>
-                          `${e.actor_id ?? "Unauthenticated"} · ${e.action}`,
+                        cell: (e) => (
+                          <>
+                            {e.actor_id ? (
+                              <UserName id={e.actor_id} name={e.actor_name} />
+                            ) : (
+                              "Unauthenticated"
+                            )}
+                            <small>{e.action}</small>
+                          </>
+                        ),
                       },
                       {
                         label: "Details / correlation",

@@ -64,12 +64,17 @@ def severity_expression() -> ColumnElement[str]:
     )
 
 
-def event_data(row: Event, severity: str, actor_id: UUID) -> dict[str, object]:
+def event_data(session: Session, row: Event, severity: str, actor_id: UUID) -> dict[str, object]:
     return {
         "id": str(row.id),
         "type": row.type,
         "created_at": row.created_at.isoformat(),
         "actor_id": str(row.actor_id) if row.actor_id else None,
+        "actor_name": (
+            user.display_name
+            if row.actor_id and (user := session.get(User, row.actor_id))
+            else None
+        ),
         "workspace_id": str(row.workspace_id) if row.workspace_id else None,
         "job_id": str(row.job_id) if row.job_id else None,
         "node_id": str(row.node_id) if row.node_id else None,
@@ -149,7 +154,7 @@ def events(
         query.order_by(Event.created_at.desc(), Event.id.desc()).limit(PAGE_SIZE).offset(offset)
     )
     return {
-        "items": [event_data(e, s, actor.owner_id) for e, s in rows],
+        "items": [event_data(session, e, s, actor.owner_id) for e, s in rows],
         "total": total,
         "offset": offset,
         "limit": PAGE_SIZE,

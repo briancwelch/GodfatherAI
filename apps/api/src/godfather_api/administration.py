@@ -370,7 +370,11 @@ def owned_credentials(
     rows, total = page_rows(
         session,
         select(AccessCredential)
-        .where(AccessCredential.owner_id == actor.owner_id, AccessCredential.kind == "worker")
+        .where(
+            AccessCredential.owner_id == actor.owner_id,
+            AccessCredential.kind == "worker",
+            AccessCredential.deleted_at.is_(None),
+        )
         .order_by(AccessCredential.created_at.desc(), AccessCredential.id),
         offset,
         paged,
@@ -469,6 +473,11 @@ def security_audit(
         {
             "id": str(e.id),
             "actor_id": str(e.actor_id) if e.actor_id else None,
+            "actor_name": (
+                user.display_name
+                if e.actor_id and (user := session.get(User, e.actor_id))
+                else None
+            ),
             "action": e.type,
             "timestamp": e.created_at.isoformat(),
             "details": human_event_details(e, actor.owner_id),
@@ -481,7 +490,7 @@ def security_audit(
 
 class BulkDeletion(BaseModel):
     model_config = {"extra": "forbid"}
-    kind: Literal["workspaces", "jobs", "agents"]
+    kind: Literal["workspaces", "jobs", "agents", "node-credentials"]
     ids: list[UUID] = Field(min_length=1, max_length=100)
 
 
@@ -490,6 +499,37 @@ def bulk_delete(payload: BulkDeletion, request: Request, session: SessionDep) ->
     """Atomic logical deletion; durable execution and billing history are never erased."""
     actor = authenticate(request, session, "human")
     ids = sorted(set(payload.ids))
+    if payload.kind == "node-credentials":
+        credentials = list(
+            session.scalars(
+                select(AccessCredential)
+                .where(
+                    AccessCredential.id.in_(ids),
+                    AccessCredential.kind == "worker",
+                    AccessCredential.owner_id == actor.owner_id,
+                )
+                .order_by(AccessCredential.id)
+                .with_for_update()
+            )
+        )
+        if len(credentials) != len(ids):
+            raise HTTPException(404, "Owned machine credential not found; nothing was deleted")
+        now = datetime.now(UTC)
+        for credential in credentials:
+            if credential.deleted_at is not None:
+                continue
+            credential.revoked = True
+            credential.deleted_at = now
+            # Free the display name for a new pairing while retaining the credential and node.
+            credential.name = "Deleted connection " + str(credential.id)
+            if credential.node_id is not None:
+                node = session.get(Node, credential.node_id, with_for_update=True)
+                if node is not None:
+                    node.state = "disabled"
+                    record(session, node, "node.credential_deleted", {}, actor.owner_id)
+            audit(session, "node_credential_deleted", actor.owner_id, credential.id)
+        session.flush()
+        return {"deleted_ids": [str(i) for i in ids], "retention": "execution_history"}
     if payload.kind == "workspaces":
         workspace_ids = ids
     elif payload.kind == "jobs":

@@ -143,6 +143,11 @@ class RepositoryReference(Contract):
 
 
 class Advertisement(Contract):
+    worker_version: str | None = Field(
+        default=None,
+        max_length=100,
+        pattern=r"^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$",
+    )
     os: Literal["windows", "macos", "linux"]
     os_version: str = Field(min_length=1, max_length=100)
     architecture: Literal["x86_64", "arm64", "x86", "unknown"]
@@ -170,6 +175,8 @@ class Advertisement(Contract):
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
+        if self.worker_version is None:
+            data.pop("worker_version", None)
         if not self.coding_repositories:
             data.pop("coding_repositories", None)
         return data
@@ -204,6 +211,7 @@ class WorkerAck(Contract):
 
 
 class NodeView(Advertisement):
+    owner_name: str | None = None
     node_id: UUID
     owner_id: UUID
     name: str

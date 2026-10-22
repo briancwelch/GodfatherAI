@@ -1,5 +1,6 @@
 "use client";
 
+import { UserName } from "./node-identity";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { AuditEvent } from "../lib/contracts";
 import { localTime, short } from "../lib/contracts";
@@ -166,7 +167,11 @@ export function EventTimeline({ events }: { events: AuditEvent[] }) {
               </a>
             )}{" "}
             {event.attempt_id && <span>Attempt {short(event.attempt_id)}</span>}{" "}
-            {event.actor_id && <span>Actor {short(event.actor_id)}</span>}
+            {event.actor_id && (
+              <span>
+                Actor <UserName id={event.actor_id} name={event.actor_name} />
+              </span>
+            )}
           </p>
           <JsonDetails label="Event details" value={event.details} />
         </li>

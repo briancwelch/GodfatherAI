@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandIcon } from "./command-icon";
+import { WorkerVersion, OwnerName } from "./node-identity";
 import { BulkTable } from "./bulk-table";
 
 import { useEffect, useState, type FormEvent } from "react";
@@ -175,9 +177,11 @@ export default function CommandCenter({
             {section === "overview" && (
               <>
                 <a className="action secondary" href="/jobs">
+                  <CommandIcon label="Jobs" />
                   Jobs
                 </a>
                 <a className="action secondary" href="/nodes">
+                  <CommandIcon label="Nodes" />
                   Nodes
                 </a>
               </>
@@ -518,7 +522,9 @@ function NodeTable({ data }: { data: Snapshot }) {
           cell: (n) => (
             <>
               <a href={`/nodes/${n.node_id}`}>{n.name}</a>
-              <small title={n.owner_id}>Owner {short(n.owner_id)}</small>
+              <small>
+                Owner <OwnerName node={n} />
+              </small>
             </>
           ),
         },
@@ -534,6 +540,10 @@ function NodeTable({ data }: { data: Snapshot }) {
               </small>
             </>
           ),
+        },
+        {
+          label: "Worker version",
+          cell: (n) => <WorkerVersion node={n} />,
         },
         {
           label: "Platform / resources",
@@ -1151,7 +1161,11 @@ function NodeInspection({
       <dl>
         <dt>Identity / owner</dt>
         <dd>
-          {n.node_id} / {n.owner_id}
+          {n.node_id} / <OwnerName node={n} />
+        </dd>
+        <dt>Worker version</dt>
+        <dd>
+          <WorkerVersion node={n} />
         </dd>
         <dt>Platform</dt>
         <dd>
@@ -1469,12 +1483,15 @@ function Activity({
                         ]
                       : key === "user_id"
                         ? [
-                            ...new Set(
+                            ...new Map(
                               data.events.items
-                                .map((e) => e.actor_id)
-                                .filter((v): v is string => !!v),
-                            ),
-                          ].map((id) => [id, short(id)])
+                                .filter((e) => e.actor_id)
+                                .map((e) => [
+                                  e.actor_id!,
+                                  [e.actor_id!, e.actor_name || "Unknown user"],
+                                ]),
+                            ).values(),
+                          ]
                         : [
                             ...new Set(data.events.items.map((e) => e.type)),
                           ].map((t) => [t, t])

@@ -229,6 +229,9 @@ def node_view(session: Session, node: Node) -> NodeView:
             "allowed_workspace_ids": node.contribution_policy.get("allowed_workspace_ids", []),
             "node_id": node.id,
             "owner_id": node.owner_id,
+            "owner_name": (
+                owner.display_name if (owner := session.get(User, node.owner_id)) else None
+            ),
             "name": node.name,
             "os": node.os,
             "os_version": node.os_version,
@@ -342,6 +345,7 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
     node.runtimes = payload.model_dump(
         mode="json",
         include={
+            "worker_version",
             "job_protocol_version",
             "inference_protocol_version",
             "workflow_protocol_version",

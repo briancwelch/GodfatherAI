@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from godfather_api.account_providers import router as account_providers_router
 from godfather_api.administration import router as administration_router
 from godfather_api.agents import router as agents_router
+from godfather_api.appearance import router as appearance_router
 from godfather_api.artifacts import LocalArtifactStore
 from godfather_api.authentication import router as authentication_router
 from godfather_api.command_center import router as command_center_router
@@ -89,6 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/api/v1/openapi.json",
     )
     app.include_router(provider_connections_router)
+    app.include_router(appearance_router)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:

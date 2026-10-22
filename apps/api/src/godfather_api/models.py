@@ -60,6 +60,12 @@ class User(Entity, Base):
     picture: Mapped[str | None] = mapped_column(String(2048))
 
 
+class ApplicationSetting(Base):
+    __tablename__ = "application_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[dict[str, object]] = mapped_column(JSONB)
+
+
 class GoogleIdentity(Entity, Base):
     __tablename__ = "google_identities"
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), unique=True)
@@ -252,6 +258,7 @@ class AccessCredential(Entity, Owned, Base):
         ForeignKey("nodes.id", ondelete="RESTRICT"), unique=True
     )
     revoked: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Capability(Entity, Base):

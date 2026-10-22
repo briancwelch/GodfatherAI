@@ -206,6 +206,9 @@ def main(
         client = worker_client or WorkerClient(args.url, credentials["token"])
         advertisement = profile(args.simulate) if args.simulate else discover()
         values = advertisement.model_dump()
+        from godfather_worker.build_info import worker_version
+
+        values["worker_version"] = worker_version()
         if args.primary:
             values["primary_capabilities"] = args.primary
         if args.secondary:

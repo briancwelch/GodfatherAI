@@ -25,6 +25,8 @@ def reconnect_node(
     session: SessionDep, credential: AccessCredential, request: Request
 ) -> Node | None:
     """The credential lock serializes replacement against all old worker requests."""
+    if credential.deleted_at is not None:
+        raise HTTPException(409, "This connection was deleted. Start a new pairing.")
     if credential.node_id is None:
         return None
     node = session.scalar(select(Node).where(Node.id == credential.node_id).with_for_update())

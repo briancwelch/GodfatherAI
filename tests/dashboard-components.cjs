@@ -662,3 +662,79 @@ test("bulk tables expose scoped eligible selection and workspace archive protect
     false,
   );
 });
+
+const identity = require("../apps/dashboard/src/components/node-identity.tsx");
+const appearance = require("../apps/dashboard/src/lib/appearance.ts");
+const appearanceUI = require("../apps/dashboard/src/components/appearance-settings.tsx");
+test("worker build comparison uses semantic precedence and platform installers", () => {
+  for (const [a, b, expected] of [
+    ["0.4.1-rc.9", "0.4.1-rc.10", -1],
+    ["0.4.1", "0.4.1-rc.10", 1],
+    ["0.4.1+abc", "0.4.1+def", 0],
+    ["0.10.0", "0.9.0", 1],
+  ])
+    assert.equal(Math.sign(identity.compareVersions(a, b)), expected);
+  assert.equal(identity.compareVersions("unknown", "0.4.1"), null);
+  const builds = identity.availableBuilds({
+    artifacts: [
+      {
+        filename: "consigliere-0.4.1-rc.4-windows-x64-setup.exe",
+        sha256: "a".repeat(64),
+      },
+      {
+        filename: "consigliere-0.3.0-macos-arm64-installer.dmg",
+        sha256: "a".repeat(64),
+      },
+    ],
+  });
+  assert.deepEqual(builds, {
+    "windows-x86_64": "0.4.1-rc.4",
+    "macos-arm64": "0.3.0",
+  });
+  assert.deepEqual(
+    identity.availableBuilds({
+      artifacts: [null, { filename: "untrusted.exe" }],
+    }),
+    {},
+  );
+});
+test("owner is readable with full UUID on hover and keyboard focus", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(identity.OwnerName, {
+      node: { owner_name: "Brian", owner_id: "owner-uuid" },
+    }),
+  );
+  assert.match(html, /Brian/);
+  assert.match(html, /title="owner-uuid"/);
+  assert.match(html, /tabindex="0"/);
+  assert.match(html, /role="tooltip"/);
+});
+test("appearance defaults are accessible and bridge operations stay allowlisted", () => {
+  assert.deepEqual(appearance.paletteErrors(appearance.defaults.light), []);
+  assert.deepEqual(appearance.paletteErrors(appearance.defaults.dark), []);
+  assert.ok(
+    appearance.paletteErrors({
+      ...appearance.defaults.light,
+      foreground: "#ffffff",
+    }).length,
+  );
+  assert.equal(server.allowedPath("appearance", "GET"), true);
+  assert.equal(server.allowedPath("appearance", "POST"), true);
+  assert.equal(server.allowedPath("appearance/arbitrary-css", "POST"), false);
+  const html = renderToStaticMarkup(
+    React.createElement(appearanceUI.AppearanceSettings),
+  );
+  assert.match(html, /Loading saved appearance/);
+});
+
+test("audit actor identity has a readable name and full UUID tooltip", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(identity.UserName, {
+      id: "actor-uuid",
+      name: "Audit user",
+    }),
+  );
+  assert.match(html, /Audit user/);
+  assert.match(html, /title="actor-uuid"/);
+  assert.match(html, /role="tooltip"/);
+});

@@ -14,7 +14,7 @@ export function BulkTable<T>({
   onDeleted,
   ...table
 }: ComponentProps<typeof DataTable<T>> & {
-  kind: "workspaces" | "jobs" | "agents";
+  kind: "workspaces" | "jobs" | "agents" | "node-credentials";
   scope: string;
   deleteKey: (row: T) => string;
   label: (row: T) => string;
@@ -65,7 +65,11 @@ export function BulkTable<T>({
           <ConfirmAction
             label="Delete selected"
             disabled={busy || !ids.length}
-            description={`Delete ${ids.length} selected ${kind}? ${kind === "agents" ? "All versions of each selected agent will be removed. " : ""}${kind === "jobs" ? "Only completed, failed or cancelled jobs can be deleted. " : "Unfinished jobs must be cancelled or finished first. "}Items disappear from normal lists. Execution history, artifacts and usage records are retained. No files on worker computers are removed.`}
+            description={
+              kind === "node-credentials"
+                ? `Delete ${ids.length} selected computer credentials? Access is permanently revoked and credentials disappear from this list. Active attempts expire and may recover on compatible computers. Node and audit history are retained. Local files are preserved.`
+                : `Delete ${ids.length} selected ${kind}? ${kind === "agents" ? "All versions of each selected agent will be removed. " : ""}${kind === "jobs" ? "Only completed, failed or cancelled jobs can be deleted. " : "Unfinished jobs must be cancelled or finished first. "}Items disappear from normal lists. Execution history, artifacts and usage records are retained. No files on worker computers are removed.`
+            }
             onConfirm={remove}
           />
         )}

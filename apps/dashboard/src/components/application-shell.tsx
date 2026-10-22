@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AppearanceProvider, useAppearance } from "./appearance-provider";
+import { WorkerBuildProvider } from "./node-identity";
 import { CommandIcon } from "./command-icon";
 import type { Snapshot } from "../lib/contracts";
 
@@ -77,7 +79,17 @@ export function UnavailableCommand({
   );
 }
 
-export function ApplicationShell({
+export function ApplicationShell(props: Parameters<typeof DesktopShell>[0]) {
+  return (
+    <AppearanceProvider enabled={!!props.account}>
+      <WorkerBuildProvider>
+        <DesktopShell {...props} />
+      </WorkerBuildProvider>
+    </AppearanceProvider>
+  );
+}
+
+function DesktopShell({
   section,
   data,
   account,
@@ -94,8 +106,15 @@ export function ApplicationShell({
   ribbon?: ReactNode;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [inspector, setInspector] = useState(false);
+  const { settings, theme, setTheme } = useAppearance();
+  const [navigationOverride, setNavigationOverride] = useState<boolean | null>(
+    null,
+  );
+  const [inspectorOverride, setInspectorOverride] = useState<boolean | null>(
+    null,
+  );
+  const collapsed = navigationOverride ?? !settings.navigation_open;
+  const inspector = inspectorOverride ?? settings.inspector_open;
   return (
     <div
       className={`desktop-application ${collapsed ? "navigation-collapsed" : ""}`}
@@ -123,9 +142,9 @@ export function ApplicationShell({
             Theme
             <select
               aria-label="Theme"
-              defaultValue="light"
+              value={theme}
               onChange={(e) => {
-                document.documentElement.dataset.theme = e.target.value;
+                setTheme(e.target.value as "light" | "dark");
               }}
             >
               <option value="light">Light</option>
@@ -178,14 +197,14 @@ export function ApplicationShell({
           <button
             className="action secondary"
             aria-pressed={!collapsed}
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => setNavigationOverride(!collapsed)}
           >
             Navigation
           </button>
           <button
             className="action secondary"
             aria-pressed={inspector}
-            onClick={() => setInspector(!inspector)}
+            onClick={() => setInspectorOverride(!inspector)}
           >
             Inspector
           </button>

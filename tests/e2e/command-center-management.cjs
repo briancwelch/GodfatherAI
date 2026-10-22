@@ -82,6 +82,60 @@ const memberPage = {
     .slice(0, 25)
     .map((a) => ({ user_id: a.id, role: roles.get(a.id) })),
 };
+const ts = require("typescript");
+const appearanceSource = fs.readFileSync(
+  "apps/dashboard/src/lib/appearance.ts",
+  "utf8",
+);
+const appearanceModule = { exports: {} };
+new Function(
+  "module",
+  "exports",
+  ts.transpileModule(appearanceSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText,
+)(appearanceModule, appearanceModule.exports);
+let siteAppearance = structuredClone(appearanceModule.exports.defaults);
+let computers = [1, 2, 3].map((i) => ({
+  id: uuid(600 + i),
+  name: `Fixture computer ${i}`,
+  revoked: i === 3,
+  node_id: uuid(600 + i),
+}));
+const nodeFixture = {
+  node_id: uuid(601),
+  owner_id: owner,
+  owner_name: "Isolated owner",
+  name: "Fixture computer 1",
+  os: "windows",
+  os_version: "11",
+  architecture: "x86_64",
+  worker_version: "0.4.1-rc.3",
+  state: "online",
+  connection_status: "online",
+  protocol_version: 1,
+  last_heartbeat_at: new Date().toISOString(),
+  resources: {
+    source: "simulated",
+    cpu_name: "Fixture CPU",
+    cpu_count: 4,
+    ram_bytes: 8000000000,
+    gpus: [],
+  },
+  primary_capabilities: [],
+  secondary_capabilities: [],
+  runtimes: [],
+  toolchains: [],
+  dependencies: [],
+  sandbox_modes: [],
+  worker_tools: [],
+  tool_permissions: [],
+  installed_models: [],
+  model_deployments: [],
+  scheduling_policy: "shared",
+  concurrency_limit: 1,
+  visible_active_jobs: 0,
+};
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const route = url.pathname.replace("/api/v1/", "");
@@ -92,6 +146,33 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   let value;
   if (route === "auth/me") value = account;
+  else if (route === "appearance") {
+    if (req.method === "POST") siteAppearance = payload;
+    value = siteAppearance;
+  } else if (route === "administration/node-credentials")
+    value = {
+      items: computers.slice(offset, offset + 25),
+      offset,
+      limit: 25,
+      total: computers.length,
+    };
+  else if (route === "administration/audit")
+    value = {
+      items: [
+        {
+          id: uuid(750),
+          actor_id: owner,
+          actor_name: "Isolated owner",
+          action: "security.appearance_updated",
+          timestamp: new Date().toISOString(),
+          details: {},
+          correlation_id: "fixture",
+        },
+      ],
+      offset: 0,
+      limit: 25,
+      total: 1,
+    };
   else if (route === "tools") value = [];
   else if (route === "command-center")
     value = {
@@ -109,7 +190,7 @@ const server = http.createServer(async (req, res) => {
               can_manage: true,
             },
           ],
-      nodes: [],
+      nodes: [nodeFixture],
       jobs: jobs.slice(offset, offset + 25),
       agents,
       models: [],
@@ -118,7 +199,7 @@ const server = http.createServer(async (req, res) => {
       node_counts: {},
       job_counts: { COMPLETED: jobs.length },
       agent_counts: {},
-      totals: { jobs: jobs.length, nodes: 0, agents: agents.length },
+      totals: { jobs: jobs.length, nodes: 1, agents: agents.length },
       limit: 25,
       offset,
     };
@@ -176,6 +257,8 @@ const server = http.createServer(async (req, res) => {
     };
   else if (route === "administration/bulk-delete") {
     deletes.push(payload);
+    if (payload.kind === "node-credentials")
+      computers = computers.filter((c) => !payload.ids.includes(c.id));
     if (payload.kind === "jobs")
       jobs = jobs.filter((j) => !payload.ids.includes(j.id));
     if (payload.kind === "agents")
@@ -264,6 +347,19 @@ const server = http.createServer(async (req, res) => {
       { name: "godfather_session", value: "x".repeat(43), url: origin },
     ]);
     const page = await context.newPage();
+    await page.route("**/downloads/manifest.json", (route) =>
+      route.fulfill({
+        json: {
+          artifacts: [
+            {
+              filename: "consigliere-0.4.1-rc.4-windows-x64-setup.exe",
+              sha256: "a".repeat(64),
+              signing: "Fixture unsigned",
+            },
+          ],
+        },
+      }),
+    );
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("dialog", (d) => d.accept());
@@ -489,8 +585,149 @@ const server = http.createServer(async (req, res) => {
     await popup
       .getByRole("button", { name: "Keep workspaces", exact: true })
       .click();
+    // Overview fragment commands use the shared icon set.
+    await page.goto(origin + "/");
+    await page.getByRole("region", { name: "Overview ribbon" }).waitFor();
+    assert.equal(
+      await page.locator('.application-ribbon a[href="/jobs"] svg').count(),
+      1,
+    );
+    assert.equal(
+      await page.locator('.application-ribbon a[href="/nodes"] svg').count(),
+      1,
+    );
+    await page.goto(origin + "/nodes");
+    const ownerName = page.locator(".owner-name").first();
+    await ownerName.waitFor();
+    await ownerName.hover();
+    assert.equal(await ownerName.getAttribute("title"), owner);
+    assert.equal(await ownerName.getByRole("tooltip").isVisible(), true);
+    await page.getByText("Out of Date", { exact: true }).waitFor();
+    const tooltipBox = await ownerName.getByRole("tooltip").boundingBox();
+    const tableBox = await page.locator(".table-scroll").boundingBox();
+    assert.ok(
+      tooltipBox.y >= tableBox.y &&
+        tooltipBox.y + tooltipBox.height <= tableBox.y + tableBox.height,
+      "Tooltip fits within the scrolling table",
+    );
+    await page.screenshot({
+      path: path.join(folder, "nodes-identity-and-version.png"),
+    });
+    await page.goto(origin + "/administration/appearance");
+    const appearancePanel = page.getByRole("region", {
+      name: "Site appearance",
+      exact: true,
+    });
+    await appearancePanel
+      .getByRole("button", { name: "Save site appearance", exact: true })
+      .waitFor();
+    await appearancePanel
+      .getByLabel("Font size (px)", { exact: true })
+      .fill("15");
+    await appearancePanel
+      .getByLabel("Striped table rows", { exact: true })
+      .check();
+    const appearanceOrigin = await page.evaluate(() => performance.timeOrigin);
+    await appearancePanel
+      .getByRole("button", { name: "Save site appearance", exact: true })
+      .click();
+    await appearancePanel
+      .getByRole("status")
+      .filter({ hasText: "Site appearance saved" })
+      .waitFor();
+    assert.equal(siteAppearance.font_size, 15);
+    assert.equal(siteAppearance.striped_tables, true);
+    assert.equal(
+      await page.evaluate(() => performance.timeOrigin),
+      appearanceOrigin,
+    );
+    assert.equal(
+      await page.evaluate(() => getComputedStyle(document.body).fontSize),
+      "15px",
+    );
+    await page.screenshot({
+      path: path.join(folder, "appearance-desktop.png"),
+    });
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.screenshot({ path: path.join(folder, "appearance-mobile.png") });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.reload();
+    await page
+      .getByRole("region", { name: "Site appearance", exact: true })
+      .getByLabel("Font size (px)", { exact: true })
+      .waitFor();
+    assert.equal(
+      await page
+        .getByRole("region", { name: "Site appearance", exact: true })
+        .getByLabel("Font size (px)", { exact: true })
+        .inputValue(),
+      "15",
+    );
+    await page.getByRole("tab", { name: "Computers", exact: true }).click();
+    await page
+      .getByRole("checkbox", { name: "Select Fixture computer 1", exact: true })
+      .check();
+    await page
+      .getByRole("checkbox", { name: "Select Fixture computer 2", exact: true })
+      .check();
+    const computerOrigin = await page.evaluate(() => performance.timeOrigin);
+    await page
+      .getByRole("button", { name: "Delete selected", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm delete selected", exact: true })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    assert.deepEqual(deletes.at(-1), {
+      kind: "node-credentials",
+      ids: [uuid(601), uuid(602)],
+    });
+    assert.equal(
+      await page.evaluate(() => performance.timeOrigin),
+      computerOrigin,
+    );
+    await page
+      .getByRole("button", { name: "Delete credential", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm delete credential", exact: true })
+      .click();
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    assert.equal(computers.length, 0);
+    assert.equal(
+      await page.evaluate(() => performance.timeOrigin),
+      computerOrigin,
+    );
+    await page.getByRole("tab", { name: "Audit", exact: true }).click();
+    const auditPanel = page.getByRole("tabpanel", {
+      name: "Audit",
+      exact: true,
+    });
+    const auditActor = auditPanel.locator(".owner-name");
+    await auditActor.waitFor();
+    assert.equal(await auditActor.getAttribute("title"), owner);
+    await auditActor.focus();
+    assert.equal(await auditActor.getByRole("tooltip").isVisible(), true);
+    assert.ok((await auditActor.textContent()).includes("Isolated owner"));
+    await page.screenshot({
+      path: path.join(folder, "audit-actor-tooltip.png"),
+    });
     assert.deepEqual(errors, []);
     const result = {
+      audit_actor_tooltip: true,
+      owner_tooltip: true,
+      worker_outdated: true,
+      overview_icons: true,
+      appearance_save_and_reload: true,
+      computer_single_and_bulk_ajax: true,
       jobs_ajax: true,
       agents_all_versions: true,
       top_bottom_pagination: true,
