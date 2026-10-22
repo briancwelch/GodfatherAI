@@ -52,9 +52,10 @@ storage. Local-model use and model-download consent are separate; existing-model
 permission alone does not enable downloads. Each download still needs the owner's
 confirmation in Command Center. Neither setting installs Ollama.
 
-If the download checkbox is missing, the desktop app needs an updated build.
-Older settings keep downloads disabled. The source correction requires a new
-worker build and a dashboard update before it is available in distributed apps.
+If the download checkbox is missing, update Consigliere to **0.4.1-rc.3** from
+**Nodes → Downloads**. The coordinator and all three updated installers are
+deployed; see [verification](model-download-permission-fix-2026-10-21.md).
+Older settings keep downloads disabled until the owner explicitly enables them.
 
 ## Command Center
 

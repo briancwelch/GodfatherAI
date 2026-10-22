@@ -4,8 +4,8 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current coordinator release: 0.4.1-rc.2** - [Command Center bulk management and archives](docs/operations/command-center-management-verification-2026-10-21.md).
-Consigliere remains **0.4.0-rc.3**; no worker upgrade is required.
+**Current coordinator and Consigliere release: 0.4.1-rc.3** - [Model-download permission fix and deployment](docs/operations/model-download-permission-fix-2026-10-21.md).
+Install the updated worker to expose the separate model-download permission.
 
 **Workload release: 0.4.0-rc.3 — Phase 12 images, analytics and reporting.** See the
 [Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
@@ -16,10 +16,16 @@ Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is pr
 
 ## Start here
 
+The [model-download correction](docs/operations/consigliere-ui.md#add-a-local-model)
+adds explicit download consent in Consigliere and permits first-model setup with
+an empty inventory. All three updated installers are under **Nodes → Downloads**.
+Existing-model permission alone does not enable downloads; each catalog download
+still requires confirmation in Command Center.
+
 The authorized [Command Center management update](docs/operations/command-center-management.md)
 adds AJAX bulk deletion, optional workspace ZIP archives with animated progress,
 top/bottom pagination and saved-user permission editing. It requires only the
-coordinator/dashboard update; existing Consigliere installers are unchanged.
+coordinator/dashboard update; that update did not change Consigliere installers.
 The [deployment verification](docs/operations/command-center-management-verification-2026-10-21.md) records activation and preservation checks.
 
 **Consigliere** is the new name of The Godfather AI desktop worker. The current
@@ -28,7 +34,7 @@ navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Consigliere **0.4.0-rc.3** remains the current worker. The previous coordinator
+configured. Consigliere **0.4.1-rc.3** is the current worker. The earlier coordinator
 release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
