@@ -1,5 +1,7 @@
 "use client";
 
+import { BulkTable } from "./bulk-table";
+
 import { useEffect, useState, type FormEvent } from "react";
 import {
   ApplicationShell,
@@ -117,6 +119,7 @@ export default function CommandCenter({
   });
   const state = usePoll<Snapshot>(`command-center?${query}`, revision);
   const identity = usePoll<{
+    id: string;
     display_name: string;
     email: string;
     roles: string[];
@@ -320,11 +323,35 @@ export default function CommandCenter({
                           )}
                         </div>
                       )}
+                    {(section === "jobs" ||
+                      (section === "nodes" && nodeTab === "Connected nodes") ||
+                      section === "agents") && (
+                      <Pager
+                        offset={offset}
+                        limit={data.limit}
+                        total={data.totals[section]}
+                        onChange={setOffset}
+                      />
+                    )}
                     {section === "overview" && <Overview data={data} />}
                     {section === "jobs" && (
                       <>
                         <SubmitJob data={data} />
-                        <JobTable rows={data.jobs} />
+                        <JobTable
+                          rows={data.jobs}
+                          deletion={{
+                            scope: `${data.workspace_id}:${offset}:${search}:${status}`,
+                            actor: identity.data?.id,
+                            manage:
+                              data.workspaces.find(
+                                (w) => w.id === data.workspace_id,
+                              )?.can_manage || false,
+                            refresh: () => {
+                              setOffset(0);
+                              refresh();
+                            },
+                          }}
+                        />
                       </>
                     )}
                     {section === "nodes" && (
@@ -348,7 +375,10 @@ export default function CommandCenter({
                       <AgentManagement
                         key={data.workspace_id}
                         data={data}
-                        refresh={refresh}
+                        refresh={() => {
+                          setOffset(0);
+                          refresh();
+                        }}
                         initialModel={initialModel}
                       />
                     )}
@@ -388,9 +418,31 @@ export default function CommandCenter({
   );
 }
 
-function JobTable({ rows }: { rows: JobInfo[] }) {
+function JobTable({
+  rows,
+  deletion,
+}: {
+  rows: JobInfo[];
+  deletion?: {
+    scope: string;
+    actor?: string;
+    manage: boolean;
+    refresh: () => void;
+  };
+}) {
+  const Table = deletion ? BulkTable<JobInfo> : DataTable<JobInfo>;
   return (
-    <DataTable
+    <Table
+      kind="jobs"
+      scope={deletion?.scope || ""}
+      deleteKey={(j: JobInfo) => j.id}
+      label={(j: JobInfo) => `job ${j.id}`}
+      eligible={(j: JobInfo) =>
+        !!deletion &&
+        ["COMPLETED", "FAILED", "CANCELLED"].includes(j.status) &&
+        (deletion.manage || j.owner_id === deletion.actor)
+      }
+      onDeleted={deletion?.refresh || (() => {})}
       caption="Jobs in this scope"
       rows={rows}
       rowKey={(j) => j.id}
@@ -987,6 +1039,12 @@ function JobInspection({
           {checkpoints.data && (
             <>
               <h3>Durable checkpoints</h3>
+              <Pager
+                offset={checkpointOffset}
+                limit={checkpoints.data.limit}
+                total={checkpoints.data.total}
+                onChange={setCheckpointOffset}
+              />
               <DataTable
                 caption="Integrity-checked checkpoint references"
                 rows={checkpoints.data.items}
@@ -1194,6 +1252,31 @@ function Models({
       `${m.node_id}:${m.deployment.provider_id}:${m.deployment.identifier}` ===
       selectedModel,
   );
+  const pagination = (
+    <>
+      <div className="pager">
+        <button
+          className="action secondary"
+          type="button"
+          disabled={!offset}
+          onClick={() => setOffset(Math.max(0, offset - data.limit))}
+        >
+          Previous deployments
+        </button>
+        <span>
+          From {offset + 1}; up to {data.limit} per page
+        </span>
+        <button
+          className="action secondary"
+          type="button"
+          disabled={data.models.length < data.limit}
+          onClick={() => setOffset(offset + data.limit)}
+        >
+          Next deployments
+        </button>
+      </div>
+    </>
+  );
   return (
     <>
       <ModelInstaller workspace={data.workspace_id} />
@@ -1202,6 +1285,7 @@ function Models({
         credentials. Manage paid providers separately in{" "}
         <a href="/providers">Provider Connections</a>.
       </p>
+      {pagination}
       <DataTable
         caption="Model deployments"
         rows={data.models}
@@ -1321,25 +1405,7 @@ function Models({
           </a>
         </section>
       )}
-      <div className="pager">
-        <button
-          className="action secondary"
-          disabled={!offset}
-          onClick={() => setOffset(Math.max(0, offset - data.limit))}
-        >
-          Previous deployments
-        </button>
-        <span>
-          From {offset + 1}; up to {data.limit} per page
-        </span>
-        <button
-          className="action secondary"
-          disabled={data.models.length < data.limit}
-          onClick={() => setOffset(offset + data.limit)}
-        >
-          Next deployments
-        </button>
-      </div>
+      {pagination}
       <p className="muted">
         Performance is per node, sampled from up to 200 recent inference
         attempts; it is not a model benchmark.
@@ -1456,6 +1522,14 @@ function Activity({
         </p>
       )}
       {!state.data && !state.error && <p role="status">Loading events…</p>}
+      {state.data && (
+        <Pager
+          offset={offset}
+          total={state.data.total}
+          limit={state.data.limit}
+          onChange={setOffset}
+        />
+      )}
       <EventTimeline events={state.data?.items || []} />
       {state.data && (
         <Pager

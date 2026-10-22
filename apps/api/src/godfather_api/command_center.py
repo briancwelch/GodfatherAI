@@ -172,7 +172,10 @@ def overview(
     )
     workspaces = session.scalars(
         select(Workspace)
-        .where(or_(Workspace.owner_id == actor.owner_id, Workspace.id.in_(member_ids)))
+        .where(
+            Workspace.deleted_at.is_(None),
+            or_(Workspace.owner_id == actor.owner_id, Workspace.id.in_(member_ids)),
+        )
         .order_by(Workspace.name, Workspace.id)
     ).all()
     selected = (
@@ -200,12 +203,12 @@ def overview(
         if selected
         else select(Job).where(false())
     )
-    job_query = job_query.where(live_jobs)
+    job_query = job_query.where(live_jobs, Job.deleted_at.is_(None))
     job_counts = (
         dict(
             session.execute(
                 select(Job.status, func.count())
-                .where(Job.workspace_id == selected.id, live_jobs)
+                .where(Job.workspace_id == selected.id, live_jobs, Job.deleted_at.is_(None))
                 .group_by(Job.status)
             )
             .tuples()
@@ -215,7 +218,7 @@ def overview(
         else {}
     )
     agent_query = (
-        select(Agent).where(Agent.workspace_id == selected.id)
+        select(Agent).where(Agent.workspace_id == selected.id, Agent.deleted_at.is_(None))
         if selected
         else select(Agent).where(false())
     )
@@ -223,7 +226,7 @@ def overview(
         dict(
             session.execute(
                 select(Agent.enabled, func.count())
-                .where(Agent.workspace_id == selected.id)
+                .where(Agent.workspace_id == selected.id, Agent.deleted_at.is_(None))
                 .group_by(Agent.enabled)
             )
             .tuples()
@@ -320,7 +323,11 @@ def overview(
             == "online"
         ]
         for agent in session.scalars(
-            select(Agent).where(Agent.workspace_id == selected.id, Agent.enabled.is_(True))
+            select(Agent).where(
+                Agent.workspace_id == selected.id,
+                Agent.enabled.is_(True),
+                Agent.deleted_at.is_(None),
+            )
         ):
             try:
                 definition = workflow_service.agent_view(agent).definition
@@ -540,11 +547,13 @@ def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[st
         WorkspaceMember.user_id == actor.owner_id
     )
     visible = select(Workspace.id).where(
-        or_(Workspace.owner_id == actor.owner_id, Workspace.id.in_(member_ids))
+        Workspace.deleted_at.is_(None),
+        or_(Workspace.owner_id == actor.owner_id, Workspace.id.in_(member_ids)),
     )
     assigned = session.scalars(
         select(Job)
         .where(
+            Job.deleted_at.is_(None),
             Job.workspace_id.in_(visible),
             or_(
                 Job.assigned_node_id == node_id,
@@ -573,6 +582,7 @@ def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict
         .join(WorkflowStepRecord, WorkflowStepRecord.job_id == Job.id)
         .join(Attempt, WorkflowStepRecord.attempt_id == Attempt.id)
         .where(
+            Job.deleted_at.is_(None),
             Agent.agent_key == agent.agent_key,
             Agent.workspace_id == agent.workspace_id,
             WorkflowStepRecord.metadata_refs["kind"].astext == "model",
@@ -587,6 +597,7 @@ def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict
                 select(Job)
                 .join(Agent, Job.agent_id == Agent.id)
                 .where(
+                    Job.deleted_at.is_(None),
                     Agent.agent_key == agent.agent_key,
                     Agent.workspace_id == agent.workspace_id,
                 )

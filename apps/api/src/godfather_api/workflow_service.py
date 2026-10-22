@@ -86,6 +86,7 @@ def eligible(session: Session, job: Job, node: Node, view: NodeView) -> bool:
         run is not None
         and agent is not None
         and agent.enabled
+        and agent.deleted_at is None
         and view.workflow_protocol_version == 1
         and run.status != "REVIEW_REQUIRED"
     )

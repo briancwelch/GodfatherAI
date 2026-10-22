@@ -34,11 +34,24 @@ TERMINAL = ("COMPLETED", "FAILED", "CANCELLED")
 SCHEDULER_LOCK = 7040401
 
 
+def lock_workspace(session: Session, workspace_id: UUID) -> None:
+    session.scalar(
+        select(Workspace)
+        .where(Workspace.id == workspace_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
 def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bool:
     workspace = session.get(Workspace, workspace_id)
-    return workspace is not None and (
-        workspace.owner_id == owner_id
-        or session.get(WorkspaceMember, (workspace_id, owner_id)) is not None
+    return (
+        workspace is not None
+        and workspace.deleted_at is None
+        and (
+            workspace.owner_id == owner_id
+            or session.get(WorkspaceMember, (workspace_id, owner_id)) is not None
+        )
     )
 
 

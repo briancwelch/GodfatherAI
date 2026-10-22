@@ -84,7 +84,7 @@ def view(session: Session, job: Job) -> JobView:
 
 
 def authorized_job(session: Session, job_id: UUID, actor_id: UUID, lock: bool = False) -> Job:
-    query = select(Job).where(Job.id == job_id)
+    query = select(Job).where(Job.id == job_id, Job.deleted_at.is_(None))
     job = session.scalar(query.with_for_update() if lock else query)
     if job is None or not workspace_access(session, actor_id, job.workspace_id):
         raise HTTPException(404, "Job not found in an authorized workspace")
@@ -98,6 +98,9 @@ def submit(payload: JobSubmission, request: Request, session: SessionDep) -> Job
     actor = authenticate(request, session, "human")
     if not session.info.get("test") and payload.type.startswith("synthetic."):
         raise HTTPException(403, "Synthetic jobs are restricted to isolated tests")
+    from godfather_api.scheduler import lock_workspace
+
+    lock_workspace(session, payload.workspace_id)
     if not workspace_access(session, actor.owner_id, payload.workspace_id):
         raise HTTPException(404, "Workspace not found or permission denied")
     selection = payload.requirements.model_selection
@@ -144,7 +147,11 @@ def list_jobs(
     query = (
         select(Job)
         .join(Workspace, Job.workspace_id == Workspace.id)
-        .where(or_(Workspace.owner_id == actor.owner_id, Job.workspace_id.in_(memberships)))
+        .where(
+            Workspace.deleted_at.is_(None),
+            Job.deleted_at.is_(None),
+            or_(Workspace.owner_id == actor.owner_id, Job.workspace_id.in_(memberships)),
+        )
     )
     if not session.info.get("test"):
         query = query.where(~Job.type.like("synthetic.%"))
@@ -202,6 +209,11 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
         and (membership is None or membership.role != "admin")
     ):
         raise HTTPException(403, "Only the job owner or workspace administrator may retry")
+    from godfather_api.models import Agent
+
+    agent = session.get(Agent, job.agent_id) if job.agent_id else None
+    if agent is not None and agent.deleted_at is not None:
+        raise HTTPException(409, "The agent was deleted; create a new agent before submitting work")
     previous = current_attempt(session, job)
     if job.type == "result.action":
         raise HTTPException(

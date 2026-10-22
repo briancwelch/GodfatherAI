@@ -129,6 +129,9 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
 @router.post("/jobs", response_model=JobView, status_code=201)
 def submit(payload: Submission, request: Request, session: SessionDep) -> JobView:
     actor = authenticate(request, session, "human")
+    from godfather_api.scheduler import lock_workspace
+
+    lock_workspace(session, payload.workspace_id)
     if not workspace_access(session, actor.owner_id, payload.workspace_id):
         raise HTTPException(404, "Workspace not found")
     # Serialize built-in definition creation without mutating existing user agents.
@@ -137,7 +140,11 @@ def submit(payload: Submission, request: Request, session: SessionDep) -> JobVie
     spec.name += f" v1 ({payload.ram_bytes}/{payload.gpu_memory_bytes})"
     row = session.scalar(
         select(Agent)
-        .where(Agent.workspace_id == payload.workspace_id, Agent.name == spec.name)
+        .where(
+            Agent.workspace_id == payload.workspace_id,
+            Agent.name == spec.name,
+            Agent.deleted_at.is_(None),
+        )
         .order_by(Agent.version.desc())
         .limit(1)
     )

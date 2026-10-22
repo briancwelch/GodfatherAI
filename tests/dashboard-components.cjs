@@ -553,3 +553,59 @@ test("self-hosted HTTPS uses the configured origin and still rejects foreign req
     else process.env.GODFATHER_WEB_ORIGIN = before;
   }
 });
+
+test("bulk tables expose scoped eligible selection and workspace archive protection", () => {
+  const bulk = require("../apps/dashboard/src/components/bulk-table.tsx");
+  const archive = require("../apps/dashboard/src/components/workspace-delete.tsx");
+  const html = renderToStaticMarkup(
+    React.createElement(bulk.BulkTable, {
+      kind: "jobs",
+      scope: "workspace:0",
+      rows: [
+        { id: "done", state: "COMPLETED" },
+        { id: "running", state: "RUNNING" },
+      ],
+      caption: "Jobs",
+      rowKey: (j) => j.id,
+      deleteKey: (j) => j.id,
+      label: (j) => j.id,
+      eligible: (j) => j.state === "COMPLETED",
+      onDeleted: () => {},
+      columns: [{ label: "Job", cell: (j) => j.id }],
+    }),
+  );
+  assert.match(html, /Select all eligible jobs on this page/);
+  assert.match(html, /aria-label="Select running" disabled/);
+  assert.match(html, /0 selected on this page/);
+  const dialog = renderToStaticMarkup(
+    React.createElement(archive.WorkspaceDelete, {
+      ids: ["workspace"],
+      names: ["My workspace"],
+      disabled: false,
+      onDelete: async () => {},
+    }),
+  );
+  assert.match(dialog, /Archive &amp; download/);
+  assert.match(dialog, /Keep a copy before you go/);
+  assert.match(dialog, /disabled="">Delete workspaces/);
+  assert.match(dialog, /Automatic restore is not available/);
+  assert.equal(
+    server.allowedPath("administration/workspace-archive", "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("administration/workspace-archive", "GET"),
+    false,
+  );
+  assert.equal(server.allowedPath("administration/bulk-delete", "POST"), true);
+  assert.equal(server.allowedPath("administration/bulk-delete", "GET"), false);
+  const id = "00000000-0000-0000-0000-000000000000";
+  assert.equal(
+    server.allowedPath(`administration/workspaces/${id}/members/${id}`, "GET"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath(`administration/workspaces/${id}/members/${id}`, "POST"),
+    false,
+  );
+});

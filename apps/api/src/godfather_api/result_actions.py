@@ -68,6 +68,10 @@ def submit(
     source_id: UUID, payload: ResultActionRequest, request: Request, session: SessionDep
 ) -> dict[str, object]:
     actor = authenticate(request, session, "human")
+    from godfather_api.scheduler import lock_workspace
+
+    source = jobs.authorized_job(session, source_id, actor.owner_id)
+    lock_workspace(session, source.workspace_id)
     source = jobs.authorized_job(session, source_id, actor.owner_id, lock=True)
     if (
         source.type != "agent.workflow"

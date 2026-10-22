@@ -15,6 +15,7 @@ import {
   Pager,
   SectionTabs,
 } from "./operational";
+import { BulkTable } from "./bulk-table";
 import type { Page, Snapshot } from "../lib/contracts";
 import { ConnectComputer } from "./connect-computer";
 
@@ -82,14 +83,18 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (response.status === 401) window.location.assign("/?auth=required");
-  if (!response.ok)
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
     throw new Error(
-      response.status === 401
-        ? "Session expired or revoked. Sign in again."
-        : response.status === 403
-          ? "Permission denied."
-          : "Operation not confirmed; check backend availability and permissions.",
+      typeof payload?.detail === "string"
+        ? payload.detail
+        : response.status === 401
+          ? "Session expired or revoked. Sign in again."
+          : response.status === 403
+            ? "Permission denied."
+            : "Operation not confirmed; check backend availability and permissions.",
     );
+  }
   return response.json() as Promise<T>;
 }
 
@@ -313,6 +318,14 @@ export default function Administration({
         />
         {loading && <p role="status">Loading {tab.toLowerCase()}…</p>}
         <div aria-busy={loading} inert={loading}>
+          {page && !loading && (
+            <Pager
+              offset={offset}
+              limit={page.limit}
+              total={page.total}
+              onChange={setOffset}
+            />
+          )}
           <section
             role="tabpanel"
             aria-label="Settings"
@@ -392,6 +405,34 @@ export default function Administration({
                 </select>
               </label>
             )}
+            {tab === "Workspaces" && snapshot && (
+              <BulkTable
+                kind="workspaces"
+                scope="workspaces"
+                rows={snapshot.workspaces}
+                caption="Authorized workspaces"
+                rowKey={(w) => w.id}
+                deleteKey={(w) => w.id}
+                label={(w) => `workspace ${w.name}`}
+                eligible={(w) => w.owner_id === user.id}
+                onDeleted={async () => {
+                  setWorkspace("");
+                  setMembership(null);
+                  await load();
+                }}
+                columns={[
+                  { label: "Workspace", cell: (w) => w.name },
+                  {
+                    label: "Owner",
+                    cell: (w) => (w.owner_id === user.id ? "You" : w.owner_id),
+                  },
+                  {
+                    label: "Access",
+                    cell: (w) => (w.can_manage ? "Administrator" : "Member"),
+                  },
+                ]}
+              />
+            )}
             <form
               hidden={tab !== "Workspaces"}
               method="post"
@@ -416,6 +457,12 @@ export default function Administration({
                   Owner {membership.owner_id} ·{" "}
                   {membership.shared ? "Explicitly shared" : "Private"}
                 </p>
+                <Pager
+                  offset={memberOffset}
+                  limit={membership.limit}
+                  total={membership.total}
+                  onChange={setMemberOffset}
+                />
                 <DataTable
                   caption="Workspace members"
                   rows={membership.members}
@@ -442,38 +489,19 @@ export default function Administration({
             )}
             {tab === "Permissions" && selected?.can_manage && (
               <>
-                <form
-                  method="post"
-                  onSubmit={(e) => {
-                    const f = form(e);
-                    if (
-                      window.confirm("Apply this workspace membership change?")
-                    )
-                      void operate(
-                        `administration/workspaces/${workspace}/members`,
-                        { user_id: f.get("user_id"), role: f.get("role") },
-                      );
+                <PermissionEditor
+                  key={workspace}
+                  workspace={workspace}
+                  platform={platform}
+                  members={membership?.members || []}
+                  onUpdated={async () => {
+                    setMembership(
+                      await call<Membership>(
+                        `administration/workspaces/${workspace}/members?offset=${memberOffset}`,
+                      ),
+                    );
                   }}
-                >
-                  <label>
-                    Invited account
-                    <AccountPicker
-                      platform={platform}
-                      members={membership?.members || []}
-                    />
-                  </label>
-                  <label>
-                    Workspace role
-                    <select name="role">
-                      <option value="member">Member</option>
-                      <option value="admin">Workspace administrator</option>
-                      <option value="remove">Remove access</option>
-                    </select>
-                  </label>
-                  <button className="action" disabled={busy}>
-                    Apply membership
-                  </button>
-                </form>
+                />
                 <form
                   method="post"
                   key={`${workspace}:${JSON.stringify(membership?.allowed_models)}:${JSON.stringify(membership?.allowed_tools)}`}
@@ -895,12 +923,14 @@ export function RoleChoices({ selected }: { selected: string[] }) {
   );
 }
 
-function AccountPicker({
+export function AccountPicker({
   platform,
   members,
+  onChange,
 }: {
   platform: boolean;
   members: Membership["members"];
+  onChange?: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
@@ -959,15 +989,24 @@ function AccountPicker({
           }}
         />
       )}
+      {platform && page && (
+        <Pager
+          offset={offset}
+          limit={page.limit}
+          total={page.total}
+          onChange={setOffset}
+        />
+      )}
       <select
         name="user_id"
         required
         aria-label="Invited account"
         disabled={loading}
         value={selected?.id || ""}
-        onChange={(e) =>
-          setSelected(options.find((a) => a.id === e.target.value) || null)
-        }
+        onChange={(e) => {
+          setSelected(options.find((a) => a.id === e.target.value) || null);
+          onChange?.(e.target.value);
+        }}
       >
         <option value="">Select an account</option>
         {selected && !options.some((a) => a.id === selected.id) && (
@@ -990,5 +1029,192 @@ function AccountPicker({
         />
       )}
     </span>
+  );
+}
+
+interface MemberAccess {
+  user_id: string;
+  role: "owner" | "admin" | "member" | "none";
+  account: Account | null;
+}
+
+export function PermissionEditor({
+  workspace,
+  platform,
+  members,
+  onUpdated,
+}: {
+  workspace: string;
+  platform: boolean;
+  members: Membership["members"];
+  onUpdated: () => Promise<void>;
+}) {
+  const [selected, setSelected] = useState("");
+  const [record, setRecord] = useState<{
+    path: string;
+    data: MemberAccess;
+  } | null>(null);
+  const [failure, setFailure] = useState<{
+    path: string;
+    message: string;
+  } | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const path = `administration/workspaces/${workspace}/members/${selected}?revision=${revision}`;
+  const access = record?.path === path ? record.data : null;
+  const error = failure?.path === path ? failure.message : "";
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    void call<MemberAccess>(path)
+      .then((data) => {
+        if (active) {
+          setRecord({ path, data });
+          setFailure(null);
+        }
+      })
+      .catch((e) => {
+        if (active) setFailure({ path, message: e.message });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, path]);
+  async function save(endpoint: string, body: unknown) {
+    setBusy(true);
+    setMessage("");
+    setFailure(null);
+    try {
+      await call(endpoint, body);
+      setMessage("Permissions saved.");
+      setRevision((r) => r + 1);
+      await onUpdated();
+    } catch (e) {
+      setFailure({
+        path,
+        message: e instanceof Error ? e.message : "Update failed.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-label="Selected user permissions">
+      <h3>User access</h3>
+      <fieldset disabled={busy}>
+        <legend>Select an account to view or update access</legend>
+        <AccountPicker
+          platform={platform}
+          members={members}
+          onChange={(id) => {
+            setSelected(id);
+            setMessage("");
+          }}
+        />
+      </fieldset>
+      {selected && !access && !error && (
+        <p role="status">Loading current role and permissions...</p>
+      )}
+      {error && (
+        <p role="alert">
+          {error}{" "}
+          <button type="button" onClick={() => setRevision((r) => r + 1)}>
+            Retry loading
+          </button>
+        </p>
+      )}
+      {message && <p role="status">{message}</p>}
+      {access && (
+        <>
+          <p>
+            Current workspace access:{" "}
+            {access.role === "none"
+              ? "No access"
+              : access.role === "owner"
+                ? "Owner (inherent access)"
+                : access.role === "admin"
+                  ? "Workspace administrator"
+                  : "Member"}
+          </p>
+          <form
+            key={`${path}:${access.role}`}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              if (window.confirm("Save this user's workspace access?"))
+                void save(`administration/workspaces/${workspace}/members`, {
+                  user_id: selected,
+                  role: f.get("role"),
+                });
+            }}
+          >
+            <label>
+              Workspace role
+              <select
+                name="role"
+                defaultValue={access.role === "none" ? "member" : access.role}
+                disabled={busy || access.role === "owner"}
+              >
+                {access.role === "owner" && (
+                  <option value="owner">Owner</option>
+                )}
+                <option value="member">Member</option>
+                <option value="admin">Workspace administrator</option>
+                <option value="remove">Remove access</option>
+              </select>
+            </label>
+            <button
+              className="action"
+              disabled={busy || access.role === "owner"}
+            >
+              {access.role === "none"
+                ? "Add workspace access"
+                : "Save workspace access"}
+            </button>
+          </form>
+          {platform && access.account && (
+            <form
+              key={`${path}:platform`}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                if (
+                  window.confirm(
+                    "Save platform roles and account status? This revokes the user's application sessions.",
+                  )
+                )
+                  void save(`administration/users/${selected}`, {
+                    roles: f.getAll("roles"),
+                    enabled: f.has("enabled"),
+                  });
+              }}
+            >
+              <h3>Platform access - {access.account.display_name}</h3>
+              <p>{access.account.email}</p>
+              <fieldset disabled={busy}>
+                <legend>Saved platform access</legend>
+                <RoleChoices selected={access.account.roles} />
+                <label>
+                  <input
+                    name="enabled"
+                    type="checkbox"
+                    defaultChecked={access.account.enabled}
+                  />{" "}
+                  Account enabled
+                </label>
+              </fieldset>
+              <p>
+                Current permissions:{" "}
+                {access.account.permissions.join(", ") || "None"}
+              </p>
+              <button className="action" disabled={busy}>
+                Save platform access and revoke sessions
+              </button>
+            </form>
+          )}
+        </>
+      )}
+    </section>
   );
 }

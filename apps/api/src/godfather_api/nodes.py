@@ -150,7 +150,10 @@ def coding_setup_options(request: Request, session: SessionDep) -> CodingSetupOp
     )
     workspaces = session.scalars(
         select(Workspace)
-        .where((Workspace.owner_id == credential.owner_id) | Workspace.id.in_(member_ids))
+        .where(
+            Workspace.deleted_at.is_(None),
+            (Workspace.owner_id == credential.owner_id) | Workspace.id.in_(member_ids),
+        )
         .order_by(Workspace.name, Workspace.id)
         .limit(128)
     )

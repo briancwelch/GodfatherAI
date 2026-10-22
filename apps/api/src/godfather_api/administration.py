@@ -14,23 +14,26 @@ from godfather_api.agents import manage_workspace
 from godfather_api.authentication import (
     ROLE_PERMISSIONS,
     audit,
+    permissions,
     require_permission,
     roles,
     user_data,
 )
 from godfather_api.models import (
     AccessCredential,
+    Agent,
     Event,
     GoogleIdentity,
     HumanSession,
     Invitation,
+    Job,
     Node,
     User,
     Workspace,
     WorkspaceMember,
 )
 from godfather_api.nodes import SessionDep, authenticate, human_event_details, record, token_digest
-from godfather_api.scheduler import workspace_access
+from godfather_api.scheduler import TERMINAL, lock_workspace, workspace_access
 
 router = APIRouter(prefix="/api/v1/administration")
 
@@ -474,3 +477,144 @@ def security_audit(
         for e in rows
     ]
     return page_result(items, total, offset, paged)
+
+
+class BulkDeletion(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: Literal["workspaces", "jobs", "agents"]
+    ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+@router.post("/bulk-delete")
+def bulk_delete(payload: BulkDeletion, request: Request, session: SessionDep) -> dict[str, object]:
+    """Atomic logical deletion; durable execution and billing history are never erased."""
+    actor = authenticate(request, session, "human")
+    ids = sorted(set(payload.ids))
+    if payload.kind == "workspaces":
+        workspace_ids = ids
+    elif payload.kind == "jobs":
+        workspace_ids = sorted(
+            set(session.scalars(select(Job.workspace_id).where(Job.id.in_(ids))))
+        )
+    else:
+        workspace_ids = sorted(
+            set(session.scalars(select(Agent.workspace_id).where(Agent.agent_key.in_(ids))))
+        )
+    for workspace_id in workspace_ids:
+        lock_workspace(session, workspace_id)
+    now = datetime.now(UTC)
+    targets: list[tuple[Workspace | Agent | Job, UUID, UUID]]
+    if payload.kind == "workspaces":
+        rows = list(
+            session.scalars(select(Workspace).where(Workspace.id.in_(ids)).order_by(Workspace.id))
+        )
+        if len(rows) != len(ids) or any(w.owner_id != actor.owner_id for w in rows):
+            raise HTTPException(404, "Owned workspace not found; nothing was deleted")
+        # Job row locks serialize retry/cancellation and result actions as well as scheduler claims.
+        jobs = list(
+            session.scalars(
+                select(Job).where(Job.workspace_id.in_(ids)).order_by(Job.id).with_for_update()
+            )
+        )
+        if any(j.status not in TERMINAL for j in jobs):
+            raise HTTPException(
+                409,
+                "Cancel or finish all jobs in the selected workspaces first; nothing was deleted",
+            )
+        targets = [(w, w.id, w.id) for w in rows]
+    elif payload.kind == "jobs":
+        jobs = list(
+            session.scalars(
+                select(Job)
+                .where(Job.id.in_(ids))
+                .order_by(Job.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        )
+        if len(jobs) != len(ids):
+            raise HTTPException(404, "Job not found; nothing was deleted")
+        for job in jobs:
+            if not workspace_access(session, actor.owner_id, job.workspace_id):
+                raise HTTPException(404, "Job not found; nothing was deleted")
+            if not session.info.get("test") and job.type.startswith("synthetic."):
+                raise HTTPException(404, "Job not found; nothing was deleted")
+            workspace = session.get(Workspace, job.workspace_id)
+            member = session.get(WorkspaceMember, (job.workspace_id, actor.owner_id))
+            if (
+                job.owner_id != actor.owner_id
+                and (workspace is None or workspace.owner_id != actor.owner_id)
+                and (member is None or member.role != "admin")
+            ):
+                raise HTTPException(
+                    403,
+                    "Only the job owner or workspace administrator may delete jobs; "
+                    "nothing was deleted",
+                )
+        if any(j.status not in TERMINAL for j in jobs):
+            raise HTTPException(
+                409, "Only completed, failed or cancelled jobs can be deleted; nothing was deleted"
+            )
+        targets = [(j, j.id, j.workspace_id) for j in jobs]
+    else:
+        agents = list(
+            session.scalars(
+                select(Agent)
+                .where(Agent.agent_key.in_(ids))
+                .order_by(Agent.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        )
+        if {a.agent_key for a in agents} != set(ids):
+            raise HTTPException(404, "Agent not found; nothing was deleted")
+        for agent in agents:
+            manage_workspace(session, agent.workspace_id, actor.owner_id)
+        jobs = list(
+            session.scalars(
+                select(Job)
+                .where(Job.agent_id.in_([a.id for a in agents]))
+                .order_by(Job.id)
+                .with_for_update()
+            )
+        )
+        if any(j.status not in TERMINAL for j in jobs):
+            raise HTTPException(
+                409, "Cancel or finish jobs using the selected agents first; nothing was deleted"
+            )
+        targets = [(a, a.agent_key, a.workspace_id) for a in agents]
+    for row, target_id, workspace_id in targets:
+        if row.deleted_at is None:
+            row.deleted_at = now
+            audit(
+                session,
+                payload.kind + "_deleted",
+                actor.owner_id,
+                target_id,
+                workspace_id=workspace_id,
+                metadata={"retention": "execution_history"},
+            )
+    session.flush()
+    return {"deleted_ids": [str(i) for i in ids], "retention": "execution_history"}
+
+
+@router.get("/workspaces/{workspace_id}/members/{user_id}")
+def member_access(
+    workspace_id: UUID, user_id: UUID, request: Request, session: SessionDep
+) -> dict[str, object]:
+    actor = authenticate(request, session, "human")
+    manage_workspace(session, workspace_id, actor.owner_id)
+    workspace = session.get(Workspace, workspace_id)
+    user = session.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, "User not found")
+    assert workspace is not None
+    member = session.get(WorkspaceMember, (workspace_id, user_id))
+    actor_user = session.get(User, actor.owner_id)
+    return {
+        "user_id": str(user_id),
+        "role": "owner" if workspace.owner_id == user_id else member.role if member else "none",
+        "account": user_data(user)
+        if actor_user and "platform.manage" in permissions(actor_user)
+        else None,
+    }

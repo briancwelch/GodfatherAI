@@ -40,7 +40,7 @@ from godfather_api.models import (
     WorkspaceMember,
 )
 from godfather_api.nodes import SessionDep, authenticate, node_view, node_visibility
-from godfather_api.scheduler import job_event, workspace_access
+from godfather_api.scheduler import job_event, lock_workspace, workspace_access
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(HTTPBearer(auto_error=False))])
 
@@ -79,7 +79,7 @@ def manage_workspace(session: Session, workspace_id: UUID, actor_id: UUID) -> No
 def find_agent(
     session: Session, key: UUID, actor_id: UUID, version: int | None = None, lock: bool = False
 ) -> Agent:
-    query = select(Agent).where(Agent.agent_key == key)
+    query = select(Agent).where(Agent.agent_key == key, Agent.deleted_at.is_(None))
     if version is not None:
         query = query.where(Agent.version == version)
     query = query.order_by(Agent.version.desc()).limit(1)
@@ -101,16 +101,25 @@ def flush_agent(session: Session) -> None:
 @router.post("/agents", response_model=AgentView, status_code=201)
 def create_agent(payload: AgentCreate, request: Request, session: SessionDep) -> AgentView:
     actor = authenticate(request, session, "human")
+    lock_workspace(session, payload.workspace_id)
     manage_workspace(session, payload.workspace_id, actor.owner_id)
     try:
         validate_agent(payload.definition)
     except ToolError:
         raise HTTPException(422, "Unsupported tools or missing agent permissions") from None
+    previous = session.scalar(
+        select(Agent)
+        .where(Agent.workspace_id == payload.workspace_id, Agent.name == payload.definition.name)
+        .order_by(Agent.version.desc())
+        .limit(1)
+    )
+    if previous is not None and previous.deleted_at is None:
+        raise HTTPException(409, "Agent name already exists; create a new version")
     agent = Agent(
         owner_id=actor.owner_id,
         workspace_id=payload.workspace_id,
         agent_key=uuid4(),
-        version=1,
+        version=previous.version + 1 if previous else 1,
         name=payload.definition.name,
         definition=payload.definition.model_dump(mode="json"),
         enabled=payload.definition.enabled,
@@ -134,7 +143,7 @@ def list_agents(
         raise HTTPException(404, "Workspace not found or permission denied")
     rows = session.scalars(
         select(Agent)
-        .where(Agent.workspace_id == workspace_id)
+        .where(Agent.workspace_id == workspace_id, Agent.deleted_at.is_(None))
         .order_by(Agent.agent_key, Agent.version)
         .limit(limit)
         .offset(offset)
@@ -174,7 +183,11 @@ def versions(
         service.agent_view(row)
         for row in session.scalars(
             select(Agent)
-            .where(Agent.agent_key == agent_id, Agent.workspace_id == agent.workspace_id)
+            .where(
+                Agent.agent_key == agent_id,
+                Agent.workspace_id == agent.workspace_id,
+                Agent.deleted_at.is_(None),
+            )
             .order_by(Agent.version)
             .limit(limit)
             .offset(offset)
@@ -187,6 +200,8 @@ def create_version(
     agent_id: UUID, payload: AgentVersionCreate, request: Request, session: SessionDep
 ) -> AgentView:
     actor = authenticate(request, session, "human")
+    previous = find_agent(session, agent_id, actor.owner_id)
+    lock_workspace(session, previous.workspace_id)
     previous = find_agent(session, agent_id, actor.owner_id, lock=True)
     manage_workspace(session, previous.workspace_id, actor.owner_id)
     if previous.version != payload.expected_version:
@@ -215,6 +230,8 @@ def control_agent(
     agent_id: UUID, version: int, payload: AgentControl, request: Request, session: SessionDep
 ) -> AgentView:
     actor = authenticate(request, session, "human")
+    agent = find_agent(session, agent_id, actor.owner_id, version)
+    lock_workspace(session, agent.workspace_id)
     agent = find_agent(session, agent_id, actor.owner_id, version, True)
     manage_workspace(session, agent.workspace_id, actor.owner_id)
     service.agent_view(agent)  # Refuse enabling unsupported legacy definitions.
@@ -291,6 +308,7 @@ def coding_repositories(
 @router.post("/workflow/jobs", response_model=JobView, status_code=201)
 def submit_workflow(payload: WorkflowSubmission, request: Request, session: SessionDep) -> JobView:
     actor = authenticate(request, session, "human")
+    lock_workspace(session, payload.workspace_id)
     agent = find_agent(session, payload.agent_id, actor.owner_id, payload.agent_version)
     if agent.workspace_id != payload.workspace_id:
         raise HTTPException(404, "Agent does not belong to this workspace")

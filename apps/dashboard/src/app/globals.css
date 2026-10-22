@@ -1511,3 +1511,223 @@ legend {
 :root[data-theme="dark"] .application-bar {
   background: #202020;
 }
+
+.workspace-delete-dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 30px 100px #0006;
+  overflow-y: auto;
+}
+.workspace-delete-dialog::backdrop {
+  background: #091725aa;
+  backdrop-filter: blur(5px);
+}
+.archive-dialog-heading {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.archive-dialog-heading h2 {
+  margin: 4px 0;
+  font-size: 1.5rem;
+}
+.archive-dialog-heading .eyebrow {
+  color: #087f8c;
+  letter-spacing: 0.13em;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.archive-dialog-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #58d5de22;
+  color: #087f8c;
+}
+.archive-dialog-icon .command-icon {
+  width: 24px;
+  height: 24px;
+}
+.archive-workspace-names {
+  list-style: none;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-height: 100px;
+  overflow: auto;
+  background: var(--muted);
+}
+.archive-workspace-names li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  overflow-wrap: anywhere;
+  padding-block: 3px;
+}
+.archive-workspace-names .command-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.archive-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  list-style: none;
+  padding: 12px 0;
+}
+.archive-steps li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.archive-steps li > span {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 0.8rem;
+}
+.archive-steps li[data-active="true"] > span {
+  background: #087f8c;
+  color: #fff;
+  border-color: #087f8c;
+}
+.archive-steps strong {
+  font-size: 0.86rem;
+}
+.archive-steps small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.archive-includes,
+.archive-retention {
+  color: var(--muted-foreground);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+.archive-progress {
+  padding: 14px;
+  border: 1px solid #087f8c55;
+  border-radius: 10px;
+  background: #58d5de0d;
+}
+.archive-progress > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+.archive-progress progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 10px;
+  margin-top: 12px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--muted);
+}
+.archive-progress progress::-webkit-progress-bar {
+  background: var(--muted);
+  border-radius: 10px;
+}
+.archive-progress progress::-webkit-progress-value {
+  background: linear-gradient(90deg, #087f8c, #58d5de);
+  border-radius: 10px;
+  transition: width 0.2s ease;
+}
+.archive-progress progress:indeterminate {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 20%,
+    #58d5de 50%,
+    var(--muted) 80%
+  );
+  background-size: 200% 100%;
+  animation: archive-flow 1.6s linear infinite;
+}
+.archive-progress progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+.archive-ready {
+  border-left: 3px solid #087f8c;
+  padding: 10px 14px;
+  background: #58d5de11;
+  font-size: 0.85rem;
+}
+.archive-skip {
+  display: flex;
+  align-items: start;
+  gap: 9px;
+  font-size: 0.82rem;
+  margin: 18px 0;
+}
+.archive-skip input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+.archive-dialog-actions {
+  justify-content: flex-end;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.archive-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #087f8c;
+  color: white;
+}
+.archive-download .command-icon {
+  width: 14px;
+  height: 14px;
+}
+.archive-delete {
+  background: #a92d3a;
+  color: #fff;
+}
+@keyframes archive-flow {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .archive-progress progress:indeterminate {
+    animation: none;
+  }
+  .archive-progress progress::-webkit-progress-value {
+    transition: none;
+  }
+}
+@media (max-width: 540px) {
+  .workspace-delete-dialog {
+    padding: 20px;
+  }
+  .archive-steps {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .archive-dialog-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}

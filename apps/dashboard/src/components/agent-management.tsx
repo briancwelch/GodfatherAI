@@ -1,5 +1,7 @@
 "use client";
 
+import { BulkTable } from "./bulk-table";
+
 import {
   useEffect,
   useRef,
@@ -202,7 +204,16 @@ export function AgentManagement({
         </p>
       )}
       <div className={selected ? "record-split" : ""}>
-        <DataTable
+        <BulkTable
+          kind="agents"
+          scope={`${data.workspace_id}:${data.offset}:${data.agents.map((a) => a.version_id).join()}`}
+          deleteKey={(a) => a.id}
+          label={(a) => `agent ${a.definition.name}, all versions`}
+          eligible={() => !!manage}
+          onDeleted={() => {
+            setSelectedId("");
+            refresh();
+          }}
           caption="Agents and immutable versions"
           rows={data.agents}
           rowKey={(a) => a.version_id}

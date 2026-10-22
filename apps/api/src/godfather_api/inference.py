@@ -70,6 +70,9 @@ def install_model(payload: ModelInstallRequest, request: Request, session: Sessi
     from godfather_api.jobs import view
 
     actor = authenticate(request, session, "human")
+    from godfather_api.scheduler import lock_workspace
+
+    lock_workspace(session, payload.workspace_id)
     workspace_permission(session, payload.workspace_id, actor.owner_id)
     node = session.scalar(
         select(Node)

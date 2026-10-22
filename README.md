@@ -13,6 +13,12 @@ Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is pr
 
 ## Start here
 
+The authorized [Command Center management update](docs/operations/command-center-management.md)
+adds AJAX bulk deletion, optional workspace ZIP archives with animated progress,
+top/bottom pagination and saved-user permission editing. It requires only the
+coordinator/dashboard update; existing Consigliere installers are unchanged.
+Deployment verification is recorded separately after activation.
+
 **Consigliere** is the new name of The Godfather AI desktop worker. The current
 UI update adds normal window resizing, an embedded Projects tab, a compact
 navy/cyan command ribbon and expanded owner-local Settings. See the

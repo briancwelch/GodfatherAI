@@ -187,6 +187,7 @@ class WorkerEnrollment(Entity, Owned, Base):
 
 class Workspace(Entity, Owned, Base):
     __tablename__ = "workspaces"
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     name: Mapped[str] = mapped_column(String(200))
     is_shared: Mapped[bool] = mapped_column(Boolean, server_default="false")
     allowed_models: Mapped[list[str] | None] = mapped_column(JSONB)
@@ -293,6 +294,7 @@ class NodeModel(Base):
 
 class Agent(Entity, Owned, Base):
     __tablename__ = "agents"
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint("id", "workspace_id", name="uq_agents_id_workspace"),
         UniqueConstraint(
@@ -313,6 +315,7 @@ class Agent(Entity, Owned, Base):
 
 class Job(Entity, Owned, Base):
     __tablename__ = "jobs"
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint("id", "workspace_id", name="uq_jobs_id_workspace"),
         ForeignKeyConstraint(

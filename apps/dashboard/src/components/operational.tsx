@@ -37,6 +37,7 @@ export function DataTable<T>({
   rowKey,
   selectedKey,
   onSelect,
+  selection,
 }: {
   caption: string;
   rows: T[];
@@ -44,7 +45,21 @@ export function DataTable<T>({
   rowKey: (row: T) => string;
   selectedKey?: string;
   onSelect?: (row: T) => void;
+  selection?: {
+    ids: string[];
+    key: (row: T) => string;
+    label: (row: T) => string;
+    eligible: (row: T) => boolean;
+    onChange: (ids: string[]) => void;
+    disabled: boolean;
+  };
 }) {
+  const selectable = selection
+    ? [...new Set(rows.filter(selection.eligible).map(selection.key))]
+    : [];
+  const allSelected =
+    selectable.length > 0 &&
+    selectable.every((id) => selection?.ids.includes(id));
   return (
     <div
       className="table-scroll"
@@ -56,6 +71,19 @@ export function DataTable<T>({
         <caption>{caption}</caption>
         <thead>
           <tr>
+            {selection && (
+              <th scope="col">
+                <input
+                  type="checkbox"
+                  aria-label={`Select all eligible ${caption.toLowerCase()} on this page`}
+                  checked={allSelected}
+                  disabled={selection.disabled || !selectable.length}
+                  onChange={() =>
+                    selection.onChange(allSelected ? [] : selectable)
+                  }
+                />
+              </th>
+            )}
             {columns.map((c) => (
               <th key={c.label} scope="col">
                 {c.label}
@@ -70,6 +98,25 @@ export function DataTable<T>({
               aria-selected={onSelect ? selectedKey === rowKey(row) : undefined}
               onClick={onSelect ? () => onSelect(row) : undefined}
             >
+              {selection && (
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${selection.label(row)}`}
+                    checked={selection.ids.includes(selection.key(row))}
+                    disabled={selection.disabled || !selection.eligible(row)}
+                    onChange={(e) =>
+                      selection.onChange(
+                        e.target.checked
+                          ? [...selection.ids, selection.key(row)]
+                          : selection.ids.filter(
+                              (id) => id !== selection.key(row),
+                            ),
+                      )
+                    }
+                  />
+                </td>
+              )}
               {columns.map((c) => (
                 <td key={c.label}>{c.cell(row)}</td>
               ))}
@@ -135,7 +182,9 @@ export function ConfirmAction({
   label,
   description,
   onConfirm,
+  disabled = false,
 }: {
+  disabled?: boolean;
   label: string;
   description: string;
   onConfirm: () => Promise<void>;
@@ -148,6 +197,7 @@ export function ConfirmAction({
       <button
         type="button"
         className="action secondary"
+        disabled={disabled}
         onClick={() => {
           setError("");
           dialog.current?.showModal();
@@ -183,9 +233,11 @@ export function ConfirmAction({
               try {
                 await onConfirm();
                 dialog.current?.close();
-              } catch {
+              } catch (e) {
                 setError(
-                  "Action failed or permission denied. Refresh to verify backend state.",
+                  e instanceof Error
+                    ? e.message
+                    : "Action failed. Refresh to verify backend state.",
                 );
               } finally {
                 setBusy(false);
@@ -219,6 +271,7 @@ export function Pager({
           : `${offset + 1}–${Math.min(offset + limit, total)} of ${total}`}
       </span>
       <button
+        type="button"
         className="action secondary"
         disabled={offset === 0}
         onClick={() => onChange(Math.max(0, offset - limit))}
@@ -226,6 +279,7 @@ export function Pager({
         Previous page
       </button>
       <button
+        type="button"
         className="action secondary"
         disabled={offset + limit >= total}
         onClick={() => onChange(offset + limit)}

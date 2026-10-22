@@ -60,7 +60,9 @@ export async function backend(
     body,
     cache: "no-store",
     redirect: "error",
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(
+      path === "administration/workspace-archive" ? 60000 : 15000,
+    ),
     headers: {
       "X-Godfather-Session": token,
       Origin: webOrigin(),
@@ -84,6 +86,7 @@ export function allowedPath(path: string, method: string): boolean {
     "auth/me",
     "administration/(users|invitations|audit|node-credentials)",
     `administration/workspaces/${uuid}/members`,
+    `administration/workspaces/${uuid}/members/${uuid}`,
     "command-center",
     "command-center/events",
     `command-center/jobs/${uuid}/checkpoints`,
@@ -98,6 +101,8 @@ export function allowedPath(path: string, method: string): boolean {
     "provider-connections",
     `provider-connections/${uuid}/(policy|control|test|grants)`,
     `provider-connections/${uuid}/grants/${uuid}/revoke`,
+    "administration/bulk-delete",
+    "administration/workspace-archive",
     "administration/worker-enrollments",
     "administration/worker-enrollments/revoke",
     "agents",
@@ -153,6 +158,21 @@ export async function proxy(request: NextRequest, segments: string[]) {
       request.method,
       body || undefined,
     );
+    if (response.ok && path === "administration/workspace-archive") {
+      return new NextResponse(response.body, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            response.headers.get("content-disposition") ||
+            'attachment; filename="godfather-workspaces.zip"',
+          ...(response.headers.get("content-length")
+            ? { "Content-Length": response.headers.get("content-length")! }
+            : {}),
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (
       response.ok &&
       request.method === "GET" &&
