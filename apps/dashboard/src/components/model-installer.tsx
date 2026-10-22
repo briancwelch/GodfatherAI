@@ -85,6 +85,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (tab !== "download") return;
             if (installed(identifier)) {
               setTab("available");
               setSearch(identifier);
