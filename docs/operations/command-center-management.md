@@ -69,3 +69,6 @@ dashboard, `node tests/e2e/command-center-management.cjs` runs isolated Edge
 acceptance using `.tools/browser/node_modules/playwright`; it uses synthetic
 fixtures on loopback and never signs into Google or touches production data.
 See the deployment verification report for checks actually executed.
+
+Completed source jobs also remain protected while a result action that uses them
+is unfinished. Finish or cancel the apply action before deleting its source job.

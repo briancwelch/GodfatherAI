@@ -62,3 +62,6 @@ last-administrator protection.
 All existing paginated views have controls at both ends, sharing the same state.
 Table selection is limited to eligible visible rows and is cleared by scope
 changes. AJAX mutations await the backend and show explicit failure states.
+
+Completed source jobs also remain protected while a result action that uses them
+is unfinished. Finish or cancel the apply action before deleting its source job.

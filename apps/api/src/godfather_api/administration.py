@@ -555,6 +555,21 @@ def bulk_delete(payload: BulkDeletion, request: Request, session: SessionDep) ->
             raise HTTPException(
                 409, "Only completed, failed or cancelled jobs can be deleted; nothing was deleted"
             )
+        dependent_action = session.scalar(
+            select(Job.id)
+            .where(
+                Job.type == "result.action",
+                Job.status.not_in(TERMINAL),
+                Job.input_refs["source_job_id"].astext.in_([str(j.id) for j in jobs]),
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        if dependent_action is not None:
+            raise HTTPException(
+                409,
+                "Finish or cancel result actions using the selected jobs first; nothing deleted",
+            )
         targets = [(j, j.id, j.workspace_id) for j in jobs]
     else:
         agents = list(

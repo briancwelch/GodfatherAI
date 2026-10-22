@@ -353,3 +353,28 @@ def test_workspace_delete_serializes_concurrent_submissions(h: Harness) -> None:
                     )
                     is None
                 )
+
+
+def test_completed_source_job_cannot_be_deleted_during_result_application(h: Harness) -> None:
+    source = h.submit()
+    with h.database.sessions.begin() as session:
+        row = session.get(Job, UUID(source["id"]))
+        assert row is not None
+        row.status = "COMPLETED"
+        action = Job(
+            owner_id=row.owner_id,
+            workspace_id=row.workspace_id,
+            type="result.action",
+            input_refs={"source_job_id": source["id"]},
+        )
+        session.add(action)
+        session.flush()
+        action_id = action.id
+    delete(h, "jobs", [source["id"]], 409)
+    assert h.get(source["id"])["status"] == "COMPLETED"
+    with h.database.sessions.begin() as session:
+        action_row = session.get(Job, action_id)
+        assert action_row is not None
+        action_row.status = "CANCELLED"
+    delete(h, "jobs", [source["id"]])
+    assert h.client.get(f"/api/v1/jobs/{source['id']}", headers=headers(h.admin)).status_code == 404
