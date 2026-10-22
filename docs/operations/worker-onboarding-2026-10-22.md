@@ -44,6 +44,61 @@ that origin and requires HTTP 404; it cannot save credentials or register a node
 The Mac release workflow enables this real-coordinator check for both native
 architectures. Lost responses or secure-store failures remain non-replayable.
 
-Native builds, artifact hashes, publication and final results are recorded below
-after verification. Physical recipient installation/pairing and publisher signing
+Native build and release evidence is recorded below. Physical recipient installation/pairing and publisher signing
 remain separate acceptance; Mac candidates use ad-hoc signing.
+
+
+## Native candidates and source
+
+All three **0.4.2-rc.2** installers were built from clean source
+`c84c4745503a1455107f62bc457bd608bab27d4b`. Later commits correct only the
+headless GUI regression's skip/formatting and documentation, not shipped runtime
+code. Candidate rc.1 was not published. The first Intel smoke exceeded its old
+15-second overall deadline; the final run uses a 60-second failure deadline and
+passed, without sleeps as success criteria.
+
+- [Apple silicon and Intel native build checks](https://github.com/briancwelch/GodfatherAI/actions/runs/39808595580): passed both architectures, source UI lifecycle, frozen app, real HTTPS unapproved pairing, DMG, signature, architecture and native-library checks.
+- Windows temporary install/reinstall and frozen Tk/tray/HTTPS self-test passed;
+  the frozen report states `passed` and `worker_version: 0.4.2-rc.2`.
+- An additional real-coordinator test started with zero trusted CAs, loaded the
+  packaged 120 public roots, and reached HTTP 404 while retaining certificate and
+  hostname verification. No real enrollment approval or saved credential was used.
+- The setup self-test initially required an automatic-review retry after proving
+  its TemporaryDirectory targets in source. The exact isolated test then passed;
+  the normal installed worker and its identity were not replaced.
+- Disposable release checks passed all ten gates: image identity/architecture,
+  production/Caddy config, shell syntax, migrations, empty identity bootstrap,
+  private health, proxy authentication, all installer downloads on both hostnames,
+  actual database/artifact restore, and persistence/restart. Evidence:
+  `.cache/release-tests/145a92d76dfe/result.json`.
+
+| Installer | SHA-256 |
+| --- | --- |
+| Windows x64 | `0b28e9e4b773aad91997407c219132b907d07c7fde90cead9429cfe940bb2efb` |
+| Mac Apple silicon | `7f3060b7502c6004e040bc006cde49d743be3f3fbd267d6210476d8efc2a8a93` |
+| Mac Intel | `1b4334c593b0558b09a88d9db886e63ced374a82e0d507f9b8112151527759e2` |
+
+Coordinator package: `dist/godfather-0.4.2-rc.2-linux-amd64.tar.gz`, SHA-256
+`f180c150e1964cffc0d7466ba9e5eaac87fcfd9894ff25d4346892dbf6996714`.
+The existing schema remains `0014_command_center_appearance`.
+
+
+## Final source CI
+
+[Repository checks](https://github.com/briancwelch/GodfatherAI/actions/runs/39809690373)
+passed all eight jobs on `abea8767d348ac5747ce3128b5fa4076bcc47aa6`.
+The disposable PostgreSQL/API container run completed **541 passed, 4 skipped**;
+the headless image skips only the GUI adapter check and explicitly optional
+sandbox-image checks. Native Windows/Mac GUI checks ran separately. Python
+3.12/3.14, Windows/macOS/Linux, dashboard format/lint/types/component tests/build/
+audit, real API/database restart and outage, four independent workers, the
+100-job scheduler with lease expiry, inference and checkpoint interruption/recovery
+all passed. Source runners skip integration tests when no disposable database is
+configured; the container job executes those tests against real PostgreSQL.
+
+The staged archive at
+`/opt/the-godfather/incoming/godfather-0.4.2-rc.2-linux-amd64.tar.gz.upload-f180c150`
+matched the trusted local hash. The extracted new release passed its own checksums
+and configuration checks. Initial automatic approval review blocked activation
+before any service change, requesting explicit consent for the live upgrade and
+brief interruption. The original `0.4.1-rc.6` service remained current at that point.
