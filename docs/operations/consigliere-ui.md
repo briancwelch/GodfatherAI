@@ -59,9 +59,11 @@ Downloads use that computer's network and storage. Local-model use and model-dow
 permission alone does not enable downloads. Each download still needs the owner's
 confirmation in Command Center. Neither setting installs Ollama.
 
-If the download checkbox is missing, update Consigliere to **0.4.1-rc.3** from
+For basic model-only agents, update Consigliere to **0.4.1-rc.4** from
 **Nodes → Downloads**. The coordinator and all three updated installers are
-deployed; see [verification](model-download-permission-fix-2026-10-21.md).
+deployed; see [verification](model-directory-verification-2026-10-21.md).
+The model-selection dashboard is coordinator **0.4.1-rc.5**. Refresh the page
+after deployment. Existing project/workload-enabled workers remain compatible.
 Older settings keep downloads disabled until the owner explicitly enables them.
 
 ## Command Center

@@ -31,6 +31,13 @@ their old secret never becomes valid again. Local files/settings are untouched.
 4. On those workers, pause, enable **Use API connections from my account** and
    resume. Models appear after the next inventory refresh.
 
+Open **Models → Add / use model → Local & API models** to select an account model
+or an installed local model. If workspace access is required, its owner/admin can
+choose **Allow in workspace / create agent**. This authorizes only that model and
+opens the editor with it selected. API models are used through their connection;
+they are not local downloads. Keep the selected worker online to execute jobs.
+Consigliere **0.4.1-rc.4** enables model-only agents without coding-project setup.
+
 The encrypted key is never shown again. Change computers and **Save connection**
 without re-entering it; paste a new key only to replace it. **Disconnect** removes
 the active encrypted copy and blocks new authorizations. Revoke at the provider
