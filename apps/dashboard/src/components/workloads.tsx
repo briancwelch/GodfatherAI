@@ -388,9 +388,23 @@ export default function Workloads({
             <span>Worker setup and availability</span>
           </button>
           <div id="readiness-content" hidden={!setupOpen}>
-            <h2>{available ? "Ready to process" : "Get your worker ready"}</h2>
-            <span className={`badge ${available ? "" : "worker-outdated"}`}>
-              {available ? "Compatible worker online" : "Setup required"}
+            <h2>
+              {!data
+                ? "Checking worker readiness"
+                : available
+                  ? "Ready to process"
+                  : "Get your worker ready"}
+            </h2>
+            <span
+              className={`badge ${data && !available ? "worker-outdated" : ""}`}
+            >
+              {!data
+                ? "Waiting for backend state"
+                : !data.workspaces.length
+                  ? "Create or select a workspace"
+                  : available
+                    ? "Compatible worker online"
+                    : "Setup required"}
             </span>
             {workflow === "analytics" && (
               <>
