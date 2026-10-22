@@ -193,7 +193,15 @@ class AgentView(Contract):
     definition: AgentDefinition
 
 
+class ArtifactReference(Contract):
+    id: UUID
+    checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
+    size_bytes: int = Field(ge=1, le=MAX_ARTIFACT_BYTES)
+    format_version: Literal[1] = 1
+
+
 class WorkflowInput(Contract):
+    dependency_outputs: list[ArtifactReference] = Field(default_factory=list, max_length=16)
     instruction: str = Field(min_length=1, max_length=4096)
     repository_id: UUID | None = None
     dataset: Dataset | None = None
@@ -207,6 +215,8 @@ class WorkflowInput(Contract):
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
+        if not self.dependency_outputs:
+            data.pop("dependency_outputs", None)
         if self.repository_id is None:
             data.pop("repository_id", None)
         if not self.search_terms:
@@ -224,13 +234,6 @@ class WorkflowSubmission(Contract):
     input: WorkflowInput
     priority: int = Field(default=0, ge=-100, le=100)
     paid_consent: bool = False
-
-
-class ArtifactReference(Contract):
-    id: UUID
-    checksum: str = Field(pattern=r"^[a-f0-9]{64}$")
-    size_bytes: int = Field(ge=1, le=MAX_ARTIFACT_BYTES)
-    format_version: Literal[1] = 1
 
 
 class ModelReference(Contract):

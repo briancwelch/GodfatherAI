@@ -17,6 +17,7 @@ export const navigation = {
   overview: "Overview",
   workspaces: "Workspaces",
   jobs: "Jobs",
+  distributed: "Distributed Jobs",
   nodes: "Nodes",
   agents: "Agents",
   models: "Models",
@@ -130,7 +131,7 @@ function DesktopShell({
   const sectionHref = (key: string) => {
     const path = key === "overview" ? "/" : `/${key}`;
     return data?.workspace_id &&
-      ["jobs", "agents", "models", "activity"].includes(key)
+      ["jobs", "distributed", "agents", "models", "activity"].includes(key)
       ? `${path}?workspace=${data.workspace_id}`
       : path;
   };

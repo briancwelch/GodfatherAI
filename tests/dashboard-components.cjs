@@ -797,3 +797,85 @@ test("audit actor identity has a readable name and full UUID tooltip", () => {
   assert.match(html, /title="actor-uuid"/);
   assert.match(html, /role="tooltip"/);
 });
+
+const distributed = require("../apps/dashboard/src/components/distributed-jobs.tsx");
+test("distributed workload shows dependency edges, measured shares and unknown host telemetry", () => {
+  const detail = {
+    id: "test-job",
+    final_task: "final",
+    contribution_basis: "Share of recorded attempt execution time",
+    nodes: [
+      {
+        id: "one",
+        name: "Selected node",
+        state: "offline",
+        connection_status: "offline",
+        last_heartbeat_at: null,
+        execution_seconds: 10,
+        contribution_percent: 100,
+        resources: null,
+      },
+    ],
+    tasks: [
+      {
+        key: "task1",
+        name: "Independent work",
+        job_id: "child1",
+        depends_on: [],
+        allowed_node_ids: ["one"],
+        ready: true,
+        status: "COMPLETED",
+        assigned_node_id: null,
+        attempt_count: 1,
+        checkpoint_version: 1,
+        model: { identifier: "local-model" },
+      },
+      {
+        key: "final",
+        name: "Combined answer",
+        job_id: "child2",
+        depends_on: ["task1"],
+        allowed_node_ids: ["one"],
+        ready: false,
+        status: "PENDING",
+        assigned_node_id: null,
+        attempt_count: 0,
+        checkpoint_version: 0,
+        model: null,
+      },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(distributed.DistributedWorkload, { detail }),
+  );
+  assert.match(html, /marker-end="url/);
+  assert.match(html, /Selected node/);
+  assert.match(html, /100.0%/);
+  assert.match(html, /Host CPU: Unknown/);
+  assert.match(html, /WAITING FOR DEPENDENCIES/);
+  assert.match(html, /not attributed to this job/);
+  assert.match(html, /href="\/jobs\/child2"/);
+});
+test("distributed bridge and navigation retain explicit scoped operations", () => {
+  const uuid = "00000000-0000-0000-0000-000000000001";
+  for (const route of [
+    "distributed/jobs",
+    "distributed/jobs/options",
+    `distributed/jobs/${uuid}`,
+  ])
+    assert.equal(server.allowedPath(route, "GET"), true);
+  assert.equal(server.allowedPath("distributed/jobs", "POST"), true);
+  assert.equal(
+    server.allowedPath(`distributed/jobs/${uuid}/cancel`, "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath(`distributed/jobs/${uuid}/execute-shell`, "POST"),
+    false,
+  );
+  assert.equal(
+    server.allowedPath(`distributed/jobs/${uuid}/retry`, "POST"),
+    false,
+  );
+  assert.equal(shell.navigation.distributed, "Distributed Jobs");
+});

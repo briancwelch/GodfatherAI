@@ -87,6 +87,8 @@ Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub 
 
 Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. The previous **0.4.2-rc.2** [onboarding repair](docs/operations/worker-onboarding-2026-10-22.md) introduced pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
 
+**Release preparation (0.6.0-rc.1):** [Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. Installer updates, GitHub synchronization and VPS deployment are now owner-authorized and in preparation.
+
 ## Local development
 
 Coordinator **0.5.0-rc.2** and Windows/Apple silicon/Intel workers **0.5.0-rc.1**

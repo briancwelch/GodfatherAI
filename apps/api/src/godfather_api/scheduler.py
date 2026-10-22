@@ -57,8 +57,11 @@ def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bo
 
 def permitted(session: Session, job: Job, node: Node) -> bool:
     from godfather_api.authentication import permissions
+    from godfather_api.distributed import participant_permitted
     from godfather_api.provider_connections import allowed
 
+    if not participant_permitted(session, job, node):
+        return False
     if not allowed(session, job, node):
         return False
 
@@ -369,6 +372,9 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
     from godfather_api.workflow_service import eligible, restoration_ready
 
     maintain(session, settings, now)
+    from godfather_api.distributed import advance
+
+    advance(session, now)
     # Credential revocation/disabled owner is checked again on delivery and reports.
     nodes = session.scalars(
         select(Node)

@@ -158,6 +158,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(nodes_router)
     app.include_router(jobs_router)
+    from godfather_api.distributed import router as distributed_router
+
+    app.include_router(distributed_router)
     from godfather_api.result_actions import router as result_actions_router
 
     app.include_router(result_actions_router)

@@ -74,6 +74,9 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
+    "distributed/jobs",
+    "distributed/jobs/options",
+    `distributed/jobs/${uuid}`,
     "appearance",
     "workloads/options",
     `workloads/jobs/${uuid}/files/${uuid}/[0-9]+`,
@@ -96,6 +99,8 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "distributed/jobs",
+    `distributed/jobs/${uuid}/cancel`,
     "account/profile",
     "appearance",
     "workloads/jobs",
@@ -146,7 +151,12 @@ export async function proxy(request: NextRequest, segments: string[]) {
       { detail: "Google Sign-In required" },
       { status: 401 },
     );
-  const bodyLimit = path === "workloads/jobs" ? 1500000 : 16384;
+  const bodyLimit =
+    path === "workloads/jobs"
+      ? 1500000
+      : path === "distributed/jobs"
+        ? 131072
+        : 16384;
   if (Number(request.headers.get("content-length") ?? 0) > bodyLimit)
     return NextResponse.json({ detail: "Request too large" }, { status: 413 });
   try {

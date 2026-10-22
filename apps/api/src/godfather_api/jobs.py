@@ -214,6 +214,13 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
     agent = session.get(Agent, job.agent_id) if job.agent_id else None
     if agent is not None and agent.deleted_at is not None:
         raise HTTPException(409, "The agent was deleted; create a new agent before submitting work")
+    from godfather_api.models import DistributedTask
+
+    if session.get(DistributedTask, job.id) is not None:
+        raise HTTPException(
+            409,
+            "Inspect and resubmit the distributed job; subtasks cannot be retried independently",
+        )
     previous = current_attempt(session, job)
     if job.type == "result.action":
         raise HTTPException(

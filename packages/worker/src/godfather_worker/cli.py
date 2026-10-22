@@ -275,6 +275,7 @@ def main(
                 reference = ToolReference(name=name, version=int(version))
                 tool_definition(reference)
                 tools.append(reference)
+            values["runtimes"] = [*values["runtimes"], "distributed-context-v1"]
             values["workflow_protocol_version"] = 1
             values["worker_tools"] = tools
             values["tool_permissions"] = args.allow_tool_permission

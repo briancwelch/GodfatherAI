@@ -541,3 +541,37 @@ class Event(Entity, Base):
     type: Mapped[str] = mapped_column(String(100))
     correlation_id: Mapped[str | None] = mapped_column(String(64), index=True)
     details: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+
+
+class DistributedJob(Entity, Owned, Base):
+    __tablename__ = "distributed_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING','RUNNING','COMPLETED','FAILED','CANCELLED')", name="status"
+        ),
+        Index("ix_distributed_jobs_workspace_created", "workspace_id", "created_at"),
+    )
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="RESTRICT"))
+    name: Mapped[str] = mapped_column(String(200))
+    instruction: Mapped[str] = mapped_column(Text)
+    selected_node_ids: Mapped[list[str]] = mapped_column(JSONB)
+    final_task: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), server_default="PENDING")
+    error: Mapped[str | None] = mapped_column(String(200))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DistributedTask(Base):
+    __tablename__ = "distributed_tasks"
+    __table_args__ = (UniqueConstraint("distributed_job_id", "key"),)
+    job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="RESTRICT"), primary_key=True
+    )
+    distributed_job_id: Mapped[UUID] = mapped_column(
+        ForeignKey("distributed_jobs.id", ondelete="RESTRICT"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(200))
+    depends_on: Mapped[list[str]] = mapped_column(JSONB)
+    allowed_node_ids: Mapped[list[str]] = mapped_column(JSONB)
+    ready: Mapped[bool] = mapped_column(Boolean, server_default="false")
