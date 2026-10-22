@@ -27,6 +27,65 @@ const shell = require("../apps/dashboard/src/components/application-shell.tsx");
 const results = require("../apps/dashboard/src/components/job-result.tsx");
 const outcomes = require("../apps/dashboard/src/lib/job-outcome.ts");
 const modelUse = require("../apps/dashboard/src/components/model-use.tsx");
+const avatars = require("../apps/dashboard/src/components/avatar.tsx");
+const workspaces = require("../apps/dashboard/src/components/workspace-directory.tsx");
+
+test("account settings is available to members while admin navigation is role-gated", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(shell.ApplicationShell, {
+      section: "account",
+      account: { display_name: "Invited member", roles: ["member"] },
+      refresh: () => {},
+    }),
+  );
+  assert.match(html, /href="\/account"/);
+  assert.doesNotMatch(html, /Admin settings/);
+  assert.match(html, /Workspaces/);
+  assert.match(html, /Analytics and Reports/);
+  assert.equal(server.allowedPath("account/profile", "POST"), true);
+  assert.equal(server.allowedPath("account/profile/other-user", "POST"), false);
+});
+
+test("avatars use branded initials or safe HTTPS images at 16 pixels", () => {
+  let html = renderToStaticMarkup(
+    React.createElement(avatars.Avatar, { name: "Invited member" }),
+  );
+  assert.match(html, /avatar-fallback/);
+  assert.match(html, />IM<\/span>/);
+  html = renderToStaticMarkup(
+    React.createElement(avatars.Avatar, {
+      name: "Member",
+      picture: "https://example.invalid/avatar.png",
+    }),
+  );
+  assert.match(html, /width="16" height="16"/);
+  assert.match(html, /referrerPolicy="no-referrer"/i);
+  html = renderToStaticMarkup(
+    React.createElement(avatars.Avatar, {
+      name: "Member",
+      picture: "javascript:alert(1)",
+    }),
+  );
+  assert.doesNotMatch(html, /<img/);
+});
+
+test("workspace directory lists authorized containers with scoped overview links", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(workspaces.WorkspaceList, {
+      data: {
+        workspaces: [
+          { id: "workspace-id", name: "My project", can_manage: true },
+        ],
+      },
+    }),
+  );
+  assert.match(html, /href="\/workspaces\/workspace-id"/);
+  assert.match(html, /My project/);
+  const empty = renderToStaticMarkup(
+    React.createElement(workspaces.WorkspaceList, { data: { workspaces: [] } }),
+  );
+  assert.match(empty, /Create your first workspace/);
+});
 
 test("local and API models show installed, workspace and worker status independently", () => {
   const model = {

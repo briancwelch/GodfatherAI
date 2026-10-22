@@ -479,6 +479,7 @@ def security_audit(
                 else None
             ),
             "action": e.type,
+            "actor_picture": user.picture if e.actor_id and user else None,
             "timestamp": e.created_at.isoformat(),
             "details": human_event_details(e, actor.owner_id),
             "correlation_id": e.correlation_id,

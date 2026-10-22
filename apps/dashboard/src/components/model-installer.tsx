@@ -14,6 +14,8 @@ interface InstallOptions {
     providers: string[];
     installed_models: { identifier: string; provider_id: string }[];
     reason: string;
+    runtime_setup?: boolean;
+    runtime_ready?: boolean;
   }[];
   catalog: { identifier: string; name: string; url: string }[];
   models: ModelInfo[];
@@ -101,6 +103,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 provider_id: form.get("provider"),
                 identifier: form.get("identifier"),
                 confirm_download: form.get("confirm") === "on",
+                install_runtime: form.get("install_runtime") === "on",
               });
               window.location.assign(`/jobs/${job.id}`);
             } catch (e) {
@@ -221,7 +224,10 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                     value={nodeId}
                     onChange={(e) => {
                       setNodeId(e.target.value);
-                      setProvider("");
+                      setProvider(
+                        options.nodes.find((n) => n.node_id === e.target.value)
+                          ?.providers[0] || "",
+                      );
                       setIdentifier("");
                     }}
                   >
@@ -261,14 +267,34 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                   </select>
                 </label>
               </div>
+              {node?.runtime_setup && (
+                <label key={nodeId} className="check-label">
+                  <input
+                    type="checkbox"
+                    name="install_runtime"
+                    defaultChecked={true}
+                  />{" "}
+                  Install or start Ollama on this worker if needed. The worker
+                  owner has enabled local runtime setup; verified files use this
+                  computer’s network and storage.
+                </label>
+              )}
+              {node && !node.runtime_ready && !node.runtime_setup && (
+                <p className="notice">
+                  Ollama may need setup. On this computer open Consigliere →
+                  Models &amp; API connections → Get started to approve local
+                  runtime installation.
+                </p>
+              )}
               {!options.nodes.some((n) => n.available) && (
                 <p className="notice">
                   No eligible owned worker. In Consigliere, select Pause, then
                   Models &amp; API connections. Enable both Allow my existing
                   local AI models and Allow model downloads from Command Center,
-                  then Resume. Keep Ollama running and reopen this dialog after
-                  the worker connects. Update Consigliere if the download option
-                  is missing.
+                  then Resume. If Ollama is missing, use Get started in the
+                  worker to approve runtime setup. Reopen this dialog after the
+                  worker connects. Update Consigliere if the download option is
+                  missing.
                 </p>
               )}
               <fieldset className="model-catalog">

@@ -212,6 +212,8 @@ class WorkerAck(Contract):
 
 class NodeView(Advertisement):
     owner_name: str | None = None
+    owner_picture: str | None = None
+    owner_location: str | None = None
     node_id: UUID
     owner_id: UUID
     name: str

@@ -20,7 +20,11 @@ from godfather_agent_runtime.tools import definition as tool_definition
 from godfather_contracts import Heartbeat, Registration, ToolReference
 from godfather_contracts.coding import CODING_RUNTIME, REPOSITORY_PREFIX, CodingRepository
 from godfather_contracts.jobs import JobPoll, PollResponse
-from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
+from godfather_contracts.model_management import (
+    INSTALL_RUNTIME,
+    PROVIDER_RUNTIME_PREFIX,
+    SETUP_RUNTIME,
+)
 from godfather_contracts.result_actions import ACTION_RUNTIME, PATCH_RUNTIME, TARGET_PREFIX
 from godfather_model_gateway import ProviderConfig
 from pydantic import ValidationError
@@ -51,6 +55,7 @@ def main(
     stop_event: threading.Event | None = None,
     observer: Callable[..., None] | None = None,
     worker_client: WorkerClient | None = None,
+    maintenance_event: threading.Event | None = None,
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
     if arguments and arguments[0] == "provider":
@@ -83,6 +88,8 @@ def main(
         action="store_true",
         help="Owner opt-in: accept approved local Ollama catalog downloads",
     )
+    parser.add_argument("--allow-runtime-installation", action="store_true")
+    parser.add_argument("--runtime-folder", type=Path)
     parser.add_argument(
         "--allow-tool", action="append", default=[], help="Owner grant: TOOL_NAME@VERSION"
     )
@@ -181,6 +188,12 @@ def main(
             raise ValueError(
                 "Model installation requires a physical worker and local inference configuration"
             )
+        if args.allow_runtime_installation and (
+            not args.allow_model_installation or args.runtime_folder is None
+        ):
+            raise ValueError(
+                "Runtime setup requires model downloads and an owner-local runtime folder"
+            )
         if args.inference_config:
             raw_configs = json.loads(args.inference_config.read_text(encoding="utf-8"))
             if not isinstance(raw_configs, list) or not 1 <= len(raw_configs) <= 8:
@@ -204,6 +217,15 @@ def main(
         ):
             raise ValueError("A node-specific worker credential is required")
         client = worker_client or WorkerClient(args.url, credentials["token"])
+        if args.allow_runtime_installation:
+            from godfather_worker.local_runtime import ensure_runtime, managed_executable
+
+            if managed_executable(args.runtime_folder) is not None:
+                local = next(
+                    (c for c in configs if c.id == "local-ollama" and c.provider == "ollama"), None
+                )
+                if local:
+                    asyncio.run(ensure_runtime(client.url, args.runtime_folder, local, False))
         advertisement = profile(args.simulate) if args.simulate else discover()
         values = advertisement.model_dump()
         from godfather_worker.build_info import worker_version
@@ -288,6 +310,8 @@ def main(
                     ]
                 )
             )
+        if args.allow_runtime_installation:
+            values["runtimes"].append(SETUP_RUNTIME)
         if any(r.allow_apply for r in repositories):
             values["runtimes"] = [
                 *values["runtimes"],
@@ -310,6 +334,11 @@ def main(
     account_refresh = args.account_providers
     try:
         while not stop.is_set():
+            # Checked between attempts, never by the execution cancellation watcher.
+            # An in-flight poll/attempt finishes before native installation can start.
+            if maintenance_event is not None and maintenance_event.is_set():
+                notify("worker.maintenance_ready")
+                break
             try:
                 if (
                     args.account_providers
@@ -416,6 +445,8 @@ def main(
                                     stop,
                                     result.heartbeat_interval_seconds,
                                     configs,
+                                    runtime_folder=args.runtime_folder,
+                                    allow_runtime_installation=args.allow_runtime_installation,
                                 )
                             )
                             refresh_at = (

@@ -66,7 +66,11 @@ def main() -> None:
 
     authentication.google_client = client
     uvicorn.run(
-        create_app(settings), host="0.0.0.0", port=8009, access_log=False, log_level="warning"
+        create_app(settings),
+        host=os.getenv("GODFATHER_OIDC_BIND", "0.0.0.0"),
+        port=8009,
+        access_log=False,
+        log_level="warning",
     )
 
 

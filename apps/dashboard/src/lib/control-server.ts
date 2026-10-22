@@ -96,6 +96,7 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "account/profile",
     "appearance",
     "workloads/jobs",
     "account/providers/(openai|anthropic)(/(disconnect|computers))?",

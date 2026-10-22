@@ -5,6 +5,14 @@ import sys
 
 def main() -> int:
     arguments = sys.argv[1:]
+    if "--install-update" in arguments:
+        from godfather_worker.linux_setup import main as install_update
+        from godfather_worker.updates import update_failure
+
+        try:
+            return install_update()
+        except Exception:
+            return update_failure()
     if not arguments or all(arg in ("--login", "--self-test") for arg in arguments):
         from godfather_worker.desktop_app import main as desktop
 

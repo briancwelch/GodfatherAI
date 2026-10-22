@@ -89,6 +89,12 @@ Command Center maintenance: [UI changes and verification](docs/operations/comman
 
 ## Local development
 
+The next owner-authorized milestone prepares in-app worker updates and local Ollama
+setup, a system Overview and Workspaces directory, personal profiles, and separate
+Images / Analytics and Reports workflows. It is **not deployed**. See the
+[milestone guide](docs/operations/worker-readiness-and-workspaces-2026-10-22.md).
+Existing workers need one normal installer upgrade to acquire the updater.
+
 Prerequisites: Git, Node.js 24.22.0 with npm 11, uv 0.13.1, and Docker with Compose and a Linux engine. On Windows, use Docker Desktop with WSL2. Python 3.14 is selected by `.python-version`; uv can manage it independently of system Python. Python source targets 3.12+ syntax.
 
 After preparing `.env` as described in the setup guide:

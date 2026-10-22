@@ -65,6 +65,7 @@ def user_data(user: User) -> dict[str, object]:
         "enabled": user.enabled,
         "roles": roles(user),
         "permissions": permissions(user),
+        "location": (user.profile or {}).get("location", ""),
     }
 
 
@@ -329,13 +330,15 @@ def onboard(
             audit(session, "administrator_bootstrapped", user.id, user.id)
     # Email is mutable display/contact data; identity lookup above uses only sub.
     user.email = email
-    user.display_name = str(claims.get("name") or email)[:200]
+    if not (user.profile or {}).get("customized"):
+        user.display_name = str(claims.get("name") or email)[:200]
     picture = claims.get("picture")
-    user.picture = (
-        picture
-        if isinstance(picture, str) and picture.startswith("https://") and len(picture) <= 2048
-        else None
-    )
+    if not (user.profile or {}).get("customized"):
+        user.picture = (
+            picture
+            if isinstance(picture, str) and picture.startswith("https://") and len(picture) <= 2048
+            else None
+        )
     return user
 
 

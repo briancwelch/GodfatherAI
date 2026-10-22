@@ -15,7 +15,7 @@ def stage(files: list[Path], output: Path) -> None:
     artifacts: list[dict[str, str]] = []
     for path in files:
         match = re.fullmatch(
-            r"(?:godfather-worker|consigliere)-([a-z0-9.-]+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
+            r"(?:godfather-worker|consigliere)-([a-z0-9.-]+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg|linux-(arm64|x64)\.zip)",
             path.name,
         )
         if not match:
@@ -29,7 +29,11 @@ def stage(files: list[Path], output: Path) -> None:
         platform = (
             "Windows x64"
             if path.suffix == ".exe"
-            else ("Mac (Apple silicon)" if match[3] == "arm64" else "Mac (Intel)")
+            else (
+                f"Linux ({match[4]})"
+                if match[4]
+                else ("Mac (Apple silicon)" if match[3] == "arm64" else "Mac (Intel)")
+            )
         )
         artifacts.append(
             {

@@ -1,4 +1,5 @@
 "use client";
+import { Avatar } from "./avatar";
 
 import {
   createContext,
@@ -56,15 +57,17 @@ export function availableBuilds(data: unknown): Record<string, string> {
     )
       continue;
     const match =
-      /^(?:godfather-worker|consigliere)-(.+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)$/.exec(
+      /^(?:godfather-worker|consigliere)-(.+)-(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg|linux-(arm64|x64)\.zip)$/.exec(
         item.filename,
       );
     if (!match || !versionPattern.test(match[1])) continue;
     const target = match[2].startsWith("windows")
       ? "windows-x86_64"
-      : match[3] === "arm64"
-        ? "macos-arm64"
-        : "macos-x86_64";
+      : match[4]
+        ? `linux-${match[4] === "x64" ? "x86_64" : "arm64"}`
+        : match[3] === "arm64"
+          ? "macos-arm64"
+          : "macos-x86_64";
     if (!result[target] || (compareVersions(match[1], result[target]) ?? 0) > 0)
       result[target] = match[1];
   }
@@ -75,15 +78,27 @@ export function WorkerBuildProvider({ children }: { children: ReactNode }) {
   const [builds, setBuilds] = useState<Record<string, string>>({});
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/downloads/manifest.json", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (response.ok) setBuilds(availableBuilds(await response.json()));
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      void fetch("/downloads/manifest.json", {
+        cache: "no-store",
+        signal: controller.signal,
       })
-      .catch(() => {});
-    return () => controller.abort();
+        .then(async (response) => {
+          if (response.ok) setBuilds(availableBuilds(await response.json()));
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) timer = setTimeout(refresh, 60000);
+        });
+    };
+    refresh();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, []);
   return <Builds.Provider value={builds}>{children}</Builds.Provider>;
 }
@@ -91,22 +106,27 @@ export function WorkerBuildProvider({ children }: { children: ReactNode }) {
 export function UserName({
   id,
   name,
+  picture,
+  location,
   fallback = "Unknown user",
 }: {
   id: string;
   name?: string | null;
+  picture?: string | null;
+  location?: string | null;
   fallback?: string;
 }) {
   return (
     <span
       className="owner-name"
       tabIndex={0}
-      title={id}
+      title={location ? `${id} · ${location}` : id}
       aria-label={`${name || fallback}, user ID ${id}`}
     >
-      {name || fallback}
+      <Avatar name={name || fallback} picture={picture} /> {name || fallback}
       <span role="tooltip" className="owner-tooltip">
         {id}
+        {location ? ` · ${location}` : ""}
       </span>
     </span>
   );
@@ -114,12 +134,17 @@ export function UserName({
 export function OwnerName({
   node,
 }: {
-  node: Pick<NodeInfo, "owner_id" | "owner_name">;
+  node: Pick<
+    NodeInfo,
+    "owner_id" | "owner_name" | "owner_picture" | "owner_location"
+  >;
 }) {
   return (
     <UserName
       id={node.owner_id}
       name={node.owner_name}
+      picture={node.owner_picture}
+      location={node.owner_location}
       fallback="Unknown owner"
     />
   );
@@ -142,7 +167,7 @@ export function WorkerVersion({
           className="badge worker-outdated"
           title={`Latest build for this platform: ${latest}`}
         >
-          Out of Date
+          Update Available
         </span>
       )}
       <small>

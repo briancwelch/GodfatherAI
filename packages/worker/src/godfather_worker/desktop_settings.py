@@ -46,6 +46,12 @@ class Settings:
             self.notebook.add(page, text=name)
             self.pages[name] = page
         preferences = app.preferences
+        self.check(
+            "General",
+            "Install verified worker updates automatically when idle (without prompting)",
+            "automatic_updates",
+            preferences.automatic_updates,
+        )
         self.check("General", "Start Consigliere when I sign in", "startup", app.autostart.get())
         self.check(
             "General",
@@ -89,9 +95,16 @@ class Settings:
             "model_installation",
             app.settings.model_installation,
         )
+        self.check(
+            "Resources",
+            "Allow Command Center to install local Ollama on this computer",
+            "runtime_installation",
+            app.settings.runtime_installation,
+        )
         self.note(
             "Resources",
-            "Model downloads also require local AI models enabled and Ollama running. "
+            "Model downloads require local AI models enabled. Runtime setup can install "
+            "or start Ollama when separately enabled above. "
             "Each download requires confirmation in Command Center and uses this "
             "computer's network and storage.",
         )
@@ -322,6 +335,7 @@ class Settings:
                     "primary": values["primary"],
                     "inference": values["inference"],
                     "model_installation": values["model_installation"],
+                    "runtime_installation": values["runtime_installation"],
                     "account_providers": values["account_providers"],
                     "shared": values["shared"],
                     "allowed_owner_ids": [
@@ -340,6 +354,9 @@ class Settings:
                 raise ValueError("Enable local models before choosing inference as primary.")
             if settings.model_installation and not settings.inference:
                 self.status.set("Enable local AI models before allowing model downloads.")
+                return
+            if settings.runtime_installation and not settings.model_installation:
+                self.status.set("Enable model downloads before approving Ollama runtime setup.")
                 return
             if (
                 settings != self.app.settings
@@ -362,6 +379,7 @@ class Settings:
                             "close_to_tray",
                             "start_minimized",
                             "remember_size",
+                            "automatic_updates",
                         )
                     },
                     "width": max(640, self.app.root.winfo_width()),

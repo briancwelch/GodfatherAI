@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from godfather_worker import windows_setup
 from godfather_worker.windows_setup import install
 
 from scripts.release import sha256
@@ -35,6 +36,33 @@ def test_per_user_install_preserves_identity_and_repeats_safely(
         install(source, local, tmp_path / "programs")
     assert executable.read_bytes() == b"existing different build"
     assert identity.read_text() == "preserve"
+
+
+def test_automatic_update_waits_for_worker_and_retains_owner_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "worker-payload"
+    source.mkdir()
+    (source / "manifest.json").write_text('{"version":"1.2.4"}')
+    (source / "consigliere.exe").write_bytes(b"new application fixture")
+    local, roaming = tmp_path / "local", tmp_path / "roaming"
+    data = local / "The Godfather/Desktop Worker"
+    data.mkdir(parents=True)
+    identity = data / "settings.json"
+    identity.write_text("owner-data-preserved")
+    monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
+    monkeypatch.setattr("sys.argv", ["setup", "--auto-update", "--wait-pid", "12345"])
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setenv("APPDATA", str(roaming))
+    wait, launched = Mock(), Mock()
+    monkeypatch.setattr("godfather_worker.updates.wait_for_previous", wait)
+    monkeypatch.setattr(windows_setup, "create_shortcut", Mock())
+    monkeypatch.setattr(windows_setup, "update_startup", Mock())
+    monkeypatch.setattr("godfather_worker.windows_setup.subprocess.Popen", launched)
+    assert windows_setup.main() == 0
+    wait.assert_called_once()
+    assert identity.read_text() == "owner-data-preserved"
+    assert Path(launched.call_args.args[0][0]).read_bytes() == b"new application fixture"
 
 
 def test_interrupted_install_can_be_retried_without_partial_version(

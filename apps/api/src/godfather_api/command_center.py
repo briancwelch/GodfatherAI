@@ -43,6 +43,15 @@ router = APIRouter(
 PAGE_SIZE = 25
 
 
+def human_job_view(session: Session, job: Job) -> dict[str, object]:
+    owner = session.get(User, job.owner_id)
+    return {
+        **jobs.view(session, job).model_dump(mode="json"),
+        "owner_name": owner.display_name if owner else None,
+        "owner_picture": owner.picture if owner else None,
+    }
+
+
 def manages(session: Session, workspace: Workspace, actor_id: UUID) -> bool:
     membership = session.get(WorkspaceMember, (workspace.id, actor_id))
     return workspace.owner_id == actor_id or (membership is not None and membership.role == "admin")
@@ -76,6 +85,7 @@ def event_data(session: Session, row: Event, severity: str, actor_id: UUID) -> d
             else None
         ),
         "workspace_id": str(row.workspace_id) if row.workspace_id else None,
+        "actor_picture": user.picture if row.actor_id and user else None,
         "job_id": str(row.job_id) if row.job_id else None,
         "node_id": str(row.node_id) if row.node_id else None,
         "attempt_id": str(row.attempt_id) if row.attempt_id else None,
@@ -203,8 +213,14 @@ def overview(
         .all()
     )
     live_jobs = true() if session.info.get("test") else ~Job.type.like("synthetic.%")
+    # Global Overview spans only workspaces visible to this account. Other sections
+    # retain their historical default workspace selection.
+    global_overview = section == "overview" and workspace_id is None
+    scope_ids = (
+        [w.id for w in workspaces] if global_overview else ([selected.id] if selected else [])
+    )
     job_query = (
-        select(Job).where(Job.workspace_id == selected.id)
+        select(Job).where(Job.workspace_id.in_(scope_ids))
         if selected
         else select(Job).where(false())
     )
@@ -213,7 +229,7 @@ def overview(
         dict(
             session.execute(
                 select(Job.status, func.count())
-                .where(Job.workspace_id == selected.id, live_jobs, Job.deleted_at.is_(None))
+                .where(Job.workspace_id.in_(scope_ids), live_jobs, Job.deleted_at.is_(None))
                 .group_by(Job.status)
             )
             .tuples()
@@ -223,7 +239,7 @@ def overview(
         else {}
     )
     agent_query = (
-        select(Agent).where(Agent.workspace_id == selected.id, Agent.deleted_at.is_(None))
+        select(Agent).where(Agent.workspace_id.in_(scope_ids), Agent.deleted_at.is_(None))
         if selected
         else select(Agent).where(false())
     )
@@ -231,7 +247,7 @@ def overview(
         dict(
             session.execute(
                 select(Agent.enabled, func.count())
-                .where(Agent.workspace_id == selected.id, Agent.deleted_at.is_(None))
+                .where(Agent.workspace_id.in_(scope_ids), Agent.deleted_at.is_(None))
                 .group_by(Agent.enabled)
             )
             .tuples()
@@ -309,7 +325,7 @@ def overview(
     )
     # Availability means compatible healthy advertisement, not an execution guarantee.
     available_versions = 0
-    if selected:
+    if selected and not global_overview:
         healthy = [
             (n, node_view(session, n))
             for n in session.scalars(
@@ -360,7 +376,7 @@ def overview(
     active_agent_versions = (
         session.scalar(
             select(func.count(func.distinct(Job.agent_id))).where(
-                Job.workspace_id == selected.id, Job.status.in_(("ASSIGNED", "RUNNING"))
+                Job.workspace_id.in_(scope_ids), Job.status.in_(("ASSIGNED", "RUNNING"))
             )
         )
         if selected
@@ -375,7 +391,7 @@ def overview(
         },
         "generated_at": datetime.now(UTC).isoformat(),
         "actor_id": str(actor.owner_id),
-        "workspace_id": str(selected.id) if selected else None,
+        "workspace_id": str(selected.id) if selected and not global_overview else None,
         "workspaces": [
             {
                 "id": str(w.id),
@@ -390,7 +406,7 @@ def overview(
         "agent_counts": {
             "enabled_versions": agent_counts.get(True, 0),
             "disabled_versions": agent_counts.get(False, 0),
-            "compatible_online_versions": available_versions,
+            "compatible_online_versions": None if global_overview else available_versions,
             "active_versions": active_agent_versions or 0,
         },
         "nodes": [
@@ -400,7 +416,7 @@ def overview(
             }
             for n in node_rows
         ],
-        "jobs": [jobs.view(session, j).model_dump(mode="json") for j in job_rows],
+        "jobs": [human_job_view(session, j) for j in job_rows],
         "agents": agent_views,
         "models": inference.models(
             selected.id,
@@ -410,10 +426,14 @@ def overview(
             offset if section == "models" else 0,
             include_restricted=section == "models",
         )
-        if selected
+        if selected and not global_overview
         else [],
-        "metrics": inference.metrics(selected.id, request, session) if selected else None,
-        "events": events(request, session, workspace_id=selected.id if selected else None),
+        "metrics": inference.metrics(selected.id, request, session)
+        if selected and not global_overview
+        else None,
+        "events": events(
+            request, session, workspace_id=selected.id if selected and not global_overview else None
+        ),
         "totals": {"nodes": node_total, "jobs": job_total, "agents": agent_total},
         "limit": PAGE_SIZE,
         "offset": offset,
@@ -486,7 +506,7 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
         else None,
         "can_control": job.owner_id == actor.owner_id
         or manages(session, workspace, actor.owner_id),
-        "job": jobs.view(session, job).model_dump(mode="json"),
+        "job": human_job_view(session, job),
         "attempts": [a.model_dump(mode="json") for a in jobs.attempts(job_id, request, session)],
         "workflow": {
             "status": run.status,
@@ -576,7 +596,7 @@ def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[st
     return {
         "can_control": node.owner_id == actor.owner_id,
         "node": human_node_view(session, node, actor.owner_id).model_dump(mode="json"),
-        "jobs": [jobs.view(session, j).model_dump(mode="json") for j in assigned],
+        "jobs": [human_job_view(session, j) for j in assigned],
         "events": events(request, session, node_id=node_id),
     }
 
@@ -602,7 +622,7 @@ def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict
     )
     return {
         "jobs": [
-            jobs.view(session, job).model_dump(mode="json")
+            human_job_view(session, job)
             for job in session.scalars(
                 select(Job)
                 .join(Agent, Job.agent_id == Agent.id)

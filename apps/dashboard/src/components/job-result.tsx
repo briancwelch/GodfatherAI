@@ -766,7 +766,25 @@ export function JobResult({ detail }: { detail: JobDetail }) {
           <ReadableValue value={result.tool_calls} />
         </>
       )}
-      {detail.job.type === "result.action" && hasOutput ? (
+      {detail.job.type === "model.install" && completed ? (
+        <>
+          <p>
+            Local model{" "}
+            <strong>
+              {String(
+                object(result).identifier || detail.job.input?.identifier || "",
+              )}
+            </strong>{" "}
+            was downloaded and verified on the worker.
+          </p>
+          <a
+            className="action"
+            href={`/models?workspace=${detail.job.workspace_id}`}
+          >
+            Use installed model in this workspace
+          </a>
+        </>
+      ) : detail.job.type === "result.action" && hasOutput ? (
         <>
           <p>
             {String(object(data).summary || "Application result unavailable")}

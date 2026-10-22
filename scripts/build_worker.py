@@ -179,6 +179,17 @@ def build(release: str) -> Path:
     Path(str(archive) + ".sha256").write_text(
         f"{sha256(archive)}  {archive.name}\n", encoding="utf-8"
     )
+    Path(str(archive) + ".manifest.json").write_text(
+        json.dumps(
+            {
+                "version": release,
+                "source_revision": revision,
+                "signing": "Unsigned portable worker candidate",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(f"Standalone worker candidate: {archive}")
     return archive
 

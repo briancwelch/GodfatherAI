@@ -233,6 +233,8 @@ def node_view(session: Session, node: Node) -> NodeView:
                 owner.display_name if (owner := session.get(User, node.owner_id)) else None
             ),
             "name": node.name,
+            "owner_picture": owner.picture if owner else None,
+            "owner_location": (owner.profile or {}).get("location") if owner else None,
             "os": node.os,
             "os_version": node.os_version,
             "architecture": node.architecture,

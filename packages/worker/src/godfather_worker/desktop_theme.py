@@ -16,6 +16,7 @@ class Preferences(Contract):
     close_to_tray: bool = True
     start_minimized: bool = False
     remember_size: bool = True
+    automatic_updates: bool = False
     width: int = Field(default=1120, ge=640, le=16384)
     height: int = Field(default=760, ge=480, le=16384)
 

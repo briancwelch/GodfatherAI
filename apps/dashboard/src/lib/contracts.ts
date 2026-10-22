@@ -18,6 +18,8 @@ export interface Resource {
 }
 export interface NodeInfo {
   owner_name?: string | null;
+  owner_picture?: string | null;
+  owner_location?: string | null;
   worker_version?: string | null;
   node_id: string;
   owner_id: string;
@@ -70,6 +72,8 @@ export interface ModelInfo {
   deployment: Deployment;
 }
 export interface JobInfo {
+  owner_name?: string | null;
+  owner_picture?: string | null;
   input?: Record<string, Json>;
   id: string;
   owner_id: string;
@@ -120,6 +124,7 @@ export interface AgentInfo {
 }
 export interface AuditEvent {
   actor_name?: string | null;
+  actor_picture?: string | null;
   id: string;
   type: string;
   created_at: string;
@@ -159,7 +164,7 @@ export interface Snapshot {
     enabled_versions: number;
     disabled_versions: number;
     active_versions: number;
-    compatible_online_versions: number;
+    compatible_online_versions: number | null;
   };
   nodes: NodeInfo[];
   jobs: JobInfo[];

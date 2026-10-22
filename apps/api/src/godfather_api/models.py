@@ -58,6 +58,7 @@ class User(Entity, Base):
     scheduling_turn: Mapped[int] = mapped_column(BigInteger, server_default="0")
     roles: Mapped[list[str]] = mapped_column(JSONB, server_default="[]")
     picture: Mapped[str | None] = mapped_column(String(2048))
+    profile: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
 
 
 class ApplicationSetting(Base):

@@ -20,6 +20,7 @@ import { AppearanceSettings } from "./appearance-settings";
 import { BulkTable } from "./bulk-table";
 import type { Page, Snapshot } from "../lib/contracts";
 import { ConnectComputer } from "./connect-computer";
+import { Avatar } from "./avatar";
 
 export interface Account {
   id: string;
@@ -132,6 +133,7 @@ export default function Administration({
         id: string;
         actor_id: string | null;
         actor_name?: string | null;
+        actor_picture?: string | null;
         action: string;
         timestamp: string;
         details: unknown;
@@ -301,7 +303,7 @@ export default function Administration({
         <div className="page-heading">
           <div>
             <a href="/">The Godfather / Command Center</a>
-            <h1>Account / Administration</h1>
+            <h1>Admin settings</h1>
             <p>Persisted identities, owner permissions and security history.</p>
           </div>
           <button
@@ -859,7 +861,13 @@ export default function Administration({
                           });
                       }}
                     >
-                      <h3>{account.display_name}</h3>
+                      <h3>
+                        <Avatar
+                          name={account.display_name}
+                          picture={account.picture}
+                        />{" "}
+                        {account.display_name}
+                      </h3>
                       <p>
                         {account.email} · {account.id}
                       </p>
@@ -913,7 +921,11 @@ export default function Administration({
                         cell: (e) => (
                           <>
                             {e.actor_id ? (
-                              <UserName id={e.actor_id} name={e.actor_name} />
+                              <UserName
+                                id={e.actor_id}
+                                name={e.actor_name}
+                                picture={e.actor_picture}
+                              />
                             ) : (
                               "Unauthenticated"
                             )}

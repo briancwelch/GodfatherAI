@@ -54,6 +54,38 @@ def main() -> int:
     from tkinter import ttk
 
     source = Path(sys.executable).resolve().parents[2]
+    if "--auto-update" in sys.argv:
+        import subprocess
+
+        from godfather_worker.updates import update_failure, wait_for_previous
+
+        lock = None
+        try:
+            wait_for_previous()
+            lock = acquire_lock(data_folder())
+            if lock is None:
+                raise OSError("Worker is still running; update was not applied")
+            target = next(
+                (
+                    p
+                    for p in (Path("/Applications"), Path.home() / "Applications")
+                    if (p / "Consigliere.app").exists()
+                ),
+                Path.home() / "Applications",
+            )
+            app = install(source, target)
+            agent = Path.home() / "Library/LaunchAgents/ai.the-godfather.worker.plist"
+            if agent.is_file():
+                from godfather_worker.desktop import login_startup
+
+                login_startup(True, app / "Contents/MacOS/Consigliere", agent)
+            subprocess.Popen(["/usr/bin/open", str(app)])
+        except Exception:
+            return update_failure()
+        finally:
+            if lock is not None:
+                lock.close()
+        return 0
     root = tk.Tk()
     root.title("Install Consigliere — The Godfather AI")
     root.configure(background="#F4F8FC")

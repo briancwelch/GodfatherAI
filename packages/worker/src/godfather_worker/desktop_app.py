@@ -57,6 +57,14 @@ class Application:
         self.status = tk.StringVar(value="Loading your saved connection...")
         self.connection_state = tk.StringVar(value="DISCONNECTED")
         self.build_version = worker_version()
+        self.update_info: dict[str, str] | None = None
+        self.update_pending: tuple[Path, str] | None = None
+        self.update_checking = False
+        self.update_busy = False
+        self.update_timer: str | None = None
+        self.local_setup_pending = False
+        self.local_setup_busy = False
+        self.update_status = tk.StringVar(value="Check for updates")
         self.address = tk.StringVar(value=WEB_ORIGIN)
         self.owner = tk.StringVar(value="")
         self.code = tk.StringVar(value="")
@@ -151,6 +159,7 @@ class Application:
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="Open Command Center", command=self.open_center)
         file_menu.add_command(label="Settings…", command=self.advanced)
+        file_menu.add_command(label="Check for updates", command=self.check_updates)
         file_menu.add_separator()
         file_menu.add_command(label="Quit Consigliere", command=self.quit)
         menu.add_cascade(label="File", menu=file_menu)
@@ -208,6 +217,9 @@ class Application:
             text="Build " + (self.build_version or "Source checkout (unreleased)"),
             style="Muted.TLabel",
         ).pack(side="left")
+        ttk.Button(footer, textvariable=self.update_status, command=self.check_updates).pack(
+            side="left", padx=12
+        )
         ttk.Label(footer, textvariable=self.status, style="Muted.TLabel").pack(side="right")
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
@@ -275,7 +287,7 @@ class Application:
             text=(
                 "Enable local AI models above as well. Each download requires confirmation "
                 "in Command Center and uses this computer's network and storage. "
-                "Ollama must already be installed and running."
+                "Use Get started below to set up Ollama on this computer."
             ),
             wraplength=650,
             style="Muted.TLabel",
@@ -283,6 +295,11 @@ class Application:
         ttk.Label(models, textvariable=self.inventory, wraplength=650, style="Muted.TLabel").pack(
             anchor="w", pady=8
         )
+        ttk.Button(
+            models,
+            text="Get started · Download local model from Command Center",
+            command=self.setup_local_ai,
+        ).pack(anchor="w", pady=8)
         ttk.Separator(models).pack(fill="x", pady=16)
         ttk.Label(models, text="Account API connections", style="Title.TLabel").pack(
             anchor="w", pady=(0, 8)
@@ -310,6 +327,117 @@ class Application:
         self.background(self.load)
         self.refresh_network()
         self.timer = root.after(100, self.pump)
+
+    def check_updates(self) -> None:
+        if (
+            self.update_busy
+            or self.update_checking
+            or self.local_setup_busy
+            or not self.identity
+            or not self.build_version
+        ):
+            return
+        if self.update_info:
+            if self.preferences.automatic_updates or messagebox.askyesno(
+                "Update Available",
+                f"Install Consigliere {self.update_info['version']}? "
+                "Current work will finish first. Your connection and settings are preserved.",
+                parent=self.root,
+            ):
+                self.update_busy = True
+                item = dict(self.update_info)
+                origin = self.identity.get("origin", self.address.get())
+                self.update_status.set("Downloading verified update…")
+
+                def download() -> None:
+                    from godfather_worker.updates import download_update
+
+                    try:
+                        path = download_update(origin, item, self.folder / "updates")
+                        self.event("update_downloaded", path=path, sha256=item["sha256"])
+                    except (OSError, ValueError):
+                        self.event("update_failed")
+
+                self.background(download)
+            return
+        self.update_checking = True
+        origin, current = self.identity.get("origin", self.address.get()), self.build_version
+
+        def check() -> None:
+            from godfather_worker.updates import available_update
+
+            try:
+                self.event("update_checked", item=available_update(origin, current))
+            except (OSError, ValueError, KeyError):
+                self.event("update_failed")
+
+        self.background(check)
+
+    def finish_update(self) -> None:
+        if self.controller and self.controller.running:
+            self.root.after(100, self.finish_update)
+            return
+        if self.update_pending:
+            from godfather_worker.updates import launch_update
+
+            try:
+                launch_update(*self.update_pending)
+            except (OSError, ValueError):
+                self.update_busy = False
+                self.update_pending = None
+                self.update_status.set("Update failed. Retry from File → Check for updates.")
+                return
+            self.quit()
+
+    def setup_local_ai(self) -> None:
+        if self.local_setup_busy or self.update_busy:
+            return
+        if not self.identity:
+            messagebox.showinfo(
+                "Connect first", "Connect this computer to Command Center first.", parent=self.root
+            )
+            return
+        if not messagebox.askyesno(
+            "Set up local AI",
+            "Download local model from Command Center? This enables local models and "
+            "model downloads, and permits installation of verified Ollama files in your "
+            "worker data folder. It uses this computer's storage and network. Current work "
+            "finishes first; then choose your model in Command Center.",
+            parent=self.root,
+        ):
+            return
+        self.local_setup_pending = True
+        self.local_setup_busy = True
+        if self.controller and self.controller.running:
+            self.controller.maintenance_event.set()
+            self.status.set("Finishing current work before local AI setup…")
+        else:
+            self.begin_local_setup()
+
+    def begin_local_setup(self) -> None:
+        self.local_setup_pending = False
+        self.status.set("Setting up Ollama. This download may take several minutes…")
+        origin = (
+            self.identity.get("origin", self.address.get()) if self.identity else self.address.get()
+        )
+
+        def setup() -> None:
+            from godfather_worker.local_runtime import ensure_runtime
+
+            try:
+                asyncio.run(
+                    ensure_runtime(
+                        origin,
+                        self.folder,
+                        ProviderConfig(id="local-ollama", provider="ollama"),
+                        True,
+                    )
+                )
+                self.event("local_setup_ready")
+            except (OSError, ValueError):
+                self.event("local_setup_failed")
+
+        self.background(setup)
 
     def refresh_network(self) -> None:
         if self.network_timer:
@@ -556,6 +684,9 @@ class Application:
             self.quit()
 
     def quit(self) -> None:
+        if self.update_timer:
+            self.root.after_cancel(self.update_timer)
+            self.update_timer = None
         if self.network_timer:
             self.root.after_cancel(self.network_timer)
             self.network_timer = None
@@ -587,6 +718,9 @@ class Application:
         self.connect_button.configure(state="disabled")
         self.owner.set("Account: " + identity.get("owner", "your saved account"))
         self.code.set("")
+        if self.update_timer:
+            self.root.after_cancel(self.update_timer)
+        self.update_timer = self.root.after(1000, self.periodic_update_check)
         if not self.cancel.is_set():
             self.start()
         else:
@@ -601,6 +735,62 @@ class Application:
             if name == "network":
                 self.network_checking = False
                 self.network.set(values["message"])
+            elif name == "update_checked":
+                self.update_checking = False
+                self.update_info = values["item"]
+                self.update_status.set(
+                    "Update Available" if self.update_info else "Worker is up to date"
+                )
+                if self.update_info:
+                    self.check_updates()
+                if self.update_timer:
+                    self.root.after_cancel(self.update_timer)
+                self.update_timer = self.root.after(1800000, self.periodic_update_check)
+            elif name == "update_failed":
+                self.update_busy = self.update_checking = False
+                self.update_info = None
+                self.update_status.set("Update check/download failed. Click to retry.")
+                if self.update_timer:
+                    self.root.after_cancel(self.update_timer)
+                self.update_timer = self.root.after(1800000, self.periodic_update_check)
+            elif name == "update_downloaded":
+                self.update_pending = (values["path"], values["sha256"])
+                self.update_status.set("Update ready · waiting for current work")
+                if self.controller and self.controller.running:
+                    self.controller.maintenance_event.set()
+                else:
+                    self.finish_update()
+            elif name == "local_setup_ready":
+                self.local_setup_busy = False
+                from godfather_worker.desktop import save_settings
+
+                self.settings = self.settings.model_copy(
+                    update={
+                        "inference": True,
+                        "model_installation": True,
+                        "runtime_installation": True,
+                    }
+                )
+                save_settings(self.folder / "settings.json", self.settings)
+                self.inference.set(True)
+                self.model_installation.set(True)
+                self.inventory.set(
+                    "Ollama is ready. Choose a local model in Command Center "
+                    "→ Models → Add / use model."
+                )
+                self.start()
+                origin = (
+                    self.identity.get("origin", self.address.get())
+                    if self.identity
+                    else self.address.get()
+                )
+                webbrowser.open(origin + "/models")
+            elif name == "local_setup_failed":
+                self.local_setup_busy = False
+                self.status.set(
+                    "Ollama setup failed. Check network, free storage and the published "
+                    "runtime catalog; click Get started to retry."
+                )
             elif name == "loaded":
                 self.models = values["models"]
                 self.inventory.set(
@@ -690,6 +880,10 @@ class Application:
                 self.pause_button.configure(state="disabled")
                 if self.status.get().startswith("Pausing"):
                     self.status.set("Paused")
+                if self.update_pending:
+                    self.root.after(100, self.finish_update)
+                elif self.local_setup_pending:
+                    self.root.after(100, self.begin_local_setup)
             elif name == "error":
                 self.status.set(values["message"])
             elif name == "project_update" and not self.closing:
@@ -717,6 +911,11 @@ class Application:
                 self.tray.title = "Consigliere — The Godfather AI: " + self.status.get()[:80]
         if not self.destroyed:
             self.timer = self.root.after(100, self.pump)
+
+    def periodic_update_check(self) -> None:
+        self.update_timer = None
+        self.update_info = None
+        self.check_updates()
 
 
 def main() -> int:

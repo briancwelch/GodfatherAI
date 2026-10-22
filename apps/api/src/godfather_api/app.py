@@ -168,9 +168,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(inference_router)
     app.include_router(command_center_router)
     app.include_router(authentication_router)
+    from godfather_api.account_profile import router as account_profile_router
     from godfather_api.workspace_archive import router as workspace_archive_router
 
     app.include_router(workspace_archive_router)
+    app.include_router(account_profile_router)
     app.include_router(administration_router)
     app.include_router(account_providers_router)
     app.include_router(enrollment_router)

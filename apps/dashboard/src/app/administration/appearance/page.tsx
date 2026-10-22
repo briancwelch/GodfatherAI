@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 
 export default async function AppearancePage() {
   const user = await requireUser();
-  if (!user.permissions.includes("platform.manage"))
-    redirect("/administration");
+  if (!user.permissions.includes("platform.manage")) redirect("/account");
   return <Administration initialUser={user} initialTab="Appearance" />;
 }

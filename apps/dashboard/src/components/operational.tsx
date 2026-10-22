@@ -169,7 +169,12 @@ export function EventTimeline({ events }: { events: AuditEvent[] }) {
             {event.attempt_id && <span>Attempt {short(event.attempt_id)}</span>}{" "}
             {event.actor_id && (
               <span>
-                Actor <UserName id={event.actor_id} name={event.actor_name} />
+                Actor{" "}
+                <UserName
+                  id={event.actor_id}
+                  name={event.actor_name}
+                  picture={event.actor_picture}
+                />
               </span>
             )}
           </p>

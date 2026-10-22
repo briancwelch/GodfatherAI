@@ -28,7 +28,7 @@ export function ConnectComputer() {
             (item) =>
               typeof item.signing === "string" &&
               /^[a-f0-9]{64}$/.test(item.sha256) &&
-              /^(?:godfather-worker|consigliere)-[a-z0-9.-]+-(?:windows-x64-setup\.exe|macos-(?:arm64|x64)-installer\.dmg)$/.test(
+              /^(?:godfather-worker|consigliere)-[a-z0-9.-]+-(?:windows-x64-setup\.exe|macos-(?:arm64|x64)-installer\.dmg|linux-(?:arm64|x64)\.zip)$/.test(
                 item.filename,
               ),
           )
@@ -95,6 +95,11 @@ export function ConnectComputer() {
           </div>
         ))}
       </div>
+      <p>
+        Connected older workers show Update Available and can update from their
+        app. Existing workers without the updater need one normal installer
+        upgrade first.
+      </p>
       <p>
         HTTPS connects from anywhere. Tailscale is optional. Your computer keeps
         control of its files, tools and paid AI credentials.

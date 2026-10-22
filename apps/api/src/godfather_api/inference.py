@@ -18,6 +18,7 @@ from godfather_contracts.model_management import (
     INSTALL_RUNTIME,
     MODEL_CATALOG,
     PROVIDER_RUNTIME_PREFIX,
+    SETUP_RUNTIME,
     ModelInstallInput,
     ModelInstallRequest,
 )
@@ -67,6 +68,9 @@ def install_options(workspace_id: UUID, request: Request, session: SessionDep) -
                 "os": node.os,
                 "available": healthy and INSTALL_RUNTIME in view.runtimes and bool(providers),
                 "providers": providers,
+                "runtime_setup": SETUP_RUNTIME in view.runtimes,
+                "runtime_ready": "ollama" in view.runtimes
+                or any(m.provider == "ollama" for m in view.model_deployments),
                 "installed_models": [
                     {"identifier": m.identifier, "provider_id": m.provider_id}
                     for m in view.model_deployments
@@ -106,6 +110,10 @@ def install_model(payload: ModelInstallRequest, request: Request, session: Sessi
     node_spec = node_view(session, node)
     if INSTALL_RUNTIME not in node_spec.runtimes or runtime not in node_spec.runtimes:
         raise HTTPException(409, "The node owner must opt in to model installation on this worker")
+    if payload.install_runtime and (
+        SETUP_RUNTIME not in node_spec.runtimes or payload.provider_id != "local-ollama"
+    ):
+        raise HTTPException(409, "Approve Ollama runtime setup locally in Consigliere first")
     if any(
         m.identifier == payload.identifier and m.provider_id == payload.provider_id
         for m in node_spec.model_deployments
@@ -127,9 +135,15 @@ def install_model(payload: ModelInstallRequest, request: Request, session: Sessi
         owner_id=actor.owner_id,
         workspace_id=payload.workspace_id,
         type="model.install",
-        requirements=Requirements(runtimes=[INSTALL_RUNTIME, runtime]).model_dump(mode="json"),
+        requirements=Requirements(
+            runtimes=[INSTALL_RUNTIME, runtime]
+            + ([SETUP_RUNTIME] if payload.install_runtime else [])
+        ).model_dump(mode="json"),
         input_refs=ModelInstallInput(
-            node_id=node.id, provider_id=payload.provider_id, identifier=payload.identifier
+            node_id=node.id,
+            provider_id=payload.provider_id,
+            identifier=payload.identifier,
+            install_runtime=payload.install_runtime,
         ).model_dump(mode="json"),
         timeout_seconds=3600,
         retry_limit=0,

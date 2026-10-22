@@ -18,13 +18,16 @@ interface Options {
 
 export default function Workloads({
   user,
+  workflow = "analytics",
 }: {
   user: { id: string; display_name: string; roles: string[] };
+  workflow?: "images" | "analytics";
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [workspace, setWorkspace] = useState("");
   const [options, setOptions] = useState<Options | null>(null);
-  const [kind, setKind] = useState("report");
+  const [kind, setKind] = useState(workflow === "images" ? "image" : "report");
+  const [setupOpen, setSetupOpen] = useState(true);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -130,7 +133,7 @@ export default function Workloads({
   }
   return (
     <ApplicationShell
-      section="workloads"
+      section={workflow}
       data={data}
       account={user}
       refresh={() => setRevision((v) => v + 1)}
@@ -145,237 +148,295 @@ export default function Workloads({
         </RibbonGroup>
       }
     >
-      <section className="panel">
-        <h1>Images, analytics and reports</h1>
-        <p>
-          Upload authorized data, choose the calculation columns, and receive
-          persisted results from a compatible worker.
-        </p>
-        <p role="status" aria-live="polite">
-          {status}
-        </p>
-        {!data ? (
-          <p>Loading workspaces and worker capabilities…</p>
-        ) : !data.workspaces.length ? (
-          <p>No authorized workspace is available.</p>
-        ) : (
-          <form onSubmit={(e) => void submit(e)} className="workload-form">
-            <label>
-              Workspace
-              <select
-                value={workspace || data.workspace_id || data.workspaces[0]?.id}
-                onChange={(e) => {
-                  setWorkspace(e.target.value);
-                  setOptions(null);
-                }}
-              >
-                {data.workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Workload
-              <select value={kind} onChange={(e) => setKind(e.target.value)}>
-                <option value="report">Analytics → report</option>
-                <option value="analytics">Analytics only</option>
-                <option value="image">Generate images</option>
-              </select>
-            </label>
-            {!available && (
-              <p className="notice">
-                {kind === "image"
-                  ? "Image generation unavailable: no permitted online worker advertises a configured local image model. No paid fallback is used."
-                  : "No opted-in analytics worker is online. Connect a worker with a preinstalled Python sandbox image and explicit data-analysis permission."}{" "}
-                <a href="#workload-setup">Setup details</a>
-              </p>
-            )}
-            <label>
-              {kind === "image"
-                ? "Image prompt"
-                : "Analysis request / report context"}
-              <textarea name="instruction" required maxLength={4096} rows={3} />
-            </label>
-            {kind === "image" ? (
-              <>
-                <label>
-                  Provider
-                  <select name="backend">
-                    <option>AUTOMATIC1111 (local)</option>
-                  </select>
-                </label>
-                <label>
-                  Installed model
-                  <select name="model" required>
-                    {models.map((m) => (
-                      <option key={m}>{m}</option>
-                    ))}
-                  </select>
-                </label>
-                <div className="workload-fields">
-                  {["width", "height"].map((name) => (
-                    <label key={name}>
-                      {name === "width" ? "Width" : "Height"}
-                      <select name={name} defaultValue="512">
-                        {[256, 512, 768, 1024].map((n) => (
-                          <option key={n}>{n}</option>
-                        ))}
-                      </select>
-                    </label>
+      <main
+        id="main-content"
+        className={`workload-layout ${setupOpen ? "" : "setup-collapsed"}`}
+      >
+        <section className="panel">
+          <h1>{workflow === "images" ? "Images" : "Analytics and Reports"}</h1>
+          <p>
+            {workflow === "images"
+              ? "Generate images with a permitted local image model."
+              : "Analyze authorized data and create reproducible reports on a compatible worker."}
+          </p>
+          <p role="status" aria-live="polite">
+            {status}
+          </p>
+          {!data ? (
+            <p>Loading workspaces and worker capabilities…</p>
+          ) : !data.workspaces.length ? (
+            <p>No authorized workspace is available.</p>
+          ) : (
+            <form onSubmit={(e) => void submit(e)} className="workload-form">
+              <label>
+                Workspace
+                <select
+                  value={
+                    workspace || data.workspace_id || data.workspaces[0]?.id
+                  }
+                  onChange={(e) => {
+                    setWorkspace(e.target.value);
+                    setOptions(null);
+                  }}
+                >
+                  {data.workspaces.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
                   ))}
-                  <label>
-                    Images
-                    <input
-                      name="count"
-                      type="number"
-                      min="1"
-                      max="4"
-                      defaultValue="1"
-                    />
-                  </label>
-                  <label>
-                    Quality (sampling steps)
-                    <input
-                      name="steps"
-                      type="number"
-                      min="1"
-                      max="50"
-                      defaultValue="20"
-                    />
-                  </label>
-                  <label>
-                    Seed (-1: random)
-                    <input
-                      name="seed"
-                      type="number"
-                      min="-1"
-                      max="4294967295"
-                      defaultValue="-1"
-                    />
-                  </label>
-                </div>
-              </>
-            ) : (
-              <>
+                </select>
+              </label>
+              {workflow === "analytics" && (
                 <label>
-                  Authorized dataset
-                  <input
-                    name="dataset"
-                    type="file"
-                    accept=".csv,.json,.xlsx"
-                    required
-                  />
+                  Workflow
+                  <select
+                    value={kind}
+                    onChange={(e) => setKind(e.target.value)}
+                  >
+                    <option value="report">Analytics → report</option>
+                    <option value="analytics">Analytics only</option>
+                  </select>
                 </label>
-                <p className="muted">
-                  Up to 1 MiB, 10,000 rows and 64 columns. CSV/JSON use flat
-                  records; Excel uses a values-only first worksheet. SQL results
-                  may be exported as JSON. The selected workspace and permitted
-                  worker owners can access this data.
+              )}
+              {!available && (
+                <p className="notice">
+                  {kind === "image"
+                    ? "Image generation unavailable: no permitted online worker advertises a configured local image model. No paid fallback is used."
+                    : "No opted-in analytics worker is online. Connect a worker with a preinstalled Python sandbox image and explicit data-analysis permission."}{" "}
+                  <button
+                    type="button"
+                    className="action secondary"
+                    onClick={() => setSetupOpen(true)}
+                  >
+                    Show worker setup
+                  </button>
                 </p>
-                <div className="workload-fields">
+              )}
+              <label>
+                {kind === "image"
+                  ? "Image prompt"
+                  : "Analysis request / report context"}
+                <textarea
+                  name="instruction"
+                  required
+                  maxLength={4096}
+                  rows={3}
+                />
+              </label>
+              {kind === "image" ? (
+                <>
                   <label>
-                    Group by column
-                    <input name="group_by" maxLength={120} />
-                  </label>
-                  <label>
-                    ISO date column
-                    <input name="date_column" maxLength={120} />
-                  </label>
-                  <label>
-                    Value column (blank: count)
-                    <input name="value_column" maxLength={120} />
-                  </label>
-                </div>
-                {kind === "report" && (
-                  <label>
-                    Report format
-                    <select name="report_format">
-                      <option value="html">HTML with chart</option>
-                      <option value="markdown">Markdown</option>
-                      <option value="csv">CSV</option>
-                      <option value="xlsx">Excel</option>
+                    Provider
+                    <select name="backend">
+                      <option>AUTOMATIC1111 (local)</option>
                     </select>
                   </label>
-                )}
-                <p>{options?.sql_note}</p>
+                  <label>
+                    Installed model
+                    <select name="model" required>
+                      {models.map((m) => (
+                        <option key={m}>{m}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="workload-fields">
+                    {["width", "height"].map((name) => (
+                      <label key={name}>
+                        {name === "width" ? "Width" : "Height"}
+                        <select name={name} defaultValue="512">
+                          {[256, 512, 768, 1024].map((n) => (
+                            <option key={n}>{n}</option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                    <label>
+                      Images
+                      <input
+                        name="count"
+                        type="number"
+                        min="1"
+                        max="4"
+                        defaultValue="1"
+                      />
+                    </label>
+                    <label>
+                      Quality (sampling steps)
+                      <input
+                        name="steps"
+                        type="number"
+                        min="1"
+                        max="50"
+                        defaultValue="20"
+                      />
+                    </label>
+                    <label>
+                      Seed (-1: random)
+                      <input
+                        name="seed"
+                        type="number"
+                        min="-1"
+                        max="4294967295"
+                        defaultValue="-1"
+                      />
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label>
+                    Authorized dataset
+                    <input
+                      name="dataset"
+                      type="file"
+                      accept=".csv,.json,.xlsx"
+                      required
+                    />
+                  </label>
+                  <p className="muted">
+                    Up to 1 MiB, 10,000 rows and 64 columns. CSV/JSON use flat
+                    records; Excel uses a values-only first worksheet. SQL
+                    results may be exported as JSON. The selected workspace and
+                    permitted worker owners can access this data.
+                  </p>
+                  <div className="workload-fields">
+                    <label>
+                      Group by column
+                      <input name="group_by" maxLength={120} />
+                    </label>
+                    <label>
+                      ISO date column
+                      <input name="date_column" maxLength={120} />
+                    </label>
+                    <label>
+                      Value column (blank: count)
+                      <input name="value_column" maxLength={120} />
+                    </label>
+                  </div>
+                  {kind === "report" && (
+                    <label>
+                      Report format
+                      <select name="report_format">
+                        <option value="html">HTML with chart</option>
+                        <option value="markdown">Markdown</option>
+                        <option value="csv">CSV</option>
+                        <option value="xlsx">Excel</option>
+                      </select>
+                    </label>
+                  )}
+                  <p>{options?.sql_note}</p>
+                </>
+              )}
+              <details>
+                <summary>Resource requirements</summary>
+                <div className="workload-fields">
+                  <label>
+                    Minimum memory (MiB)
+                    <input
+                      type="number"
+                      name="memory_mb"
+                      min="512"
+                      max="1048576"
+                      defaultValue="512"
+                    />
+                  </label>
+                  <label>
+                    Minimum GPU memory (MiB)
+                    <input
+                      type="number"
+                      name="vram_mb"
+                      min="0"
+                      max="1048576"
+                      defaultValue="0"
+                    />
+                  </label>
+                </div>
+                <p>
+                  Execution queues if these requirements are unavailable.
+                  Analytics/report execution is limited to one CPU and 512 MiB
+                  per stage.
+                </p>
+              </details>
+              <label className="check-label">
+                <input type="checkbox" required /> I authorize processing this
+                data or prompt on a worker permitted by this workspace and its
+                owner.
+              </label>
+              <button
+                className="action"
+                type="submit"
+                disabled={busy || !available}
+              >
+                {busy ? "Submitting…" : "Run workload"}
+              </button>
+            </form>
+          )}
+        </section>
+        <aside
+          className="panel worker-readiness"
+          id="workload-setup"
+          aria-label="Worker setup and availability"
+        >
+          <button
+            className="readiness-toggle"
+            aria-expanded={setupOpen}
+            aria-controls="readiness-content"
+            onClick={() => setSetupOpen(!setupOpen)}
+            title={setupOpen ? "Collapse worker setup" : "Expand worker setup"}
+          >
+            {setupOpen ? "‹‹" : "››"}
+            <span>Worker setup and availability</span>
+          </button>
+          <div id="readiness-content" hidden={!setupOpen}>
+            <h2>{available ? "Ready to process" : "Get your worker ready"}</h2>
+            <span className={`badge ${available ? "" : "worker-outdated"}`}>
+              {available ? "Compatible worker online" : "Setup required"}
+            </span>
+            {workflow === "analytics" && (
+              <>
+                <p>
+                  Data execution requires an owner-configured, already installed
+                  Python container image pinned by digest, plus local Docker.
+                  The worker isolates uploaded data without network or host
+                  workspace access. No image or model downloads are automatic.
+                </p>
               </>
             )}
-            <details>
-              <summary>Resource requirements</summary>
-              <div className="workload-fields">
-                <label>
-                  Minimum memory (MiB)
-                  <input
-                    type="number"
-                    name="memory_mb"
-                    min="512"
-                    max="1048576"
-                    defaultValue="512"
-                  />
-                </label>
-                <label>
-                  Minimum GPU memory (MiB)
-                  <input
-                    type="number"
-                    name="vram_mb"
-                    min="0"
-                    max="1048576"
-                    defaultValue="0"
-                  />
-                </label>
-              </div>
-              <p>
-                Execution queues if these requirements are unavailable.
-                Analytics/report execution is limited to one CPU and 512 MiB per
-                stage.
-              </p>
-            </details>
-            <label className="check-label">
-              <input type="checkbox" required /> I authorize processing this
-              data or prompt on a worker permitted by this workspace and its
-              owner.
-            </label>
-            <button
-              className="action"
-              type="submit"
-              disabled={busy || !available}
-            >
-              {busy ? "Submitting…" : "Run workload"}
-            </button>
-          </form>
-        )}
-      </section>
-      <section className="panel" id="workload-setup">
-        <h2>Worker setup and availability</h2>
-        <p>
-          Data execution requires an owner-configured, already installed Python
-          container image pinned by digest, plus local Docker. The worker
-          isolates uploaded data without network or host workspace access. No
-          image or model downloads are automatic.
-        </p>
-        <p>
-          Image execution requires a locally configured AUTOMATIC1111 API and an
-          installed permitted model. Cloud image providers, live SQL connections
-          and PDF output are not configured in this version.
-        </p>
-        <p>
-          Update Consigliere, Pause the worker, then open Settings to enable
-          data processing or a local image connection. Resume after saving.
-          Google account file connections are unavailable in this version;
-          export your authorized spreadsheet and upload it above.
-        </p>
-        <ul>
-          {options?.nodes.map((n) => (
-            <li key={n.id}>
-              {n.name}: {n.available ? "online" : "unavailable"};
-              analytics/reporting {n.analytics ? "configured" : "unavailable"};
-              image models {n.image_models.join(", ") || "none"}
-            </li>
-          ))}
-        </ul>
-      </section>
+            {workflow === "images" && (
+              <>
+                <p>
+                  Image execution requires a locally configured AUTOMATIC1111
+                  API and an installed permitted model. Cloud image providers,
+                  live SQL connections and PDF output are not configured in this
+                  version.
+                </p>
+              </>
+            )}
+            <p>
+              Update Consigliere, Pause the worker, then open Settings to enable
+              {workflow === "images"
+                ? " a local image connection."
+                : " data processing."}{" "}
+              Resume after saving.
+              {workflow === "analytics" &&
+                " Google account file connections are unavailable in this version; export your authorized spreadsheet and upload it above."}
+            </p>
+            <ul>
+              {options?.nodes.map((n) => (
+                <li key={n.id}>
+                  {n.name}: {n.available ? "online" : "unavailable"};
+                  {workflow === "images"
+                    ? `image models ${n.image_models.join(", ") || "none"}`
+                    : `analytics/reporting ${n.analytics ? "configured" : "unavailable"}`}
+                </li>
+              ))}
+            </ul>
+            <a className="action" href="/nodes">
+              Connect or inspect a worker
+            </a>
+          </div>
+        </aside>
+      </main>
     </ApplicationShell>
   );
 }

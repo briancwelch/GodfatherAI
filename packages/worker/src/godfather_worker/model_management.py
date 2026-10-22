@@ -4,6 +4,7 @@ import asyncio
 import threading
 from contextlib import suppress
 from datetime import UTC, datetime
+from pathlib import Path
 from time import monotonic
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from godfather_contracts.model_management import (
     INSTALL_RUNTIME,
     MODEL_CATALOG,
     PROVIDER_RUNTIME_PREFIX,
+    SETUP_RUNTIME,
     ModelInstallInput,
     ModelInstallResult,
 )
@@ -33,6 +35,8 @@ async def execute_installation(
     configs: list[ProviderConfig],
     max_bytes: int = 16 * 1024**3,
     provider_override: OllamaProvider | None = None,
+    runtime_folder: Path | None = None,
+    allow_runtime_installation: bool = False,
 ) -> None:
     payload = assignment.job.input
     if (
@@ -70,6 +74,16 @@ async def execute_installation(
         )
 
     async def download() -> None:
+        if payload.install_runtime:
+            if (
+                not allow_runtime_installation
+                or runtime_folder is None
+                or SETUP_RUNTIME not in registration.runtimes
+            ):
+                raise ValueError("Runtime installation was not authorized locally")
+            from godfather_worker.local_runtime import ensure_runtime
+
+            await ensure_runtime(client.url, runtime_folder, config, True)
         success = False
         layers: dict[str, int] = {}
         last_progress = 0.0
@@ -121,6 +135,8 @@ async def execute_installation(
         await report("fail", error_code=error.code)
     except TimeoutError:
         await report("fail", error_code="provider_timeout")
+    except (OSError, ValueError):
+        await report("fail", error_code="runtime_setup_failed")
     finally:
         for pending_task in (work, watch):
             if pending_task is not None:

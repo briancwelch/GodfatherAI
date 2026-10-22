@@ -97,6 +97,7 @@ class Contribution(Contract):
     ram_gib: int = Field(default=2, ge=1, le=1048576)
     inference: bool = False
     model_installation: bool = False
+    runtime_installation: bool = False
     account_providers: bool = False
     primary: Literal["cpu", "inference"] = "cpu"
     shared: bool = False
@@ -173,6 +174,7 @@ class Controller:
         # Existing app identities without an origin retain the old private API endpoint.
         self.origin = coordinator_origin(identity.get("origin", API_ORIGIN))
         self.stop_event = threading.Event()
+        self.maintenance_event = threading.Event()
         self.thread: threading.Thread | None = None
 
     @property
@@ -188,6 +190,8 @@ class Controller:
             raise ValueError("Enable local inference before making it the primary capability")
         if settings.model_installation and not settings.inference:
             raise ValueError("Enable local AI models before allowing model downloads")
+        if settings.runtime_installation and not settings.model_installation:
+            raise ValueError("Enable model downloads before allowing Ollama runtime setup")
         if settings.repositories:
             owner = UUID(self.identity["owner_id"])
             if not settings.inference and not settings.account_providers:
@@ -216,6 +220,8 @@ class Controller:
             arguments += ["--secondary", secondary, "--inference-config", str(provider)]
         if settings.model_installation:
             arguments += ["--allow-model-installation"]
+        if settings.runtime_installation:
+            arguments += ["--allow-runtime-installation", "--runtime-folder", str(self.folder)]
         if (
             settings.inference
             or settings.account_providers
@@ -255,6 +261,7 @@ class Controller:
         ):
             arguments += ["--allow-workspace", str(workspace)]
         self.stop_event = threading.Event()
+        self.maintenance_event.clear()
         client = LimitedClient(self.identity["token"], settings, self.origin)
 
         def run() -> None:
@@ -265,6 +272,7 @@ class Controller:
                     stop_event=self.stop_event,
                     observer=self.observer,
                     worker_client=client,
+                    maintenance_event=self.maintenance_event,
                 )
             except Exception:
                 self.observer("worker.unexpected_error")

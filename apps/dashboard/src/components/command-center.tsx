@@ -1,8 +1,9 @@
 "use client";
 
 import { CommandIcon } from "./command-icon";
-import { WorkerVersion, OwnerName } from "./node-identity";
+import { WorkerVersion, OwnerName, UserName } from "./node-identity";
 import { BulkTable } from "./bulk-table";
+import { CreateWorkspace, WorkspaceList } from "./workspace-directory";
 
 import { useEffect, useState, type FormEvent } from "react";
 import {
@@ -126,6 +127,7 @@ export default function CommandCenter({
     display_name: string;
     email: string;
     roles: string[];
+    picture?: string | null;
   }>("auth/me", revision);
   const data = state.data;
   const refresh = () => setRevision((r) => r + 1);
@@ -209,7 +211,11 @@ export default function CommandCenter({
         <div className="page-heading">
           <div>
             <p className="eyebrow">THE GODFATHER / CONTROL PLANE</p>
-            <h1>{labels[section]}</h1>
+            <h1>
+              {section === "overview" && workspace
+                ? `${data?.workspaces.find((w) => w.id === workspace)?.name || "Workspace"} · Overview`
+                : labels[section]}
+            </h1>
             <p>Real backend state, durable work and recovery activity.</p>
           </div>
           {data && (
@@ -244,10 +250,21 @@ export default function CommandCenter({
                     <select
                       value={workspace || data.workspace_id || ""}
                       onChange={(e) => {
+                        if (section === "overview") {
+                          window.location.assign(
+                            e.target.value
+                              ? `/workspaces/${e.target.value}`
+                              : "/",
+                          );
+                          return;
+                        }
                         setWorkspace(e.target.value);
                         setOffset(0);
                       }}
                     >
+                      {section === "overview" && (
+                        <option value="">All authorized workspaces</option>
+                      )}
                       {data.workspaces.map((w) => (
                         <option key={w.id} value={w.id}>
                           {w.name}
@@ -262,8 +279,10 @@ export default function CommandCenter({
                     {state.error ? "Stale data" : "Polling every 3 seconds"} ·
                     Updated {localTime(data.generated_at)}
                     <small>
-                      Jobs and agents: selected workspace. Nodes: platform
-                      health. Workload counts: authorized workspaces only.
+                      {data.workspace_id
+                        ? "Jobs and agents: selected workspace."
+                        : "Jobs and agents: all authorized workspaces."}{" "}
+                      Nodes: permitted platform health.
                     </small>
                   </p>
                 </section>
@@ -338,7 +357,12 @@ export default function CommandCenter({
                         onChange={setOffset}
                       />
                     )}
-                    {section === "overview" && <Overview data={data} />}
+                    {section === "overview" && (
+                      <>
+                        <CreateWorkspace />
+                        <Overview data={data} />
+                      </>
+                    )}
                     {section === "jobs" && (
                       <>
                         <SubmitJob data={data} />
@@ -457,7 +481,14 @@ function JobTable({
           cell: (j) => (
             <>
               <a href={`/jobs/${j.id}`}>{short(j.id)}</a>
-              <small title={j.owner_id}>Requester {short(j.owner_id)}</small>
+              <small>
+                Requester{" "}
+                <UserName
+                  id={j.owner_id}
+                  name={j.owner_name}
+                  picture={j.owner_picture}
+                />
+              </small>
             </>
           ),
         },
@@ -613,9 +644,10 @@ function Overview({ data }: { data: Snapshot }) {
         <Metric
           label="Enabled agent versions"
           value={data.agent_counts.enabled_versions}
-          detail={`${data.agent_counts.active_versions} active · ${data.agent_counts.compatible_online_versions} compatible online · ${data.agent_counts.disabled_versions} disabled`}
+          detail={`${data.agent_counts.active_versions} active · ${data.agent_counts.compatible_online_versions ?? "Select a workspace to check"} compatible online · ${data.agent_counts.disabled_versions} disabled`}
         />
       </div>
+      {!data.workspace_id && <WorkspaceList data={data} preview />}
       <section className="panel">
         <h2>Cluster state</h2>
         <div className="state-strip">
@@ -639,11 +671,13 @@ function Overview({ data }: { data: Snapshot }) {
             : "Unavailable — no online physical readings"}
           .
         </p>
-        <p>
-          {data.models.filter((m) => m.available).length} available deployments
-          on the first page in this workspace.{" "}
-          <a href="/models">Inspect models</a>.
-        </p>
+        {data.workspace_id && (
+          <p>
+            {data.models.filter((m) => m.available).length} available
+            deployments on the first page in this workspace.{" "}
+            <a href="/models">Inspect models</a>.
+          </p>
+        )}
         <p className="muted">
           Simulated readings are excluded from physical utilization. Unknown
           telemetry is distinct from zero.
@@ -652,6 +686,11 @@ function Overview({ data }: { data: Snapshot }) {
       <section className="panel">
         <h2>Recent jobs</h2>
         <JobTable rows={data.jobs.slice(0, 8)} />
+      </section>
+      <section className="panel">
+        <h2>Worker health and readiness</h2>
+        <NodeTable data={{ ...data, nodes: data.nodes.slice(0, 8) }} />
+        <a href="/nodes">View all permitted nodes</a>
       </section>
       <div className="two-columns">
         <section className="panel">
@@ -868,7 +907,12 @@ function JobInspection({
           <dd>{j.id}</dd>
           <dt>Requester / workspace</dt>
           <dd>
-            {j.owner_id} / {j.workspace_id}
+            <UserName
+              id={j.owner_id}
+              name={j.owner_name}
+              picture={j.owner_picture}
+            />{" "}
+            / {j.workspace_id}
           </dd>
           <dt>Assigned worker</dt>
           <dd>

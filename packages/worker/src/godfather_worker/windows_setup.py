@@ -108,6 +108,22 @@ def main() -> int:
     from tkinter import messagebox, ttk
 
     payload = Path(getattr(sys, "_MEIPASS", "")) / "worker-payload"
+    if "--auto-update" in sys.argv:
+        from godfather_worker.updates import update_failure, wait_for_previous
+
+        try:
+            wait_for_previous()
+            executable = install(
+                payload,
+                Path(os.environ["LOCALAPPDATA"]),
+                Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs",
+            )
+            subprocess.Popen(
+                [str(executable)], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            )
+            return 0
+        except Exception:
+            return update_failure()
     if "--self-test" in sys.argv:
         with TemporaryDirectory(prefix="godfather-setup-smoke-") as temporary:
             folder = Path(temporary)

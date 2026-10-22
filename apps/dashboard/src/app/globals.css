@@ -1917,3 +1917,106 @@ body {
     overflow-wrap: anywhere;
   }
 }
+.account-avatar {
+  margin-right: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-flex;
+  vertical-align: middle;
+  flex: 0 0 16px;
+}
+.avatar-fallback {
+  align-items: center;
+  justify-content: center;
+  background: #14283d;
+  color: #58d5de;
+  border: 1px solid #58d5de;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+.profile-form {
+  max-width: 680px;
+}
+.profile-form label,
+.workspace-create label {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.workspace-directory {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.workspace-entry {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border, #d4dfe9);
+  border-left: 3px solid #58d5de;
+  border-radius: 4px;
+}
+.workspace-entry small {
+  display: block;
+}
+.workload-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 330px);
+  gap: 16px;
+  align-items: start;
+}
+.workload-layout.setup-collapsed {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+.worker-readiness {
+  position: sticky;
+  top: 16px;
+  padding: 14px;
+}
+.readiness-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 6px 0;
+  font-weight: 600;
+  text-align: left;
+}
+.setup-collapsed .worker-readiness {
+  padding: 8px;
+  min-height: 200px;
+}
+.setup-collapsed .readiness-toggle {
+  flex-direction: column;
+}
+.setup-collapsed .readiness-toggle span {
+  writing-mode: vertical-rl;
+}
+.worker-readiness p {
+  line-height: 1.6;
+}
+@media (max-width: 1000px) {
+  .workload-layout,
+  .workload-layout.setup-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .worker-readiness {
+    position: static;
+  }
+  .setup-collapsed .worker-readiness {
+    min-height: 0;
+  }
+  .setup-collapsed .readiness-toggle {
+    flex-direction: row;
+  }
+  .setup-collapsed .readiness-toggle span {
+    writing-mode: initial;
+  }
+}

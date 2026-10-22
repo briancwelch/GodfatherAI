@@ -54,7 +54,6 @@ architectures. Lost responses or secure-store failures remain non-replayable.
 Native build and release evidence is recorded below. Physical recipient installation/pairing and publisher signing
 remain separate acceptance; Mac candidates use ad-hoc signing.
 
-
 ## Native candidates and source
 
 All three **0.4.2-rc.2** installers were built from clean source
@@ -79,16 +78,15 @@ passed, without sleeps as success criteria.
   actual database/artifact restore, and persistence/restart. Evidence:
   `.cache/release-tests/145a92d76dfe/result.json`.
 
-| Installer | SHA-256 |
-| --- | --- |
-| Windows x64 | `0b28e9e4b773aad91997407c219132b907d07c7fde90cead9429cfe940bb2efb` |
+| Installer         | SHA-256                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| Windows x64       | `0b28e9e4b773aad91997407c219132b907d07c7fde90cead9429cfe940bb2efb` |
 | Mac Apple silicon | `7f3060b7502c6004e040bc006cde49d743be3f3fbd267d6210476d8efc2a8a93` |
-| Mac Intel | `1b4334c593b0558b09a88d9db886e63ced374a82e0d507f9b8112151527759e2` |
+| Mac Intel         | `1b4334c593b0558b09a88d9db886e63ced374a82e0d507f9b8112151527759e2` |
 
 Coordinator package: `dist/godfather-0.4.2-rc.2-linux-amd64.tar.gz`, SHA-256
 `f180c150e1964cffc0d7466ba9e5eaac87fcfd9894ff25d4346892dbf6996714`.
 The existing schema remains `0014_command_center_appearance`.
-
 
 ## Final source CI
 

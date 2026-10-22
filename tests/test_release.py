@@ -70,6 +70,7 @@ def test_bundle_allowlist_excludes_operator_secrets(
         for key in ("python", "uv", "node", *release.UPSTREAM)
     }
     (source / "images.lock.json").write_text(json.dumps(pins))
+    (tmp_path / "infrastructure/ollama-runtimes.json").write_text('{"artifacts": []}')
     docs = tmp_path / "docs/operations"
     docs.mkdir(parents=True)
     for name in (

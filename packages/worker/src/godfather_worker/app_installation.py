@@ -2,8 +2,23 @@
 
 import json
 import shutil
+import stat
+import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+
+def extract_zip(archive: zipfile.ZipFile, destination: Path) -> None:
+    total = 0
+    for member in archive.infolist():
+        total += member.file_size
+        if (
+            total > 8 * 1024**3
+            or not (destination / member.filename).resolve().is_relative_to(destination.resolve())
+            or stat.S_ISLNK(member.external_attr >> 16)
+        ):
+            raise ValueError("Unsafe application archive")
+    archive.extractall(destination)
 
 
 def contained_directory(path: Path, parent: Path) -> None:

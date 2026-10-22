@@ -116,6 +116,7 @@ def assemble(
         shutil.copyfile(ROOT / "docs/operations" / name, folder / target)
     downloads = folder / "downloads"
     downloads.mkdir()
+    shutil.copyfile(ROOT / "infrastructure/ollama-runtimes.json", downloads / "ollama.json")
     if worker_downloads is None:
         (downloads / "manifest.json").write_text('{"artifacts": []}\n', encoding="utf-8")
     else:
@@ -125,7 +126,7 @@ def assemble(
             if (
                 not re.fullmatch(
                     r"(?:godfather-worker|consigliere)-[a-z0-9.-]+-"
-                    r"(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg)",
+                    r"(windows-x64-setup\.exe|macos-(arm64|x64)-installer\.dmg|linux-(arm64|x64)\.zip)",
                     name,
                 )
                 or sha256(worker_downloads / name) != item["sha256"]

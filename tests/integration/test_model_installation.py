@@ -5,7 +5,11 @@ from uuid import UUID
 import pytest
 from godfather_api.models import WorkspaceMember
 from godfather_api.provision import provision
-from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
+from godfather_contracts.model_management import (
+    INSTALL_RUNTIME,
+    PROVIDER_RUNTIME_PREFIX,
+    SETUP_RUNTIME,
+)
 
 from tests.integration.test_jobs import Harness, headers
 from tests.integration.test_jobs import h as h
@@ -42,6 +46,41 @@ def payload(h: Harness) -> dict[str, object]:
         "identifier": "qwen3:0.6b",
         "confirm_download": True,
     }
+
+
+def test_runtime_setup_requires_separate_local_opt_in_and_is_durably_bound(h: Harness) -> None:
+    opt_in(h)
+    body = {**payload(h), "provider_id": "local-ollama", "install_runtime": True}
+    assert (
+        h.client.post("/api/v1/models/install", json=body, headers=headers(h.admin)).status_code
+        == 409
+    )
+    registration = h.registrations[0].model_copy(
+        update={
+            "runtimes": [
+                *h.registrations[0].runtimes,
+                PROVIDER_RUNTIME_PREFIX + "local-ollama",
+                SETUP_RUNTIME,
+            ]
+        }
+    )
+    assert (
+        h.client.post(
+            "/api/v1/workers/register",
+            json=registration.model_dump(mode="json"),
+            headers=headers(h.workers[0]),
+        ).status_code
+        == 200
+    )
+    response = h.client.post("/api/v1/models/install", json=body, headers=headers(h.admin))
+    assert response.status_code == 201, response.text
+    job = response.json()
+    assert job["input"]["install_runtime"] is True
+    assert SETUP_RUNTIME in job["requirements"]["runtimes"]
+    h.tick()
+    assert h.poll(1) is None
+    assignment = h.poll()
+    assert assignment is not None and assignment["job"]["id"] == job["id"]
 
 
 def test_install_requires_owner_opt_in_confirmation_and_catalog(h: Harness) -> None:

@@ -11,17 +11,21 @@ import { AppearanceProvider, useAppearance } from "./appearance-provider";
 import { WorkerBuildProvider } from "./node-identity";
 import { CommandIcon } from "./command-icon";
 import type { Snapshot } from "../lib/contracts";
+import { Avatar } from "./avatar";
 
 export const navigation = {
   overview: "Overview",
+  workspaces: "Workspaces",
   jobs: "Jobs",
   nodes: "Nodes",
   agents: "Agents",
   models: "Models",
   providers: "Provider Connections",
-  workloads: "Images / Analytics / Reports",
+  images: "Images",
+  analytics: "Analytics and Reports",
+  account: "Account settings",
   activity: "Activity / Audit",
-  administration: "Administration",
+  administration: "Admin settings",
 };
 
 export function RibbonGroup({
@@ -100,7 +104,11 @@ function DesktopShell({
 }: {
   section: keyof typeof navigation;
   data?: Snapshot | null;
-  account?: { display_name: string; roles: string[] } | null;
+  account?: {
+    display_name: string;
+    roles: string[];
+    picture?: string | null;
+  } | null;
   stale?: boolean;
   refresh: () => void;
   ribbon?: ReactNode;
@@ -115,6 +123,17 @@ function DesktopShell({
   );
   const collapsed = navigationOverride ?? !settings.navigation_open;
   const inspector = inspectorOverride ?? settings.inspector_open;
+  const visibleNavigation = Object.entries(navigation).filter(
+    ([key]) =>
+      key !== "administration" || account?.roles.includes("platform_admin"),
+  );
+  const sectionHref = (key: string) => {
+    const path = key === "overview" ? "/" : `/${key}`;
+    return data?.workspace_id &&
+      ["jobs", "agents", "models", "activity"].includes(key)
+      ? `${path}?workspace=${data.workspace_id}`
+      : path;
+  };
   return (
     <div
       className={`desktop-application ${collapsed ? "navigation-collapsed" : ""}`}
@@ -132,9 +151,10 @@ function DesktopShell({
             : "Environment unavailable"}
         </span>
         <div className="account-controls">
-          {account && <a href="/providers">Account settings</a>}
+          {account && <a href="/account">Account settings</a>}
           {account && (
             <span>
+              <Avatar name={account.display_name} picture={account.picture} />
               {account.display_name} · {account.roles.join(", ")}
             </span>
           )}
@@ -171,10 +191,10 @@ function DesktopShell({
         </div>
       </header>
       <nav className="application-tabs" aria-label="Main navigation">
-        {Object.entries(navigation).map(([key, label]) => (
+        {visibleNavigation.map(([key, label]) => (
           <a
             key={key}
-            href={key === "overview" ? "/" : `/${key}`}
+            href={sectionHref(key)}
             aria-current={key === section ? "page" : undefined}
           >
             {label}
@@ -222,10 +242,10 @@ function DesktopShell({
                 "Authorized workspaces"}
             </p>
             <nav>
-              {Object.entries(navigation).map(([key, label]) => (
+              {visibleNavigation.map(([key, label]) => (
                 <a
                   key={key}
-                  href={key === "overview" ? "/" : `/${key}`}
+                  href={sectionHref(key)}
                   aria-current={key === section ? "page" : undefined}
                 >
                   <CommandIcon label={label} />
