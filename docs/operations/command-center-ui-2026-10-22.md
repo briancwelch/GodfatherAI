@@ -1,8 +1,9 @@
 # Command Center UI update - 2026-10-22
 
-Implementation is local source only. Do not deploy or publish installers until
-explicitly authorized by the owner. Existing running local application services,
-production services and normal application databases were not upgraded.
+Implementation was initially local source only. The owner subsequently authorized
+coordinator deployment while explicitly deferring worker builds. Coordinator
+0.4.1-rc.6 is now live; see the [deployment report](command-center-ui-deployment-2026-10-22.md).
+The original validation results below describe implementation-time checks.
 
 ## Changes and locations
 
@@ -71,14 +72,13 @@ verify forbidden saves and missing-origin rejection. No authorization bypass was
 introduced. PowerShell's npm script restriction was handled with `npm.cmd` without
 changing the execution policy.
 
-## Later activation requirements
+## Activation and remaining worker work
 
-Apply additive migration 0014 together with the updated coordinator/dashboard after
-separate deployment authorization. The test harness applied it only to its disposable
-database. Existing workers remain supported and display Not reported until updated.
+Migration 0014 was subsequently applied during the owner-authorized coordinator
+upgrade. Existing workers remain supported and display Not reported until updated.
 Publish newly built Windows/macOS installers to enable build-version reporting on
 those computers; source workers intentionally report no release build. An unavailable
 platform installer is labeled unavailable, not out of date. Native installation,
 actual recipient upgrades and production acceptance remain deferred.
 
-No new phase is started. Deployment remains on hold.
+No new phase is started. Native worker builds remain on hold.

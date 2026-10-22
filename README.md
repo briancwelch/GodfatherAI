@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current coordinator: 0.4.1-rc.5 · Consigliere: 0.4.1-rc.4** - [Local and API model selection and deployment](docs/operations/model-directory-verification-2026-10-21.md).
+**Current coordinator: 0.4.1-rc.6 · Consigliere: 0.4.1-rc.4** - [Command Center UI deployment](docs/operations/command-center-ui-deployment-2026-10-22.md).
 Models → Add / use model lists installed local and connected API models. The
 worker update enables basic model-only agents while preserving existing settings.
 
@@ -85,7 +85,7 @@ is required. Email delivery is manual, and Tailscale access is separate.
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
-Local-only Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. Deployment remains on hold.
+Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. Coordinator changes are deployed; native worker builds remain on hold.
 
 ## Local development
 

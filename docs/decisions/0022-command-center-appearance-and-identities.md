@@ -1,7 +1,9 @@
 # Command Center appearance and human identities
 
 Status: accepted for the owner-authorized UI maintenance update, 2026-10-22.
-Deployment and installer publication are explicitly deferred.
+Coordinator deployment was subsequently authorized on 2026-10-22; see the
+[deployment report](../operations/command-center-ui-deployment-2026-10-22.md).
+Native worker builds and installer publication remain explicitly deferred.
 
 ## Shared appearance
 
