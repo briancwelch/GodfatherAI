@@ -20,7 +20,9 @@ Publisher signing and physical recipient pairing remain pending.
    connects automatically; there is no credential file or finish button.
 
 Enable **Allow my existing local AI models** to contribute installed Ollama models.
-The app does not install Ollama or download models. With local AI off, the node
+The app does not install Ollama. Model downloads require separate local opt-in
+and confirmation of each catalog download in Command Center; see
+[Add a local model](consigliere-ui.md#add-a-local-model). With local AI off, the node
 connects for availability only. Paid AI, repository access and other tools retain
 their separate owner-controlled configuration and permissions.
 

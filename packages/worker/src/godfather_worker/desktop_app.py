@@ -60,6 +60,7 @@ class Application:
         self.inventory = tk.StringVar(value="Checking existing local AI models...")
         self.hardware = tk.StringVar(value="")
         self.inference = tk.BooleanVar(value=False)
+        self.model_installation = tk.BooleanVar(value=False)
         self.account_connections = tk.BooleanVar(value=False)
         self.data_image = tk.StringVar(value="")
         self.image_endpoint = tk.StringVar(value="")
@@ -246,6 +247,22 @@ class Application:
             variable=self.inference,
             command=self.apply_models,
         ).pack(anchor="w")
+        ttk.Checkbutton(
+            models,
+            text="Allow model downloads from Command Center",
+            variable=self.model_installation,
+            command=self.apply_models,
+        ).pack(anchor="w", pady=(8, 0))
+        ttk.Label(
+            models,
+            text=(
+                "Enable local AI models above as well. Each download requires confirmation "
+                "in Command Center and uses this computer's network and storage. "
+                "Ollama must already be installed and running."
+            ),
+            wraplength=650,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=8)
         ttk.Label(models, textvariable=self.inventory, wraplength=650, style="Muted.TLabel").pack(
             anchor="w", pady=8
         )
@@ -390,13 +407,10 @@ class Application:
             self.settings = self.settings.model_copy(
                 update={
                     "inference": self.inference.get(),
+                    "model_installation": self.model_installation.get(),
                     "account_providers": self.account_connections.get(),
                 }
             )
-            if self.settings.inference and not self.models:
-                raise ValueError(
-                    "No local models found. Open your local AI runtime and restart the worker."
-                )
             self.controller = Controller(self.identity, self.folder, self.event)
             self.controller.start(self.settings)
             self.status.set("Connecting...")
@@ -408,6 +422,7 @@ class Application:
     def apply_models(self) -> None:
         if self.controller and self.controller.running:
             self.inference.set(self.settings.inference)
+            self.model_installation.set(self.settings.model_installation)
             self.account_connections.set(self.settings.account_providers)
             messagebox.showinfo(
                 "Pause first", "Pause the worker before changing contributions, then Resume."
@@ -554,12 +569,14 @@ class Application:
                     "Local models: "
                     + (
                         ", ".join(self.models)
-                        or "None installed. You can use an API connection from Account settings."
+                        or "None found. To add one, enable local AI models and model downloads, "
+                        "then select a model in Command Center. Ollama must be running."
                     )
                 )
                 self.settings = values["settings"]
                 self.autostart.set(values["startup"])
                 self.inference.set(self.settings.inference)
+                self.model_installation.set(self.settings.model_installation)
                 self.account_connections.set(self.settings.account_providers)
                 workloads = self.settings.workloads
                 self.data_image.set(workloads.image or "" if workloads else "")

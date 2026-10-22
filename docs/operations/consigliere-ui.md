@@ -21,8 +21,8 @@ Project Save controls retain space when the window shrinks.
 **Settings** is a single resizable window containing six tabs:
 
 - General: sign-in startup, start minimized and close-to-tray behavior.
-- Resources: CPU/RAM scheduling allowance, primary specialty, local models and
-  authorized account API connections.
+- Resources: CPU/RAM scheduling allowance, primary specialty, local models,
+  explicit model-download permission and authorized account API connections.
 - Workloads: explicit analytics/report permission, an already installed pinned
   Python environment, and optional local image-backend/model permission.
 - Sharing: explicit allowed owners and workspaces; private remains the default.
@@ -36,6 +36,25 @@ contribution settings and OS credentials. Startup changes occur only when the
 owner explicitly saves them. This UI revision grants no new access by default.
 Native checks cover resized windows, embedded project operations, six settings
 tabs, theme persistence and tray restore with an isolated fixture identity.
+
+## Add a local model
+
+In Consigliere, choose **Pause**, then **Models & API connections**. Enable both
+**Allow my existing local AI models** and **Allow model downloads from Command
+Center**, then **Resume**. The same controls are available under **Settings →
+Resources**; choose **Save settings** there before resuming. Ollama must already
+be installed and running. An empty model inventory does not prevent connection.
+
+After the worker connects, reopen **Models → Add / install model** in Command
+Center. Select your worker, Ollama runtime and catalog model, confirm the download
+and choose **Install selected model**. Downloads use that computer's network and
+storage. Local-model use and model-download consent are separate; existing-model
+permission alone does not enable downloads. Each download still needs the owner's
+confirmation in Command Center. Neither setting installs Ollama.
+
+If the download checkbox is missing, the desktop app needs an updated build.
+Older settings keep downloads disabled. The source correction requires a new
+worker build and a dashboard update before it is available in distributed apps.
 
 ## Command Center
 

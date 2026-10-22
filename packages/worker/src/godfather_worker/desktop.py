@@ -94,6 +94,7 @@ class Contribution(Contract):
     cpu_cores: int = Field(default=1, ge=1, le=65536)
     ram_gib: int = Field(default=2, ge=1, le=1048576)
     inference: bool = False
+    model_installation: bool = False
     account_providers: bool = False
     primary: Literal["cpu", "inference"] = "cpu"
     shared: bool = False
@@ -183,6 +184,8 @@ class Controller:
             raise ValueError("Shared work requires explicit owner and workspace IDs")
         if settings.primary == "inference" and not settings.inference:
             raise ValueError("Enable local inference before making it the primary capability")
+        if settings.model_installation and not settings.inference:
+            raise ValueError("Enable local AI models before allowing model downloads")
         if settings.repositories:
             owner = UUID(self.identity["owner_id"])
             if not settings.inference and not settings.account_providers:
@@ -209,6 +212,8 @@ class Controller:
             provider.write_text('[{"id":"local-ollama","provider":"ollama"}]', encoding="utf-8")
             secondary = "inference" if settings.primary == "cpu" else "cpu"
             arguments += ["--secondary", secondary, "--inference-config", str(provider)]
+        if settings.model_installation:
+            arguments += ["--allow-model-installation"]
         if settings.repositories:
             from godfather_worker.coding_setup import save_repositories
 

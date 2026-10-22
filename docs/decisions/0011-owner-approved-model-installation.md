@@ -10,6 +10,14 @@ being started with `--allow-model-installation`. Older workers receive no instal
 jobs. Neither another administrator nor a workspace administrator can substitute
 for the node owner. The local provider configuration remains private.
 
+Desktop usability correction (2026-10-21): Consigliere exposes a separate
+**Allow model downloads from Command Center** opt-in under Models & API connections
+and Settings → Resources. It defaults to false for new and existing settings and
+passes the same `--allow-model-installation` flag to the existing CLI. Local-model
+use must also be enabled. Empty installed-model inventories may connect so the
+first catalog model can be downloaded. Changes require Pause and Resume; each
+download still requires the existing owner-only Command Center confirmation.
+
 Each installation is pinned to its approved node/provider/model, has a one-hour
 deadline, normal leases/fencing, bounded streamed progress, and zero automatic
 retries. Ollama pulls content-addressed layers; cancellation does not promise

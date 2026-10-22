@@ -8,7 +8,8 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from godfather_contracts import Heartbeat, Registration
+from godfather_contracts import Heartbeat, Registration, WorkerAck
+from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
 from godfather_worker import cli, keychain
 from godfather_worker.desktop import Contribution, Controller, LimitedClient, Pairing, login_startup
 from godfather_worker.simulated import profile
@@ -150,6 +151,63 @@ def test_shared_work_requires_explicit_both_allowlists(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="explicit"):
         controller.start(Contribution(shared=True))
     assert not controller.running
+
+
+@pytest.mark.parametrize("host", ["LV-01", "LA-01", "LA-02"])
+@pytest.mark.parametrize("downloads", [False, True])
+def test_desktop_download_consent_reaches_registration_with_empty_inventory(
+    host: str, downloads: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Desktop -> real CLI -> registration; no coordinator or model traffic."""
+    monkeypatch.setattr(cli, "discover", lambda: profile(host))
+
+    async def empty_models(*_: object) -> list[object]:
+        return []
+
+    monkeypatch.setattr(cli, "discover_models", empty_models)
+    registrations: list[Registration] = []
+    ack = WorkerAck(
+        node_id="00000000-0000-0000-0000-000000000001",
+        state="online",
+        connection_status="online",
+        heartbeat_interval_seconds=10,
+    )
+
+    def register(self: LimitedClient, path: str, payload: Registration) -> WorkerAck:
+        assert path == "/api/v1/workers/register"
+        registrations.append(payload)
+        return ack
+
+    def poll(self: LimitedClient, path: str, payload: object) -> object:
+        assert path.endswith("/jobs/poll")
+        controller.stop_event.set()
+        return {"assignment": None}
+
+    monkeypatch.setattr(LimitedClient, "post", register)
+    monkeypatch.setattr(LimitedClient, "post_document", poll)
+    controller = Controller({"kind": "worker", "token": "fixture-only"}, tmp_path, Mock())
+    settings = Contribution(inference=True, model_installation=downloads)
+    controller.start(settings)
+    assert controller.thread is not None
+    controller.thread.join(3)
+    assert not controller.running
+    assert len(registrations) == 1
+    registration = registrations[0]
+    assert not registration.model_deployments
+    assert (INSTALL_RUNTIME in registration.runtimes) is downloads
+    assert (PROVIDER_RUNTIME_PREFIX + "local-ollama" in registration.runtimes) is downloads
+    saved = Contribution.model_validate_json((tmp_path / "settings.json").read_text())
+    assert saved.model_installation is downloads
+
+
+def test_desktop_download_consent_is_separate_and_requires_local_models(tmp_path: Path) -> None:
+    assert not Contribution().model_installation
+    assert not Contribution.model_validate({"inference": True}).model_installation
+    controller = Controller({"token": "fixture-only"}, tmp_path, Mock())
+    with pytest.raises(ValueError, match="Enable local AI models"):
+        controller.start(Contribution(model_installation=True))
+    assert not controller.running
+    assert not (tmp_path / "settings.json").exists()
 
 
 def test_login_agent_only_product_file_and_no_root(tmp_path: Path) -> None:

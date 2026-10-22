@@ -144,9 +144,12 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
               </div>
               {!options.nodes.some((n) => n.available) && (
                 <p className="notice">
-                  No eligible owned worker. The owner must update their worker
-                  and enable model downloads in its local settings. Existing
-                  workers remain connected.
+                  No eligible owned worker. In Consigliere, select Pause, then
+                  Models &amp; API connections. Enable both Allow my existing
+                  local AI models and Allow model downloads from Command Center,
+                  then Resume. Keep Ollama running and reopen this dialog after
+                  the worker connects. Update Consigliere if the download option
+                  is missing.
                 </p>
               )}
               <fieldset className="model-catalog">

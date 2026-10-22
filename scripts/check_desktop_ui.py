@@ -183,14 +183,28 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     app.advanced()
                     dialog = app.settings_dialog
                     assert len(dialog.notebook.tabs()) == 6
+                    assert not dialog.values["model_installation"].get()
+                    dialog.values["model_installation"].set(True)
+                    dialog.save()
+                    assert "Enable local AI models" in dialog.status.get()
+                    assert dialog.window.winfo_exists()
+                    assert not app.settings.model_installation
+                    dialog.values["inference"].set(True)
                     dialog.values["theme"].set("dark")
                     dialog.save()
                     assert app.preferences.theme == "dark"
+                    assert app.settings.model_installation and app.model_installation.get()
+                    assert json.loads((app.folder / "settings.json").read_text())[
+                        "model_installation"
+                    ]
                     assert not dialog.window.winfo_exists()
                     app.advanced()
                     dialog = app.settings_dialog
-                    dialog.notebook.select(dialog.pages["Workloads"])
+                    dialog.notebook.select(dialog.pages["Resources"])
                     root.update()
+                    page = dialog.pages["Resources"]
+                    for child in page.winfo_children():
+                        assert child.winfo_y() + child.winfo_height() <= page.winfo_height()
                     if screenshot:
                         ImageGrab.grab(window=dialog.window.winfo_id()).save(
                             screenshot.with_stem(screenshot.stem + "-settings")
@@ -209,9 +223,33 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     # Projects remains embedded in the main notebook.
                     app.start()
                     assert len(controllers) == 2
+                    assert not app.models  # First-model downloads must not block Resume.
+                    assert controllers[-1].start.call_args.args[0].model_installation
+                    app.model_installation.set(False)
+                    with patch("godfather_worker.desktop_app.messagebox.showinfo") as info:
+                        app.apply_models()
+                    info.assert_called_once()
+                    assert app.model_installation.get()  # Consent changes require Pause.
+                    app.advanced()
+                    dialog = app.settings_dialog
+                    dialog.values["model_installation"].set(False)
+                    dialog.save()
+                    assert "Pause the worker" in dialog.status.get()
+                    assert app.settings.model_installation
+                    dialog.window.destroy()
+                    app.pause()
+                    app.advanced()
+                    dialog = app.settings_dialog
+                    dialog.values["model_installation"].set(False)
+                    dialog.save()
+                    assert not app.settings.model_installation
+                    assert not app.model_installation.get()
+                    app.start()
+                    assert not controllers[-1].start.call_args.args[0].model_installation
                     result.append(
                         "pairing, tray restore, expanded resizing, embedded Projects, "
-                        "tabbed Settings, theme persistence and project permissions"
+                        "tabbed Settings, theme persistence, project permissions, "
+                        "model-download consent and empty-inventory Resume"
                     )
                     deadline.set()
                     app.quit()

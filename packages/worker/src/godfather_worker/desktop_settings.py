@@ -85,6 +85,18 @@ class Settings:
         )
         self.check(
             "Resources",
+            "Allow model downloads from Command Center",
+            "model_installation",
+            app.settings.model_installation,
+        )
+        self.note(
+            "Resources",
+            "Model downloads also require local AI models enabled and Ollama running. "
+            "Each download requires confirmation in Command Center and uses this "
+            "computer's network and storage.",
+        )
+        self.check(
+            "Resources",
             "Use API connections authorized for this computer",
             "account_providers",
             app.settings.account_providers,
@@ -309,6 +321,7 @@ class Settings:
                     "ram_gib": int(values["ram"]),
                     "primary": values["primary"],
                     "inference": values["inference"],
+                    "model_installation": values["model_installation"],
                     "account_providers": values["account_providers"],
                     "shared": values["shared"],
                     "allowed_owner_ids": [
@@ -325,6 +338,9 @@ class Settings:
                 raise ValueError("Shared work needs explicit owner and workspace grants.")
             if settings.primary == "inference" and not settings.inference:
                 raise ValueError("Enable local models before choosing inference as primary.")
+            if settings.model_installation and not settings.inference:
+                self.status.set("Enable local AI models before allowing model downloads.")
+                return
             if (
                 settings != self.app.settings
                 and self.app.controller
@@ -358,6 +374,7 @@ class Settings:
             desktop_theme.save(self.app.folder, preferences)
             self.app.settings, self.app.preferences = settings, preferences
             self.app.inference.set(settings.inference)
+            self.app.model_installation.set(settings.model_installation)
             self.app.account_connections.set(settings.account_providers)
             self.app.autostart.set(bool(values["startup"]))
             self.app.cpu.set(str(settings.cpu_cores))
