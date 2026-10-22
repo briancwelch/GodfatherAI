@@ -194,6 +194,8 @@ def test_desktop_download_consent_reaches_registration_with_empty_inventory(
     assert len(registrations) == 1
     registration = registrations[0]
     assert not registration.model_deployments
+    assert registration.workflow_protocol_version == 1
+    assert registration.worker_tools == [] and registration.tool_permissions == []
     assert (INSTALL_RUNTIME in registration.runtimes) is downloads
     assert (PROVIDER_RUNTIME_PREFIX + "local-ollama" in registration.runtimes) is downloads
     saved = Contribution.model_validate_json((tmp_path / "settings.json").read_text())
@@ -208,6 +210,21 @@ def test_desktop_download_consent_is_separate_and_requires_local_models(tmp_path
         controller.start(Contribution(model_installation=True))
     assert not controller.running
     assert not (tmp_path / "settings.json").exists()
+
+
+def test_desktop_account_models_enable_read_only_workflows_without_local_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = Mock(return_value=0)
+    monkeypatch.setattr(cli, "main", run)
+    controller = Controller({"kind": "worker", "token": "fixture"}, tmp_path, Mock())
+    controller.start(Contribution(account_providers=True))
+    assert controller.thread is not None
+    controller.thread.join(2)
+    arguments = run.call_args.args[0]
+    assert "--execute-workflows" in arguments and "--account-providers" in arguments
+    assert "--inference-config" not in arguments
+    assert "--allow-tool" not in arguments and "--allow-tool-permission" not in arguments
 
 
 def test_login_agent_only_product_file_and_no_root(tmp_path: Path) -> None:

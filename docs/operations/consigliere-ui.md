@@ -45,10 +45,17 @@ Center**, then **Resume**. The same controls are available under **Settings →
 Resources**; choose **Save settings** there before resuming. Ollama must already
 be installed and running. An empty model inventory does not prevent connection.
 
-After the worker connects, reopen **Models → Add / install model** in Command
-Center. Select your worker, Ollama runtime and catalog model, confirm the download
-and choose **Install selected model**. Downloads use that computer's network and
-storage. Local-model use and model-download consent are separate; existing-model
+After the worker connects, open **Models → Add / use model** in Command Center.
+**Local & API models** lists installed local and connected OpenAI/Anthropic models.
+Workspace access and worker availability are separate: use **Allow in workspace /
+create agent** to authorize the selected model and open its agent editor, or
+**Use model / create agent** when already allowed. API definitions and runs retain
+their explicit provider consent. Selecting a model does not run inference.
+
+Use **Download local model** only for a new Ollama model. Select your worker and
+runtime; installed choices are labeled **Already installed** and offer **Use
+installed model**. Confirm a new download and choose **Install selected model**.
+Downloads use that computer's network and storage. Local-model use and model-download consent are separate; existing-model
 permission alone does not enable downloads. Each download still needs the owner's
 confirmation in Command Center. Neither setting installs Ollama.
 

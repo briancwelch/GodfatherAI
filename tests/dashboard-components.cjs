@@ -26,6 +26,59 @@ const administration = require("../apps/dashboard/src/components/administration.
 const shell = require("../apps/dashboard/src/components/application-shell.tsx");
 const results = require("../apps/dashboard/src/components/job-result.tsx");
 const outcomes = require("../apps/dashboard/src/lib/job-outcome.ts");
+const modelUse = require("../apps/dashboard/src/components/model-use.tsx");
+
+test("local and API models show installed, workspace and worker status independently", () => {
+  const model = {
+    node_id: "node",
+    node_name: "Computer",
+    workspace_allowed: false,
+    can_enable: true,
+    available: false,
+    worker_available: true,
+    deployment: {
+      provider: "openai",
+      identifier: "gpt-4.1",
+      provider_id: "account",
+      connection_id: "connection",
+    },
+  };
+  let html = renderToStaticMarkup(
+    React.createElement(modelUse.ModelAvailability, { model }),
+  );
+  assert.match(html, /Connected OpenAI API/);
+  assert.match(html, /workspace access required/);
+  assert.match(html, /worker online/);
+  html = renderToStaticMarkup(
+    React.createElement(modelUse.UseModel, { workspace: "workspace", model }),
+  );
+  assert.match(html, /Allow in workspace \/ create agent/);
+  assert.doesNotMatch(html, /disabled/);
+  html = renderToStaticMarkup(
+    React.createElement(modelUse.UseModel, {
+      workspace: "workspace",
+      model: { ...model, can_enable: false },
+    }),
+  );
+  assert.match(html, /disabled/);
+  assert.match(html, /workspace administrator/);
+  model.deployment.provider = "ollama";
+  model.deployment.identifier = "qwen3:8b";
+  model.deployment.connection_id = null;
+  html = renderToStaticMarkup(
+    React.createElement(modelUse.ModelAvailability, {
+      model: { ...model, workspace_allowed: true, worker_available: false },
+    }),
+  );
+  assert.match(html, /Installed locally/);
+  assert.match(html, /worker offline/);
+  assert.equal(
+    modelUse.modelAgentUrl("workspace", model),
+    "/agents?workspace=workspace&model=ollama%3Aqwen3%3A8b",
+  );
+  assert.equal(server.allowedPath("models/workspace-access", "POST"), true);
+  assert.equal(server.allowedPath("models/workspace-access", "GET"), false);
+});
 
 test("workload results show persisted calculations and scoped downloads", () => {
   const detail = codingDetail();

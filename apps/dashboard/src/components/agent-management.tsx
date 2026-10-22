@@ -68,7 +68,12 @@ export function AgentManagement({
   const selected = data.agents.find((a) => a.version_id === selectedId);
   const [options, setOptions] = useState<Options | null>(null);
   const [error, setError] = useState("");
-  const [editing, setEditing] = useState<AgentInfo | "new" | null>(null);
+  const [editing, setEditing] = useState<AgentInfo | "new" | null>(() =>
+    initialModel &&
+    data.workspaces.some((w) => w.id === data.workspace_id && w.can_manage)
+      ? "new"
+      : null,
+  );
   const [running, setRunning] = useState(false);
   const [history, setHistory] = useState<{
     events: EventPage;

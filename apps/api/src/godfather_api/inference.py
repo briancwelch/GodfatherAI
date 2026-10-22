@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
+from godfather_contracts import Contract
 from godfather_contracts.execution import Requirements
 from godfather_contracts.jobs import InferenceSubmission, JobView
 from godfather_contracts.model_management import (
@@ -20,11 +21,20 @@ from godfather_contracts.model_management import (
     ModelInstallInput,
     ModelInstallRequest,
 )
+from pydantic import Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from godfather_api.jobs import authorized_job, current_attempt, submit
-from godfather_api.models import AccessCredential, Attempt, Job, Node, User, Workspace
+from godfather_api.models import (
+    AccessCredential,
+    Attempt,
+    Job,
+    Node,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 from godfather_api.nodes import SessionDep, authenticate, connection_at, node_view
 from godfather_api.scheduler import job_event, permitted, workspace_access
 
@@ -57,12 +67,21 @@ def install_options(workspace_id: UUID, request: Request, session: SessionDep) -
                 "os": node.os,
                 "available": healthy and INSTALL_RUNTIME in view.runtimes and bool(providers),
                 "providers": providers,
+                "installed_models": [
+                    {"identifier": m.identifier, "provider_id": m.provider_id}
+                    for m in view.model_deployments
+                    if m.provider == "ollama"
+                ],
                 "reason": "Ready"
                 if healthy and INSTALL_RUNTIME in view.runtimes and providers
                 else "Owner must enable model downloads on an online worker",
             }
         )
-    return {"nodes": result, "catalog": MODEL_CATALOG}
+    return {
+        "nodes": result,
+        "catalog": MODEL_CATALOG,
+        "models": models(workspace_id, request, session, 200, 0, include_restricted=True),
+    }
 
 
 @router.post("/models/install", response_model=JobView, status_code=201)
@@ -136,11 +155,16 @@ def models(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     node_id: UUID | None = None,
+    include_restricted: bool = False,
 ) -> list[dict[str, object]]:
     actor = authenticate(request, session, "human")
     workspace_permission(session, workspace_id, actor.owner_id)
     workspace = session.get(Workspace, workspace_id)
     assert workspace is not None
+    membership = session.get(WorkspaceMember, (workspace_id, actor.owner_id))
+    can_enable = workspace.owner_id == actor.owner_id or bool(
+        membership and membership.role == "admin"
+    )
     probe = Job(owner_id=actor.owner_id, workspace_id=workspace_id)
     query = (
         select(Node)
@@ -186,10 +210,11 @@ def models(
                 )
                 if billing_selection is None:
                     continue
-            if (
-                workspace.allowed_models is not None
-                and deployment.identifier not in workspace.allowed_models
-            ):
+            workspace_allowed = (
+                workspace.allowed_models is None
+                or deployment.identifier in workspace.allowed_models
+            )
+            if not workspace_allowed and not include_restricted:
                 continue
             if not session.info.get("test") and node.resources.get("source") != "physical":
                 continue
@@ -197,8 +222,13 @@ def models(
                 {
                     "node_id": str(node.id),
                     "owner_id": str(node.owner_id),
+                    "node_name": node.name,
                     "state": node.state,
+                    "workspace_allowed": workspace_allowed,
+                    "can_enable": can_enable,
+                    "worker_available": healthy,
                     "available": healthy
+                    and workspace_allowed
                     and deployment.available
                     and view.inference_protocol_version == 1,
                     "deployment": deployment.model_dump(mode="json"),
@@ -208,6 +238,53 @@ def models(
                 }
             )
     return result[offset : offset + limit]
+
+
+class ModelWorkspaceAccess(Contract):
+    workspace_id: UUID
+    node_id: UUID
+    provider_id: str = Field(min_length=1, max_length=100)
+    identifier: str = Field(min_length=1, max_length=255)
+
+
+@router.post("/models/workspace-access")
+def enable_workspace_model(
+    payload: ModelWorkspaceAccess, request: Request, session: SessionDep
+) -> dict[str, bool]:
+    from godfather_api.agents import manage_workspace
+    from godfather_api.authentication import audit
+    from godfather_api.scheduler import lock_workspace
+
+    actor = authenticate(request, session, "human")
+    lock_workspace(session, payload.workspace_id)
+    manage_workspace(session, payload.workspace_id, actor.owner_id)
+    workspace = session.get(Workspace, payload.workspace_id)
+    assert workspace is not None
+    visible = models(
+        payload.workspace_id, request, session, 200, 0, payload.node_id, include_restricted=True
+    )
+    if not any(
+        isinstance(row["deployment"], dict)
+        and row["deployment"]["identifier"] == payload.identifier
+        and row["deployment"]["provider_id"] == payload.provider_id
+        for row in visible
+    ):
+        raise HTTPException(
+            404, "Model is not advertised by an authorized worker or API connection"
+        )
+    if workspace.allowed_models is not None and payload.identifier not in workspace.allowed_models:
+        if len(workspace.allowed_models) >= 64:
+            raise HTTPException(409, "Workspace model limit reached; review workspace permissions")
+        workspace.allowed_models = [*workspace.allowed_models, payload.identifier]
+        audit(
+            session,
+            "workspace_model_enabled",
+            actor.owner_id,
+            payload.workspace_id,
+            workspace_id=payload.workspace_id,
+            metadata={"identifier": payload.identifier},
+        )
+    return {"enabled": True}
 
 
 @router.get("/models/deployments/{node_id}")

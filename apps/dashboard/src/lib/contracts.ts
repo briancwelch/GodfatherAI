@@ -56,6 +56,10 @@ export interface Deployment {
   estimated_vram_bytes: number | null;
 }
 export interface ModelInfo {
+  node_name?: string;
+  workspace_allowed?: boolean;
+  can_enable?: boolean;
+  worker_available?: boolean;
   grant_id?: string | null;
   node_id: string;
   owner_id: string;

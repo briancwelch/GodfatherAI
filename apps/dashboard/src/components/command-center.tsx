@@ -10,6 +10,7 @@ import {
 } from "./application-shell";
 import { AgentManagement, RepositorySelection } from "./agent-management";
 import { ModelInstaller } from "./model-installer";
+import { ModelAvailability, UseModel } from "./model-use";
 import { GoogleLogin } from "@/components/google-login";
 import { JobResult } from "./job-result";
 import { ConnectComputer } from "./connect-computer";
@@ -1281,9 +1282,9 @@ function Models({
     <>
       <ModelInstaller workspace={data.workspace_id} />
       <p className="muted">
-        Permitted deployments for this workspace. Provider aliases contain no
-        credentials. Manage paid providers separately in{" "}
-        <a href="/providers">Provider Connections</a>.
+        Your discovered local and connected API models. Use a model to allow it
+        in this workspace and create an agent. API runs require explicit
+        provider confirmation. <a href="/providers">Manage API connections</a>.
       </p>
       {pagination}
       <DataTable
@@ -1321,13 +1322,15 @@ function Models({
           },
           {
             label: "Host",
-            cell: (m) => <a href={`/nodes/${m.node_id}`}>{short(m.node_id)}</a>,
+            cell: (m) => (
+              <a href={`/nodes/${m.node_id}`}>
+                {m.node_name || short(m.node_id)}
+              </a>
+            ),
           },
           {
             label: "Availability",
-            cell: (m) => (
-              <StatusBadge value={m.available ? "available" : "unavailable"} />
-            ),
+            cell: (m) => <ModelAvailability model={m} />,
           },
           {
             label: "Capabilities",
@@ -1397,12 +1400,9 @@ function Models({
             label="Deployment and capabilities"
             value={selected.deployment}
           />
-          <a
-            className="action"
-            href={`/agents?workspace=${data.workspace_id}&model=${encodeURIComponent(`${selected.deployment.provider}:${selected.deployment.identifier}${selected.deployment.connection_id ? `:${selected.deployment.connection_id}` : ""}`)}`}
-          >
-            Create agent with this model
-          </a>
+          {data.workspace_id && (
+            <UseModel workspace={data.workspace_id} model={selected} />
+          )}
         </section>
       )}
       {pagination}

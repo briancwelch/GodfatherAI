@@ -214,13 +214,21 @@ class Controller:
             arguments += ["--secondary", secondary, "--inference-config", str(provider)]
         if settings.model_installation:
             arguments += ["--allow-model-installation"]
+        if (
+            settings.inference
+            or settings.account_providers
+            or settings.repositories
+            or settings.workloads
+        ):
+            # Model-only agents need the workflow protocol too. No host tools are
+            # granted here; coding/data tools retain their separate owner opt-ins.
+            arguments += ["--execute-workflows"]
         if settings.repositories:
             from godfather_worker.coding_setup import save_repositories
 
             coding_path = self.folder / "coding.json"
             save_repositories(coding_path, settings.repositories)
             arguments += [
-                "--execute-workflows",
                 "--coding-config",
                 str(coding_path),
                 "--allow-tool-permission",
@@ -232,7 +240,7 @@ class Controller:
             config_path = self.folder / "workloads.json"
             config_path.write_text(settings.workloads.model_dump_json(), encoding="utf-8")
             config_path.chmod(0o600)
-            arguments += ["--execute-workflows", "--workload-config", str(config_path)]
+            arguments += ["--workload-config", str(config_path)]
             if settings.workloads.image:
                 arguments += ["--allow-tool-permission", "data.analyze"]
             if settings.workloads.images:

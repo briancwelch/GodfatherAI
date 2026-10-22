@@ -98,6 +98,7 @@ export function allowedPath(path: string, method: string): boolean {
     "workloads/jobs",
     "account/providers/(openai|anthropic)(/(disconnect|computers))?",
     "models/install",
+    "models/workspace-access",
     "provider-connections",
     `provider-connections/${uuid}/(policy|control|test|grants)`,
     `provider-connections/${uuid}/grants/${uuid}/revoke`,

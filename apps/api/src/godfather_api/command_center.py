@@ -398,7 +398,12 @@ def overview(
         "jobs": [jobs.view(session, j).model_dump(mode="json") for j in job_rows],
         "agents": agent_views,
         "models": inference.models(
-            selected.id, request, session, PAGE_SIZE, offset if section == "models" else 0
+            selected.id,
+            request,
+            session,
+            PAGE_SIZE,
+            offset if section == "models" else 0,
+            include_restricted=section == "models",
         )
         if selected
         else [],
