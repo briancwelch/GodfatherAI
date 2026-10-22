@@ -42,7 +42,9 @@ def test_automatic_update_waits_for_worker_and_retains_owner_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     pytest.importorskip(
-        "tkinter", reason="native setup entry point requires the optional Tk adapter"
+        "tkinter",
+        exc_type=ImportError,
+        reason="native setup entry point requires the optional Tk adapter",
     )
     source = tmp_path / "worker-payload"
     source.mkdir()
