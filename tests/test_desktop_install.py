@@ -41,6 +41,9 @@ def test_per_user_install_preserves_identity_and_repeats_safely(
 def test_automatic_update_waits_for_worker_and_retains_owner_data(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    pytest.importorskip(
+        "tkinter", reason="native setup entry point requires the optional Tk adapter"
+    )
     source = tmp_path / "worker-payload"
     source.mkdir()
     (source / "manifest.json").write_text('{"version":"1.2.4"}')

@@ -10,7 +10,6 @@ from unittest.mock import Mock
 import pytest
 from godfather_model_gateway import ProviderConfig
 from godfather_worker import local_runtime, updates
-from godfather_worker.desktop_theme import Preferences
 
 
 def test_semantic_updates_are_platform_specific_and_never_downgrade(
@@ -30,6 +29,12 @@ def test_semantic_updates_are_platform_specific_and_never_downgrade(
     assert result and result["version"] == "1.2.3-rc.10"
     assert updates.available_update("https://example.invalid", "1.2.3", "windows-x64") is None
     assert updates.available_update("https://example.invalid", "10.0.0", "macos-arm64") is None
+
+
+def test_desktop_update_preference_prompts_by_default() -> None:
+    pytest.importorskip("tkinter", reason="desktop preferences require the optional Tk adapter")
+    from godfather_worker.desktop_theme import Preferences
+
     assert Preferences().automatic_updates is False
 
 
