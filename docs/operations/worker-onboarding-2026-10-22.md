@@ -1,5 +1,12 @@
 # Worker onboarding repair - 2026-10-22
 
+**Released:** coordinator and Windows/Apple silicon/Intel workers **0.4.2-rc.2**.
+Download from **Nodes > Connect a computer** in
+[Command Center](https://app.the-godfather.ai). Quit the existing tray worker before
+installing the replacement. Existing local identities, settings and permissions
+retain their locations. Fresh computers use Connect and matching-code approval;
+Reconnect is only for replacing a connection under an existing owned name.
+
 The owner authorized repairing fresh Windows/macOS onboarding, incorporating the
 existing version-reporting changes, rebuilding native workers, publishing them in
 Command Center, and pushing the final changes to GitHub main.
@@ -102,3 +109,43 @@ matched the trusted local hash. The extracted new release passed its own checksu
 and configuration checks. Initial automatic approval review blocked activation
 before any service change, requesting explicit consent for the live upgrade and
 brief interruption. The original `0.4.1-rc.6` service remained current at that point.
+
+## Authorized production activation
+
+The owner then explicitly approved activation, backup and brief service interruption.
+The existing verified installer upgraded the coordinator to
+`/opt/the-godfather/releases/godfather-0.4.2-rc.2-linux-amd64`. All five services
+passed health checks; API metadata reports version `0.4.2-rc.2` and the exact
+native-build source `c84c4745503a1455107f62bc457bd608bab27d4b`. Schema remains
+`0014_command_center_appearance`. API, dashboard, PostgreSQL and Redis have no
+published host ports; the existing proxy remains the public entry point.
+
+The production environment remained byte-identical with mode 600. Before/after
+record fingerprints matched for 2 users, 2 Google identities, 3 workspaces,
+1 membership, 4 credentials, 2 node ownership/policy records, 9 jobs, 5 agents,
+6 artifacts, 3 checkpoints, 2 provider connections and 1 encrypted account key.
+No account key was decrypted. There were no active jobs at upgrade or postflight.
+Node health after activation was one online and one offline; no contributor
+computer was remotely installed, reconfigured or granted new permissions.
+
+Paired backup: `/opt/the-godfather/state/backups/20261022T195238-1266002`.
+Its checksums, PostgreSQL dump listing and artifact gzip integrity passed.
+Actual restore testing used the disposable release environment; production
+restore was not performed. Previous release and download artifacts are retained.
+
+Deployment evidence is ignored under `.cache/worker-onboarding-2026-10-22/`;
+server-side preservation evidence is under
+`/opt/the-godfather/state/deployments/worker-onboarding-20261022-rc2`.
+
+All **50 public HTTP checks passed** using normal DNS and verified TLS. The
+download manifest matches the staged release, and all three new installers
+returned HTTP 200 with exact SHA-256 matches on both existing public hostnames
+(six complete download/hash checks). Fresh unapproved enrollment returns the
+expected 404; unauthenticated worker registration, private APIs, account/workload
+operations, appearance and credential deletion remain denied. Foreign-origin
+mutations remain blocked. No production job, account login or real enrollment
+approval was performed to manufacture acceptance.
+
+Actual recipient Google sign-in and fresh Windows/Mac installation still require
+physical acceptance. Native runner, packaged HTTPS and synthetic lifecycle checks
+do not substitute for that acceptance. No next implementation phase is started.

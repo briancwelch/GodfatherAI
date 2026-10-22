@@ -85,7 +85,7 @@ is required. Email delivery is manual, and Tailscale access is separate.
 
 Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
 
-Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. Coordinator changes are deployed; native worker builds remain on hold.
+Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. Coordinator and Windows/Apple silicon/Intel worker builds **0.4.2-rc.2** are now published. See the [onboarding repair and release verification](docs/operations/worker-onboarding-2026-10-22.md) for pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
 
 ## Local development
 

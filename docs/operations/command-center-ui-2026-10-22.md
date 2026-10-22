@@ -81,4 +81,7 @@ those computers; source workers intentionally report no release build. An unavai
 platform installer is labeled unavailable, not out of date. Native installation,
 actual recipient upgrades and production acceptance remain deferred.
 
-No new phase is started. Native worker builds remain on hold.
+No new phase was started. Native worker builds were held at the end of this task.
+The owner subsequently authorized the onboarding repair and native releases;
+Windows, Apple silicon and Intel **0.4.2-rc.2** installers are now published. See
+[worker onboarding verification](worker-onboarding-2026-10-22.md).
