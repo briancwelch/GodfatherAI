@@ -128,7 +128,9 @@ def test_frozen_connection_probe_requires_unapproved_response(
 def test_failed_pairing_preserves_code_and_never_claims_connected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pytest.importorskip("tkinter", reason="GUI adapter check requires Tk; core worker does not")
+    pytest.importorskip(
+        "tkinter", reason="GUI adapter check requires Tk; core worker does not", exc_type=ImportError
+    )
     from godfather_worker.desktop_app import Application
 
     app = Application.__new__(Application)
