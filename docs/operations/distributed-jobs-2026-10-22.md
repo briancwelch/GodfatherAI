@@ -1,9 +1,9 @@
-# Distributed Jobs: local implementation
+# Distributed Jobs: implementation and deployment
 
 Owner initially authorized local implementation on 2026-10-22. After local validation,
 the owner explicitly authorized updated installers, coordinator deployment to the
-existing VPS and GitHub synchronization. Release 0.6.0-rc.1 is being prepared through
-the existing native packaging, backup and verification gates. Live billable inference,
+existing VPS and GitHub synchronization. Release 0.6.0-rc.1 was built through
+the existing native packaging, backup and verification gates and activated on the VPS. Live billable inference,
 model downloads and changes to contributor-host permissions remain outside this work.
 
 ## Use
@@ -30,9 +30,11 @@ separate reviewable artifacts; no automatic apply, Git merge or deployment occur
 
 Normal jobs and old workers retain their contracts. A synthesis worker must run the
 updated source: `--execute-workflows` now advertises `distributed-context-v1`.
-Native installer updates were subsequently authorized and are being built through
-the existing Windows and macOS packaging. Publishing them does not bypass local
-update consent or change contributor permissions.
+Consigliere 0.6.0-rc.1 Windows, Apple silicon and Intel Mac installers are published.
+Use **File > Check for updates** on participating workers, or download the replacement
+under **Nodes > Connect a computer**. The existing identity, projects and settings are
+retained. Publishing installers does not bypass local update consent or change
+contributor permissions.
 
 ## Limits and recovery
 
@@ -118,3 +120,76 @@ installed worker binaries, GPU performance and billable provider execution were 
 validated. The owner subsequently authorized committing/pushing this milestone and publishing
 updated installers with the coordinator upgrade. Release results will be recorded
 after activation; this local evidence alone does not claim remote acceptance.
+
+## Published release and VPS activation
+
+Coordinator and all three worker installers: **0.6.0-rc.1**, built from clean source
+`eab6d21fb69b82bf37187bb2dbde192ba554b47a`. Source is committed and pushed to main.
+The deployment report is saved in a subsequent documentation commit.
+
+The [source CI run](https://github.com/briancwelch/GodfatherAI/actions/runs/39868688578)
+passed all eight jobs. Its Linux container run completed **575 passed, 6 skipped**;
+Windows, macOS, Linux and Python 3.12/3.14 checks, API/database restarts, four simulated
+worker processes, the 100-job scheduler, lease expiry and checkpoint interruption /
+recovery passed. Headless native-library and optional sandbox skips do not establish
+physical hardware acceptance.
+
+[Both native Mac jobs](https://github.com/briancwelch/GodfatherAI/actions/runs/39868728096)
+passed app/DMG/checksum, native architecture/library, Tk/tray and HTTPS unapproved
+pairing checks. Windows temporary install/reinstall, frozen Tk/tray and isolated
+OS-store checks passed locally. These installers remain unsigned/ad-hoc signed;
+recipient installation, physical models and GPU performance remain separate acceptance.
+
+| Installer         | SHA-256                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| Windows x64       | `efc7e2c8d7b12a5413cdda4b3c3d337bed3b60391e41f1cfccf687feff378ccf` |
+| Mac Apple silicon | `ee4dff4f22840ea7cfde8e6a3e6a7acadfe1dcdf6c00806935b3acf7e7e8d141` |
+| Mac Intel         | `a4708083632dc47b578754d3de8034b850a50ba8a2fbc99d344a8c5421625bd1` |
+
+Coordinator archive: `dist/godfather-0.6.0-rc.1-linux-amd64.tar.gz`, SHA-256
+`cabdfc71e687bd76cdfd57b8aff6c0956e999b467f04bf6d8e14d4cc16202bcc`.
+All ten disposable release gates passed, including immutable image identity and
+content, production proxy configuration, shell syntax, fresh/repeat migrations,
+private services, anonymous denial, all installer downloads through both hostnames,
+actual database/artifact restore and persistence/restart.
+Evidence: `.cache/release-tests/64e236007770/result.json`.
+
+The transferred archive matched its trusted local hash before extraction. The normal
+release installer took a paired backup, applied `0016_distributed_jobs` explicitly,
+and activated `/opt/the-godfather/releases/godfather-0.6.0-rc.1-linux-amd64`.
+A post-upgrade receipt helper needed a newline-escaping correction after successful
+activation; only the receipt and read-only postflight were rerun, not the upgrade.
+
+All five services are healthy. Only Caddy publishes host ports; PostgreSQL, Redis,
+API and dashboard ports remain private. API metadata matches the exact source,
+version and migration. All four workers reconnected online. No jobs were active at
+upgrade or postflight, and verification created no distributed jobs.
+
+The production environment remained byte-identical with mode 600. Stable record
+fingerprints matched for 2 users (including profiles), 2 Google identities,
+3 workspaces, 1 membership, 6 credentials, 4 node ownership/policy records, 12 jobs,
+7 agents, 6 artifacts, 3 checkpoints, 3 provider connections and 1 encrypted account
+key. No key was decrypted or contributor host reconfigured.
+
+Paired backup: `/opt/the-godfather/state/backups/20261022T231216-1354615`.
+SHA-256 checks, PostgreSQL dump listing and artifact gzip integrity passed.
+Restore tests used disposable release data; production was not restored.
+Previous releases are retained.
+
+Server-side evidence: `/opt/the-godfather/state/deployments/distributed-20261022-rc1`.
+Ignored local release/deployment evidence: `.cache/distributed-release-0.6.0-rc.1/`.
+
+All **68 public HTTP checks passed** through normal DNS and verified TLS. All
+three updated installers returned HTTP 200 with exact SHA-256 matches on both
+hostnames (six full download/hash checks). Both runtime catalogs match the pinned
+source catalog. Distributed Jobs redirects anonymous visitors to sign-in; its
+list/options/detail/create/cancel bridge routes reject anonymous access and
+foreign-origin writes. Private coordinator endpoints remain unavailable publicly.
+These checks created no accounts, enrollments or jobs and used no real Google
+session or provider key.
+
+Open [Distributed Jobs](https://app.the-godfather.ai/distributed) after normal
+sign-in. Update selected synthesis workers to **0.6.0-rc.1** before submitting;
+ordinary jobs remain compatible with older workers. Actual recipient update and
+physical multi-node/model execution remain owner acceptance tasks. No later
+milestone was started.

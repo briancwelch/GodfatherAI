@@ -4,7 +4,7 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current coordinator: 0.4.1-rc.6 · Consigliere: 0.4.1-rc.4** - [Command Center UI deployment](docs/operations/command-center-ui-deployment-2026-10-22.md).
+**Current coordinator and Consigliere: 0.6.0-rc.1** - [Distributed Jobs deployment](docs/operations/distributed-jobs-2026-10-22.md).
 Models → Add / use model lists installed local and connected API models. The
 worker update enables basic model-only agents while preserving existing settings.
 
@@ -36,7 +36,7 @@ navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Consigliere **0.4.1-rc.4** is the current worker. The earlier coordinator
+configured. Consigliere **0.6.0-rc.1** is the current worker. The earlier coordinator
 release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
@@ -87,14 +87,13 @@ Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub 
 
 Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. The previous **0.4.2-rc.2** [onboarding repair](docs/operations/worker-onboarding-2026-10-22.md) introduced pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
 
-**Release preparation (0.6.0-rc.1):** [Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. Installer updates, GitHub synchronization and VPS deployment are now owner-authorized and in preparation.
+**Distributed Jobs (0.6.0-rc.1):** [Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. The coordinator and updated Windows, Apple silicon and Intel Mac installers are deployed. Update participating workers through File > Check for updates before using synthesis.
 
 ## Local development
 
-Coordinator **0.5.0-rc.2** and Windows/Apple silicon/Intel workers **0.5.0-rc.1**
-are published with in-app worker updates and local Ollama setup, a system Overview
-and Workspaces directory, personal profiles, and separate Images / Analytics and
-Reports workflows. See the
+The previous **0.5.0** release introduced in-app worker updates and local Ollama
+setup, a system Overview and Workspaces directory, personal profiles, and separate
+Images / Analytics and Reports workflows. See the
 [milestone guide](docs/operations/worker-readiness-and-workspaces-2026-10-22.md).
 Existing workers need one normal installer upgrade to acquire the updater.
 
