@@ -105,6 +105,8 @@ def build(release: str) -> Path:
         "pystray",
         "--collect-data",
         "godfather_worker",
+        "--collect-data",
+        "certifi",
         "--add-data",
         str(build_info) + os.pathsep + "godfather_worker",
         "--add-data",

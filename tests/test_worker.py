@@ -270,6 +270,7 @@ def test_worker_reconnects_with_same_session_and_obeys_coordinator_interval(
             waits.append(seconds)
 
     monkeypatch.setattr(cli, "WorkerClient", Client)
+    monkeypatch.setattr("godfather_worker.build_info.worker_version", lambda: "0.4.2-rc.1")
     monkeypatch.setattr("godfather_worker.cli.threading.Event", Stop)
     monkeypatch.setattr(
         "sys.argv", ["worker", "--credential-file", str(credential), "--simulate", "LA-01"]
@@ -277,5 +278,7 @@ def test_worker_reconnects_with_same_session_and_obeys_coordinator_interval(
     assert cli.main() == 0
     assert calls[0][0] == calls[2][0] == "/api/v1/workers/register"
     assert calls[0][1] == calls[2][1]
+    assert isinstance(calls[0][1], Registration)
+    assert calls[0][1].worker_version == "0.4.2-rc.1"
     assert waits == [10, 1, 10]
     assert "secret" not in capsys.readouterr().out

@@ -5,6 +5,8 @@ import json
 import os
 import plistlib
 import secrets
+import socket
+import ssl
 import subprocess
 import threading
 from collections.abc import Callable
@@ -277,6 +279,20 @@ class Controller:
 
 
 def connection_error(error: Exception) -> str:
+    from urllib.error import URLError
+
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return (
+            "HTTPS certificate verification failed. Check this computer's date/time "
+            "and whether its network inspects HTTPS."
+        )
+    if isinstance(reason, socket.gaierror):
+        return "Command Center address could not be resolved. Check the address and DNS connection."
+    if isinstance(reason, (TimeoutError, ConnectionError)):
+        return (
+            "Command Center did not respond. Check your internet connection and try Connect again."
+        )
     if isinstance(error, HTTPError):
         return {
             401: "This computer's credential was revoked. Contact your administrator.",

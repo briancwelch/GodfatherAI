@@ -1,15 +1,21 @@
 """Origin binding and approval polling regression checks without real credentials."""
 
 import json
+import socket
+import ssl
 import threading
 from email.message import Message
 from unittest.mock import MagicMock, Mock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPSHandler
 
 import pytest
-from godfather_worker.desktop import Pairing, coordinator_origin
+from godfather_worker.client import WorkerClient
+from godfather_worker.desktop import Pairing, connection_error, coordinator_origin
+from godfather_worker.desktop_app import Application
 from godfather_worker.native_desktop import CredentialStore, login_startup_enabled
-from godfather_worker.pairing import await_approval
+from godfather_worker.pairing import await_approval, check_connection
 
 
 @pytest.mark.parametrize(
@@ -75,6 +81,90 @@ def test_cancelled_pairing_does_not_send_or_store(monkeypatch: pytest.MonkeyPatc
     cancel.set()
     assert await_approval(Pairing(), Mock(), cancel) is None
     exchange.assert_not_called()
+
+
+def test_fresh_host_without_system_roots_loads_verified_public_trust(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    assert context.cert_store_stats()["x509_ca"] == 0
+    monkeypatch.setattr("godfather_worker.client.ssl.create_default_context", lambda: context)
+    client = WorkerClient("https://example.invalid", "")
+    assert any(
+        isinstance(handler, HTTPSHandler)
+        for handler in client.opener.handlers  # type: ignore[attr-defined]
+    )
+    assert context.cert_store_stats()["x509_ca"] > 0
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+
+
+@pytest.mark.parametrize(
+    "reason,expected",
+    [
+        (ssl.SSLCertVerificationError("private diagnostic"), "certificate verification failed"),
+        (socket.gaierror("private diagnostic"), "could not be resolved"),
+        (TimeoutError("private diagnostic"), "did not respond"),
+    ],
+)
+def test_connection_errors_are_actionable_without_leaking_details(
+    reason: Exception,
+    expected: str,
+) -> None:
+    message = connection_error(URLError(reason))
+    assert expected in message and "private diagnostic" not in message
+
+
+def test_frozen_connection_probe_requires_unapproved_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exchange = Mock(side_effect=HTTPError("", 404, "pending", Message(), None))
+    monkeypatch.setattr(Pairing, "exchange", exchange)
+    check_connection("https://example.invalid")
+    assert exchange.call_count == 1
+    exchange.side_effect = URLError(ssl.SSLCertVerificationError("untrusted"))
+    with pytest.raises(URLError):
+        check_connection("https://example.invalid")
+
+
+def test_failed_pairing_preserves_code_and_never_claims_connected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = Application.__new__(Application)
+    app.root = Mock()
+    app.address = Mock()
+    app.address.get.return_value = "https://example.invalid"
+    app.identity, app.tray = None, None
+    app.pairing_busy, app.destroyed = False, False
+    app.status, app.code, app.connection_state = Mock(), Mock(), Mock()
+    app.connection_badge, app.connect_button, app.address_entry, app.notebook = (
+        Mock(),
+        Mock(),
+        Mock(),
+        Mock(),
+    )
+    app.store = Mock()
+    import queue
+
+    app.events = queue.Queue()
+    # Deterministic event production; no network or background timing dependency.
+    monkeypatch.setattr(app, "background", lambda action: action())
+    monkeypatch.setattr(
+        "godfather_worker.desktop_app.await_approval",
+        Mock(side_effect=URLError(ssl.SSLCertVerificationError("untrusted"))),
+    )
+    browser = Mock()
+    monkeypatch.setattr("godfather_worker.desktop_app.webbrowser.open", browser)
+    app.connect()
+    challenge = urlsplit(browser.call_args.args[0]).fragment.split("=", 1)[1][:12].upper()
+    assert challenge in app.code.set.call_args.args[0]
+    app.root.update_idletasks.assert_called_once()
+    app.pump()
+    assert "inactive" in app.code.set.call_args.args[0]
+    assert challenge in app.code.set.call_args.args[0]
+    assert "certificate verification failed" in app.status.set.call_args.args[0]
+    assert app.connection_state.set.call_args.args == ("DISCONNECTED",)
+    assert not app.pairing_busy and app.identity is None
+    app.store.write.assert_not_called()
 
 
 def test_store_refuses_silent_identity_replacement(monkeypatch: pytest.MonkeyPatch) -> None:

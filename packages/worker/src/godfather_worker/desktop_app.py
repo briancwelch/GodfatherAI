@@ -17,6 +17,7 @@ from typing import Any
 
 from godfather_model_gateway import ProviderConfig
 
+from godfather_worker.build_info import worker_version
 from godfather_worker.desktop import (
     WEB_ORIGIN,
     Contribution,
@@ -54,6 +55,8 @@ class Application:
         self.settings = Contribution()
         self.models: list[str] = []
         self.status = tk.StringVar(value="Loading your saved connection...")
+        self.connection_state = tk.StringVar(value="DISCONNECTED")
+        self.build_version = worker_version()
         self.address = tk.StringVar(value=WEB_ORIGIN)
         self.owner = tk.StringVar(value="")
         self.code = tk.StringVar(value="")
@@ -69,7 +72,7 @@ class Application:
         self.shared = tk.BooleanVar(value=False)
         self.owners, self.workspaces = tk.StringVar(), tk.StringVar()
         self.autostart = tk.BooleanVar(value=False)
-        root.title("Consigliere — The Godfather AI")
+        root.title("Consigliere — The Godfather AI · " + (self.build_version or "Source checkout"))
         root.configure(background="#F4F8FC")
         self.app_icon = tk.PhotoImage(
             file=str(Path(__file__).parent / "assets/consigliere.png")
@@ -134,6 +137,16 @@ class Application:
         ttk.Button(header, text="Settings", command=self.advanced, style="Header.TButton").pack(
             side="right"
         )
+        self.connection_badge = tk.Label(
+            header,
+            textvariable=self.connection_state,
+            background="#58431B",
+            foreground="#FFFFFF",
+            font=("Segoe UI", 11, "bold"),
+            padx=12,
+            pady=6,
+        )
+        self.connection_badge.pack(side="right", padx=16)
         menu = tk.Menu(root)
         file_menu = tk.Menu(menu, tearoff=False)
         file_menu.add_command(label="Open Command Center", command=self.open_center)
@@ -191,7 +204,9 @@ class Application:
         footer = ttk.Frame(root, padding=(16, 6))
         footer.pack(side="bottom", fill="x")
         ttk.Label(
-            footer, text="The Godfather AI · Owner-controlled worker", style="Muted.TLabel"
+            footer,
+            text="Build " + (self.build_version or "Source checkout (unreleased)"),
+            style="Muted.TLabel",
         ).pack(side="left")
         ttk.Label(footer, textvariable=self.status, style="Muted.TLabel").pack(side="right")
         body = ttk.Frame(root)
@@ -224,7 +239,9 @@ class Application:
         ttk.Label(main, text="Command Center address").pack(anchor="w", pady=(18, 5))
         self.address_entry = ttk.Entry(main, textvariable=self.address)
         self.address_entry.pack(fill="x")
-        ttk.Label(main, textvariable=self.code, wraplength=380).pack(anchor="w", pady=8)
+        ttk.Label(main, textvariable=self.code, style="Title.TLabel", wraplength=380).pack(
+            anchor="w", pady=8
+        )
         network = ttk.LabelFrame(connection, text="NETWORK", padding=16)
         network.grid(row=0, column=1, sticky="new")
         ttk.Label(network, textvariable=self.network, wraplength=280).pack(anchor="w", pady=(0, 12))
@@ -307,6 +324,10 @@ class Application:
     def event(self, name: str, **values: Any) -> None:
         self.events.put((name, values))
 
+    def set_connection_state(self, state: str) -> None:
+        self.connection_state.set(state)
+        self.connection_badge.configure(background="#176044" if state == "CONNECTED" else "#58431B")
+
     def background(self, action: Callable[[], None]) -> None:
         def work() -> None:
             try:
@@ -388,12 +409,25 @@ class Application:
         self.address_entry.configure(state="disabled")
         self.code.set("Match this code in your browser: " + pairing.challenge[:12].upper())
         self.status.set("Approve this computer in your browser. Connecting automatically...")
+        self.set_connection_state("AWAITING APPROVAL")
+        self.notebook.select(0)  # type: ignore[no-untyped-call]
+        self.show()
+        # Paint the comparison code before the browser can cover the worker.
+        self.root.update_idletasks()
 
         def exchange() -> None:
             try:
                 identity = await_approval(pairing, self.store, self.cancel)
                 if identity:
                     self.event("identity", identity=identity)
+            except Exception as error:
+                self.event(
+                    "pairing_failed",
+                    message=(
+                        str(error) if isinstance(error, TimeoutError) else connection_error(error)
+                    ),
+                    code=pairing.challenge[:12].upper(),
+                )
             finally:
                 self.event("pairing_finished")
 
@@ -414,6 +448,7 @@ class Application:
             self.controller = Controller(self.identity, self.folder, self.event)
             self.controller.start(self.settings)
             self.status.set("Connecting...")
+            self.set_connection_state("CONNECTING")
             self.resume_button.configure(state="disabled")
             self.pause_button.configure(state="normal")
         except (ValueError, OSError) as error:
@@ -432,6 +467,7 @@ class Application:
         if self.controller and self.controller.running:
             self.controller.stop()
             self.status.set("Pausing safely...")
+            self.set_connection_state("PAUSING")
 
     def open_center(self) -> None:
         # Saved credentials always use their bound origin, regardless of textbox edits.
@@ -503,6 +539,7 @@ class Application:
             self.connect_button.configure(state="normal")
             self.resume_button.configure(state="disabled")
             self.status.set("Disconnected. Ready to connect.")
+            self.set_connection_state("DISCONNECTED")
         except OSError:
             messagebox.showerror(
                 "Disconnect", "Unlock the operating system credential store and try again."
@@ -554,6 +591,7 @@ class Application:
             self.start()
         else:
             self.status.set("Connection saved. Paused.")
+            self.set_connection_state("PAUSED")
             self.resume_button.configure(state="normal")
 
     def pump(self) -> None:
@@ -604,6 +642,14 @@ class Application:
                     self.connect_button.configure(state="normal")
             elif name == "identity":
                 self.show_identity(values["identity"])
+            elif name == "pairing_failed":
+                self.set_connection_state("DISCONNECTED")
+                self.status.set(values["message"])
+                self.code.set(
+                    "Previous code: "
+                    + values["code"]
+                    + " (inactive). Close the approval page and click Connect to try again."
+                )
             elif name == "pairing_finished":
                 self.pairing_busy = False
                 self.connect_button.configure(text="Connect")
@@ -612,18 +658,25 @@ class Application:
                     self.address_entry.configure(state="normal")
                     if self.cancel.is_set():
                         self.status.set("Connection cancelled. Ready to connect.")
-                    self.code.set("")
+                        self.set_connection_state("DISCONNECTED")
+                        self.code.set("")
             elif name in ("worker.registered", "worker.heartbeat"):
+                self.set_connection_state(
+                    "CONNECTED" if values.get("state", "online") != "disabled" else "DISABLED"
+                )
                 self.status.set(
                     "Connected"
                     if values.get("state", "online") != "disabled"
                     else "Node disabled by administrator"
                 )
             elif name == "worker.coordinator_unavailable":
+                self.set_connection_state("DISCONNECTED · RETRYING")
                 self.status.set("Connection lost. Reconnecting automatically...")
             elif name == "worker.session_busy":
+                self.set_connection_state("WAITING FOR SESSION")
                 self.status.set("Waiting for your previous worker session to end safely...")
             elif name == "worker.request_refused":
+                self.set_connection_state("ACCESS REFUSED")
                 self.status.set(
                     "Connection refused. Ask your administrator to check this node's permission."
                 )
@@ -632,6 +685,7 @@ class Application:
             elif name == "worker.attempt_finished":
                 self.status.set("Connected - ready for your next job")
             elif name == "worker.stopped":
+                self.set_connection_state("PAUSED" if self.identity else "DISCONNECTED")
                 self.resume_button.configure(state="normal" if self.identity else "disabled")
                 self.pause_button.configure(state="disabled")
                 if self.status.get().startswith("Pausing"):
@@ -655,6 +709,7 @@ class Application:
                 "worker.configuration_invalid",
                 "worker.invalid_coordinator_response",
             ):
+                self.set_connection_state("DISCONNECTED")
                 self.status.set(
                     "Worker could not continue. Check settings or contact your administrator."
                 )
@@ -674,12 +729,24 @@ def main() -> int:
     def self_test_stage(stage: str) -> None:
         report = os.getenv("GODFATHER_SELF_TEST_REPORT")
         if report and "--self-test" in sys.argv:
-            Path(report).write_text(json.dumps({"stage": stage}), encoding="utf-8")
+            Path(report).write_text(
+                json.dumps({"stage": stage, "worker_version": worker_version()}), encoding="utf-8"
+            )
 
     self_test_stage("before_tk")
     root = tk.Tk()
     if "--self-test" in sys.argv:
         self_test_stage("tk_ready")
+        from godfather_worker.client import WorkerClient
+        from godfather_worker.pairing import check_connection
+
+        # Load bundled public roots in the frozen executable, even for offline smoke.
+        WorkerClient(WEB_ORIGIN, "")
+        self_test_stage("tls_ready")
+        if origin := os.getenv("GODFATHER_SELF_TEST_ORIGIN"):
+            self_test_stage("checking_fresh_pairing")
+            check_connection(origin)
+            self_test_stage("fresh_pairing_pending")
         # Frozen builds need this fixed source file to pass into a worker sandbox.
         from godfather_worker.workloads import program_source
 

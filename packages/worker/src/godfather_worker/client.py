@@ -1,10 +1,12 @@
 """Small outbound HTTP client; credentials never follow redirects or proxy settings."""
 
 import json
+import ssl
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
 
+import certifi
 from godfather_contracts import Contract, WorkerAck
 
 
@@ -38,7 +40,11 @@ class WorkerClient:
     def __init__(self, url: str, token: str) -> None:
         self.url = validate_url(url)
         self.token = token
-        self.opener = build_opener(ProxyHandler({}), NoRedirect())
+        # Frozen Python/macOS and fresh Windows hosts may lack usable public roots.
+        # Retain OS trust and add the packaged Mozilla roots; verification stays mandatory.
+        context = ssl.create_default_context()
+        context.load_verify_locations(cafile=certifi.where())
+        self.opener = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=context))
 
     def post(self, path: str, payload: Contract) -> WorkerAck:
         return WorkerAck.model_validate(self.post_document(path, payload))

@@ -37,6 +37,7 @@ jobs:
       UV_PYTHON_DOWNLOADS: never
       EXPECTED_MACHINE: ${{ matrix.machine }}
       REQUESTED_VERSION: ${{ inputs.version }}
+      GODFATHER_SELF_TEST_ORIGIN: https://app.the-godfather.ai
     defaults:
       run:
         shell: bash

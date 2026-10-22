@@ -8,6 +8,28 @@ from urllib.error import HTTPError
 from godfather_worker.desktop import Pairing, SecretStore
 
 
+def check_connection(origin: str) -> None:
+    """Probe fresh pairing without an account, approval, registration or saved secret."""
+
+    class RefuseStore:
+        def read(self) -> str | None:
+            return None
+
+        def write(self, value: str) -> None:
+            raise RuntimeError("An unapproved diagnostic must never store a credential")
+
+        def delete(self) -> None:
+            raise RuntimeError("An unapproved diagnostic must never delete a credential")
+
+    try:
+        Pairing(origin=origin).exchange(RefuseStore())
+    except HTTPError as error:
+        if error.code == 404:
+            return
+        raise
+    raise RuntimeError("Coordinator unexpectedly accepted an unapproved diagnostic")
+
+
 def await_approval(
     pairing: Pairing,
     store: SecretStore,

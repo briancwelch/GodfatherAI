@@ -95,6 +95,8 @@ def build(release: str, identity: str | None = None, notary_profile: str | None 
         str(ROOT / "packages/worker/src/godfather_worker/assets/consigliere.icns"),
         "--collect-data",
         "godfather_worker",
+        "--collect-data",
+        "certifi",
         "--add-data",
         str(build_info) + os.pathsep + "godfather_worker",
         "--add-data",

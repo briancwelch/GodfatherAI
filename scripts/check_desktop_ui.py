@@ -28,6 +28,11 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
     store.read.return_value = json.dumps(identity) if saved else None
     store.write.side_effect = AssertionError("Real enrollment is not part of UI smoke")
     controllers: list[Mock] = []
+    approval_ready = threading.Event()
+
+    def approve(*_: object) -> dict[str, str]:
+        assert approval_ready.wait(10), "Pairing code was never presented"
+        return identity
 
     def controller(*args: object) -> Mock:
         instance = Mock(running=False)
@@ -59,7 +64,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         patch("godfather_worker.desktop_app.discover", return_value=profile("LV-01")),
         patch("godfather_worker.desktop_app.discover_models", new=Mock()),
         patch("godfather_worker.desktop_app.Controller", side_effect=controller),
-        patch("godfather_worker.desktop_app.await_approval", return_value=identity),
+        patch("godfather_worker.desktop_app.await_approval", side_effect=approve),
         patch("godfather_worker.desktop_app.webbrowser.open") as browser,
         patch(
             "godfather_worker.coding_projects.setup_options",
@@ -91,6 +96,21 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     root.after(30, loaded)
                     return
                 app.connect()
+                root.update_idletasks()
+                assert app.connection_state.get() == "AWAITING APPROVAL"
+                assert "Match this code" in app.code.get()
+                from urllib.parse import urlsplit
+
+                challenge = urlsplit(browser.call_args.args[0]).fragment.split("=", 1)[1]
+                assert challenge[:12].upper() in app.code.get()
+                if screenshot:
+                    from PIL import ImageGrab
+
+                    screenshot.parent.mkdir(parents=True, exist_ok=True)
+                    ImageGrab.grab(window=root.winfo_id()).save(
+                        screenshot.with_stem(screenshot.stem + "-pairing")
+                    )
+                approval_ready.set()
                 root.after(30, connected)
 
             def connected() -> None:
@@ -98,6 +118,8 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     root.after(30, connected)
                     return
                 assert app.identity == identity and len(controllers) == 1
+                assert app.connection_state.get() == "CONNECTED"
+                assert not app.code.get()
                 if saved:
                     browser.assert_not_called()
                 else:
@@ -144,6 +166,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
 
             def paused() -> None:
                 assert app.status.get() == "Paused"
+                assert app.connection_state.get() == "PAUSED"
                 app.projects()
                 project = app.project_editor
                 assert isinstance(project, Projects)
