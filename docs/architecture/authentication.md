@@ -98,7 +98,7 @@ See the [operations guide](../history/phases.md#phase-09) for migration and reco
 | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Platform administrator | Platform user/invitation/audit administration, cluster health, own contributions, permitted jobs and workspaces |
 | Contributor            | Own node onboarding/contributions, permitted jobs/workspaces                                                    |
-| Member                 | Permitted jobs/workspaces and own account/session settings                                                      |
+| Member                 | Own node onboarding/contributions, permitted jobs/workspaces and own account/session settings                   |
 
 Users can hold multiple roles; permissions are the union of the role sets. Existing
 single-role records remain compatible. New permission kinds can extend the central
@@ -106,6 +106,13 @@ mapping without changing account-count assumptions. Only platform administrators
 change platform roles. Serialized checks prevent removing/disabling the last enabled
 administrator. A second founding administrator is an ordinary invitation with the
 same `platform_admin` role; there is no founder-specific code path.
+
+All active, invited members are trusted to register and contribute their own
+computers. Members and contributors share the same current permission set; the
+contributor role remains compatible with existing accounts and invitations.
+`nodes.contribute` is calculated from roles on each request, so existing members
+receive this permission without an account migration or promotion. Platform user,
+invitation and audit administration still requires `platform.manage`.
 
 Workspace authorization is independent: owner or explicit membership is required
 for lists, jobs, agents, model directory/metrics, attempts, streams, history,
@@ -123,7 +130,7 @@ Workspace lists do not globally reveal private assets to platform administrators
 
 Node credentials remain independent random machine secrets, hashed centrally and
 bound server-side to one owner/reserved identity. Registration payloads cannot set
-ownership. Contributor and administrator onboarding always creates an owned
+ownership. Member, contributor and administrator onboarding always creates an owned
 credential, never an arbitrary other-user credential. Only the node owner may
 drain, disable, enable or revoke it. Worker-local contribution limits, sharing
 allowlists, model availability and tool grants remain mandatory. Platform authority

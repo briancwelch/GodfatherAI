@@ -2,9 +2,20 @@
 
 import pytest
 from fastapi.responses import JSONResponse
-from godfather_api.authentication import cookie
+from godfather_api.authentication import cookie, user_data
 from godfather_api.config import Settings
+from godfather_api.models import User
 from pydantic import ValidationError
+
+
+@pytest.mark.parametrize("role", ["member", "contributor", "platform_admin"])
+@pytest.mark.parametrize("stored_roles", [[], ["member"]])
+def test_trusted_accounts_can_contribute_owned_nodes(role: str, stored_roles: list[str]) -> None:
+    account = user_data(User(role=role, roles=stored_roles))
+    granted = account["permissions"]
+    assert isinstance(granted, list)
+    assert "nodes.contribute" in granted
+    assert ("platform.manage" in granted) == (role == "platform_admin")
 
 
 def test_production_session_is_secure_httponly_and_host_only() -> None:

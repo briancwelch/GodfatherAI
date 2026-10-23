@@ -26,6 +26,9 @@ coding/data environment; it is not required just to open the website or pair Con
 
 ## Install a worker
 
+Invited members, contributors and administrators can connect their own computers.
+Member access is sufficient; each owner controls their computer's permissions.
+
 1. In Command Center, open **Nodes > Downloads** (or **Connect a computer**).
 2. Download the installer for **Windows x64**, **Mac Apple silicon**, or **Mac Intel**.
 3. Install Consigliere. On Windows, run the setup EXE. On Mac, open the DMG and

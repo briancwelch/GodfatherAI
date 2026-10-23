@@ -37,7 +37,7 @@ LOGIN_COOKIE = "godfather_login"
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "platform_admin": {"platform.manage", "nodes.contribute", "jobs.use", "workspaces.create"},
     "contributor": {"nodes.contribute", "jobs.use", "workspaces.create"},
-    "member": {"jobs.use", "workspaces.create"},
+    "member": {"nodes.contribute", "jobs.use", "workspaces.create"},
 }
 
 

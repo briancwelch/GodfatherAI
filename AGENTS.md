@@ -125,7 +125,7 @@ Create components when their milestone needs them, not empty abstractions for fu
 
 ## Centralized web administration and tenancy
 - Build one responsive, browser-accessible Command Center; the proposed deployment endpoints are `app.the-godfather.ai` and `api.the-godfather.ai`. Reserve the apex domain `the-godfather.ai` for a redirect or landing page if desired. Domain ownership, DNS, TLS certificates, hosting provider, and public availability require separate decisions and explicit authorization.
-- Both founding members have equal **platform administrator** roles. Future roles include **contributor** (manage owned nodes and permitted jobs) and **member** (use authorized agents/workspaces). Roles are application-level, not machine administrator privileges.
+- Both founding members have equal **platform administrator** roles. Future roles include **contributor** and **member** (register and manage owned nodes and use authorized agents/workspaces). All active, invited members may contribute their own computers. Roles are application-level, not machine administrator privileges.
 - Separate platform-wide configuration from node-owner consent. Even a platform administrator cannot access another owner's files, secrets, repositories, or shell unless that owner explicitly exposes an approved capability.
 - The dashboard must support authenticated user sessions, node onboarding/revocation, node ownership, live health, job history, agent/model configuration, contribution policies, audit events, and workspace-scoped views.
 - Establish a minimal dashboard shell and secure login foundation early; full dashboard functionality remains Phase 08. Do not publish an unauthenticated prototype on the internet.

@@ -10,6 +10,9 @@ transport and Tailscale is optional once the coordinator candidate is activated.
 1. Open Account / Administration and create an invitation for the person's exact
    Google account email and intended roles. Use `platform_admin` only when equal
    platform administration is intended.
+   **Member** is sufficient to register and contribute the recipient's own
+   computers. Contributor accounts can also register computers; administrator
+   access is not required for either role.
 2. No email is sent automatically. Select **Copy sign-in instructions** on the
    active invitation row and share those instructions privately.
 3. The row remains available after refresh. Expired, used and revoked invitations
@@ -28,7 +31,8 @@ Legacy codes can still be entered in the optional invitation-code disclosure.
 
 Successful activation consumes the invitation and binds the new user UUID to the
 verified Google subject. Later sign-ins use that identity. Initial platform roles
-come from the invitation; workspace memberships and node permissions remain explicit.
+come from the invitation. Members can connect their own computers; workspace
+memberships, contribution settings and local host permissions remain explicit.
 
 ## Troubleshooting
 

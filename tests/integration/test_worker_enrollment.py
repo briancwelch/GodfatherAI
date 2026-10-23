@@ -119,7 +119,73 @@ def test_pairing_requires_google_owner_and_consumes_once_with_existing_protocol(
         assert pairing.secret not in audit and pairing.machine_secret not in audit
 
 
-@pytest.mark.parametrize("condition", ["expired", "disabled", "unlinked", "member", "revoked"])
+@pytest.mark.parametrize("role", ["member", "contributor"])
+def test_invited_non_admin_can_pair_register_and_revoke_owned_computer(
+    auth: AuthHarness, role: str
+) -> None:
+    assert auth.login(auth.client).status_code == 303
+    owner = auth.browser()
+    invitation = auth.invite("owner@example.invalid", [role])
+    assert auth.login(owner, "owner-sub", "owner@example.invalid", invitation).status_code == 303
+    account = owner.get("/api/v1/auth/me").json()
+    assert account["roles"] == [role]
+    assert "nodes.contribute" in account["permissions"]
+    assert "platform.manage" not in account["permissions"]
+    assert owner.get("/api/v1/administration/users").status_code == 403
+    assert (
+        auth.post(
+            owner,
+            "administration/invitations",
+            {"email": "outsider@example.invalid", "roles": ["platform_admin"]},
+        ).status_code
+        == 403
+    )
+
+    pairing = Pairing()
+    approval = {"challenge": pairing.challenge, "name": "Owned computer"}
+    assert (
+        auth.post(
+            owner,
+            "administration/worker-enrollments",
+            {**approval, "owner_id": str(uuid4())},
+        ).status_code
+        == 422
+    )
+    assert auth.post(owner, "administration/worker-enrollments", approval).status_code == 201
+    response = exchange(auth, pairing)
+    assert response.status_code == 200, response.text
+    assert response.json()["owner_id"] == account["id"]
+    credential_id = response.json()["credential_id"]
+    headers = {"Authorization": "Bearer " + pairing.machine_secret}
+    registration = Registration(**profile("LA-01").model_dump(), session_id=uuid4())
+    registered = owner.post(
+        "/api/v1/workers/register", json=registration.model_dump(mode="json"), headers=headers
+    )
+    assert registered.status_code == 200, registered.text
+    node_id = registered.json()["node_id"]
+    with auth.database.sessions() as session:
+        node = session.get(Node, UUID(node_id))
+        assert node is not None and str(node.owner_id) == account["id"]
+    assert owner.get(f"/api/v1/nodes/{node_id}").status_code == 200
+    assert (
+        auth.post(
+            auth.client, f"administration/node-credentials/{credential_id}/revoke"
+        ).status_code
+        == 404
+    )
+    assert (
+        auth.post(owner, f"administration/node-credentials/{credential_id}/revoke").status_code
+        == 200
+    )
+    assert (
+        owner.post(
+            "/api/v1/workers/register", json=registration.model_dump(mode="json"), headers=headers
+        ).status_code
+        == 401
+    )
+
+
+@pytest.mark.parametrize("condition", ["expired", "disabled", "unlinked", "revoked"])
 def test_pairing_rechecks_owner_and_expiry(auth: AuthHarness, condition: str) -> None:
     pairing = Pairing()
     approve(auth, pairing)
@@ -134,8 +200,6 @@ def test_pairing_rechecks_owner_and_expiry(auth: AuthHarness, condition: str) ->
             user.enabled = False
         elif condition == "unlinked":
             session.execute(delete(GoogleIdentity).where(GoogleIdentity.user_id == user.id))
-        elif condition == "member":
-            user.role, user.roles = "member", ["member"]
         else:
             row.consumed = True
     assert exchange(auth, pairing).status_code in (403, 404)
@@ -187,10 +251,11 @@ def test_owner_can_cancel_unused_pairing(auth: AuthHarness) -> None:
     assert exchange(auth, pairing).status_code == 404
 
 
-def test_other_admin_cannot_revoke_owner_pairing(auth: AuthHarness) -> None:
+@pytest.mark.parametrize("role", ["member", "platform_admin"])
+def test_other_user_cannot_revoke_owner_pairing(auth: AuthHarness, role: str) -> None:
     pairing = Pairing()
     approve(auth, pairing)
-    invite = auth.invite("other@example.invalid", ["platform_admin"])
+    invite = auth.invite("other@example.invalid", [role])
     other = auth.browser()
     assert auth.login(other, "other-sub", "other@example.invalid", invite).status_code == 303
     assert (
