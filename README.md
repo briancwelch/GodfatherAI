@@ -4,9 +4,9 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Coordinator 0.6.0-rc.2; Consigliere 0.6.0-rc.1.**
-[Distributed Jobs deployment](docs/operations/distributed-jobs-2026-10-22.md).
-The **0.7.0-rc.1 workspace contribution candidate** replaces sharing ID entry with
+**Coordinator 0.7.0-rc.2; Consigliere 0.7.0-rc.1 are published.**
+[Workspace contribution verification](docs/operations/workspace-contribution-verification-2026-10-22.md).
+Workspace contribution replaces sharing ID entry with
 **Contribute this computer to my workspaces**. Install, connect, approve and use
 workspace membership for ordinary/distributed work. Existing computers keep their
 permissions until their owners opt in. See [simple contribution](docs/operations/simple-contribution.md).
@@ -41,7 +41,7 @@ navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Consigliere **0.6.0-rc.1** is the current worker. The earlier coordinator
+configured. Consigliere **0.7.0-rc.1** is the current worker. The earlier coordinator
 release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
