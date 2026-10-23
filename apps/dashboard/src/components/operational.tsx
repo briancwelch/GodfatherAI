@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { UserName } from "./node-identity";
 import { useId, useRef, useState, type ReactNode } from "react";
 import type { AuditEvent } from "../lib/contracts";
@@ -202,6 +204,7 @@ export function ConfirmAction({
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   return (
     <>
       <button

@@ -226,6 +226,10 @@ def retry_job(job_id: UUID, request: Request, session: SessionDep) -> JobView:
         raise HTTPException(
             409, "Result actions cannot be replayed; inspect the project and its apply receipt"
         )
+    if view(session, job).requirements.shared_inference:
+        raise HTTPException(
+            409, "Shared inference restarts require a new explicitly selected group job"
+        )
     selection = view(session, job).requirements.model_selection
     if selection and selection.connection_id:
         raise HTTPException(
@@ -543,8 +547,13 @@ def report(
             UTC
         ):
             raise HTTPException(409, "Attempt expired before the result could commit")
-        attempt.result = payload.result.model_dump(mode="json")
-        job.result_refs = attempt.result
+        result_data = payload.result.model_dump(mode="json")
+        shared_sessions = attempt.result.get("shared_sessions")
+        attempt.result = {
+            **result_data,
+            **({"shared_sessions": shared_sessions} if shared_sessions else {}),
+        }
+        job.result_refs = result_data
         job.status, job.assigned_node_id = "COMPLETED", None
         attempt.status, attempt.finished_at = "COMPLETED", now
         job_event(session, job, "completed", now, attempt)

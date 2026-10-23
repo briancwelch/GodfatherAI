@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ToastNotifications } from "../components/toast-notifications";
 
 export const metadata: Metadata = {
   title: "The Godfather · Command Center",
@@ -12,7 +13,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ToastNotifications />
+      </body>
     </html>
   );
 }

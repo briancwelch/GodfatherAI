@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { ApplicationShell, RibbonGroup } from "./application-shell";
+import { notifyError } from "../lib/notifications";
 import { control } from "../lib/control-client";
 import type { Snapshot } from "../lib/contracts";
 
@@ -74,7 +75,7 @@ export default function Workloads({
       workspace || data?.workspace_id || data?.workspaces[0]?.id;
     if (!workspaceId) return;
     setBusy(true);
-    setStatus("Validating upload and submitting…");
+    setStatus("Validating upload and submittingâ€¦");
     try {
       let dataset;
       const file = form.get("dataset");
@@ -126,6 +127,7 @@ export default function Workloads({
       });
       window.location.assign(`/jobs/${result.id}`);
     } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Submission failed");
       setStatus(error instanceof Error ? error.message : "Submission failed");
     } finally {
       setBusy(false);
@@ -163,7 +165,7 @@ export default function Workloads({
             {status}
           </p>
           {!data ? (
-            <p>Loading workspaces and worker capabilities…</p>
+            <p>Loading workspaces and worker capabilitiesâ€¦</p>
           ) : !data.workspaces.length ? (
             <p>No authorized workspace is available.</p>
           ) : (
@@ -193,7 +195,7 @@ export default function Workloads({
                     value={kind}
                     onChange={(e) => setKind(e.target.value)}
                   >
-                    <option value="report">Analytics → report</option>
+                    <option value="report">Analytics â†’ report</option>
                     <option value="analytics">Analytics only</option>
                   </select>
                 </label>
@@ -367,7 +369,7 @@ export default function Workloads({
                 type="submit"
                 disabled={busy || !available}
               >
-                {busy ? "Submitting…" : "Run workload"}
+                {busy ? "Submittingâ€¦" : "Run workload"}
               </button>
             </form>
           )}
@@ -384,7 +386,7 @@ export default function Workloads({
             onClick={() => setSetupOpen(!setupOpen)}
             title={setupOpen ? "Collapse worker setup" : "Expand worker setup"}
           >
-            {setupOpen ? "‹‹" : "››"}
+            {setupOpen ? "â€¹â€¹" : "â€ºâ€º"}
             <span>Worker setup and availability</span>
           </button>
           <div id="readiness-content" hidden={!setupOpen}>

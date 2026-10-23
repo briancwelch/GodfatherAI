@@ -58,12 +58,43 @@ class ToolReference(Contract):
     version: int = Field(default=1, ge=1, le=100000)
 
 
+class SharedInferenceGroup(Contract):
+    """Owner-attested engine topology; no endpoints, keys or remote shell commands."""
+
+    id: UUID
+    name: str = Field(min_length=1, max_length=100)
+    mode: Literal["single_host", "local_network", "wide_area"]
+    leader_node_id: UUID
+    node_ids: list[UUID] = Field(min_length=1, max_length=64)
+    model: Label
+    engine: Literal["llama_cpp", "vllm"]
+    parallelism: Literal["tensor", "pipeline"]
+    device_count: int = Field(ge=2, le=1024)
+    private_transport: Literal[True]
+
+    @model_validator(mode="after")
+    def topology(self) -> "SharedInferenceGroup":
+        if (
+            len(set(self.node_ids)) != len(self.node_ids)
+            or self.leader_node_id not in self.node_ids
+        ):
+            raise ValueError("Group members must be distinct and include the leader")
+        if (self.mode == "single_host") != (len(self.node_ids) == 1):
+            raise ValueError(
+                "Single-host groups use one computer; network groups require at least two"
+            )
+        if self.device_count < len(self.node_ids):
+            raise ValueError("Each participating computer requires a configured compute device")
+        return self
+
+
 class ModelDeployment(Contract):
     """Worker-local provider alias, never an endpoint URL or credential."""
 
     provider_id: Label
     provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
     connection_id: UUID | None = None
+    shared_inference_group_id: UUID | None = None
     identifier: Label
     available: bool = True
     verified_capabilities: list[Label] = Field(default_factory=list, max_length=32)
@@ -83,6 +114,8 @@ class ModelDeployment(Contract):
         data: dict[str, Any] = handler(self)
         if self.connection_id is None:
             data.pop("connection_id", None)
+        if self.shared_inference_group_id is None:
+            data.pop("shared_inference_group_id", None)
         return data
 
 
@@ -165,6 +198,7 @@ class Advertisement(Contract):
     allowed_job_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
     share_with_workspaces: bool = False
+    shared_inference_groups: list[SharedInferenceGroup] = Field(default_factory=list, max_length=8)
     runtimes: list[Label] = Field(default_factory=list, max_length=32)
     installed_models: list[ModelInventory] = Field(default_factory=list, max_length=128)
     dependencies: list[Label] = Field(default_factory=list, max_length=32)
@@ -178,6 +212,8 @@ class Advertisement(Contract):
         data: dict[str, Any] = handler(self)
         if self.worker_version is None:
             data.pop("worker_version", None)
+        if not self.shared_inference_groups:
+            data.pop("shared_inference_groups", None)
         if not self.coding_repositories:
             data.pop("coding_repositories", None)
         if not self.share_with_workspaces:

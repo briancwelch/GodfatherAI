@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useEffect, useState } from "react";
 import { control } from "../lib/control-client";
 import type { Snapshot } from "../lib/contracts";
@@ -9,6 +11,7 @@ import { Pager } from "./operational";
 export function CreateWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   return (
     <details className="panel workspace-create">
       <summary>Create workspace</summary>
@@ -119,6 +122,7 @@ export default function WorkspaceDirectory({
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [error, setError] = useState("");
+  useFeedback(error);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;

@@ -204,6 +204,8 @@ def models(
             and connection_at(node.last_heartbeat_at, now, request.app.state.settings) == "online"
         )
         for deployment in view.model_deployments:
+            if deployment.shared_inference_group_id is not None:
+                continue
             billing_selection = None
             if deployment.connection_id is not None:
                 from godfather_contracts import ModelSelection

@@ -102,6 +102,11 @@ def main(
         type=Path,
         help="Opt in to text inference with worker-owned provider JSON settings",
     )
+    parser.add_argument(
+        "--shared-inference-config",
+        type=Path,
+        help="Owner-approved private inference group declarations (JSON array)",
+    )
     parser.add_argument("--step-seconds", type=float, default=0)
     parser.add_argument(
         "--coding-config",
@@ -227,11 +232,30 @@ def main(
                 )
                 if local:
                     asyncio.run(ensure_runtime(client.url, args.runtime_folder, local, False))
+        from godfather_contracts import SharedInferenceGroup
+
+        groups = []
+        if args.shared_inference_config:
+            groups = [
+                SharedInferenceGroup.model_validate(g)
+                for g in json.loads(args.shared_inference_config.read_text(encoding="utf-8"))
+            ]
+            if not 1 <= len(groups) <= 8 or len({g.id for g in groups}) != len(groups):
+                raise ValueError("Configure one to eight distinct shared inference groups")
+            if any(
+                c.shared_inference_group_id not in {g.id for g in groups}
+                for c in configs
+                if c.shared_inference_group_id
+            ):
+                raise ValueError("Every shared provider requires matching local owner consent")
+        elif any(c.shared_inference_group_id for c in configs):
+            raise ValueError("Shared inference requires local group consent configuration")
         advertisement = profile(args.simulate) if args.simulate else discover()
         values = advertisement.model_dump()
         from godfather_worker.build_info import worker_version
 
         values["worker_version"] = worker_version()
+        values["shared_inference_groups"] = groups
         if args.primary:
             values["primary_capabilities"] = args.primary
         if args.secondary:
@@ -255,7 +279,7 @@ def main(
                     ]
                 )
             )
-        if configs or args.account_providers:
+        if configs or args.account_providers or groups:
             if args.concurrency not in (None, 1):
                 raise ValueError("Phase 05 inference workers execute one attempt at a time")
             values["concurrency_limit"] = 1
@@ -276,7 +300,11 @@ def main(
                 reference = ToolReference(name=name, version=int(version))
                 tool_definition(reference)
                 tools.append(reference)
-            values["runtimes"] = [*values["runtimes"], "distributed-context-v1"]
+            values["runtimes"] = [
+                *values["runtimes"],
+                "distributed-context-v1",
+                "task-variables-v1",
+            ]
             values["workflow_protocol_version"] = 1
             values["worker_tools"] = tools
             values["tool_permissions"] = args.allow_tool_permission

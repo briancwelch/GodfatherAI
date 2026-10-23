@@ -1,6 +1,10 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
+import { control, ControlError } from "../lib/control-client";
 import { CommandIcon } from "./command-icon";
+import { NodeHeartbeat } from "./node-heartbeat";
 import { WorkerVersion, OwnerName, UserName } from "./node-identity";
 import { BulkTable } from "./bulk-table";
 import { CreateWorkspace, WorkspaceList } from "./workspace-directory";
@@ -43,19 +47,13 @@ import {
   type Snapshot,
 } from "@/lib/contracts";
 
-async function api<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/control/${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(String(response.status));
-  return response.json() as Promise<T>;
-}
+const api = control;
 function usePoll<T>(path: string | null, revision: number) {
   const [record, setRecord] = useState<{ path: string; data: T } | null>(null);
   const [error, setError] = useState("");
+  useFeedback(
+    error === "401" ? "" : error === "403" ? "Workspace access denied" : error,
+  );
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -70,7 +68,12 @@ function usePoll<T>(path: string | null, revision: number) {
         }
       } catch (e) {
         if (active) {
-          const code = e instanceof Error ? e.message : "unavailable";
+          const code =
+            e instanceof ControlError
+              ? String(e.status)
+              : e instanceof Error
+                ? e.message
+                : "unavailable";
           setError(code);
           if (code === "401" || code === "403") setRecord(null);
         }
@@ -213,7 +216,7 @@ export default function CommandCenter({
             <p className="eyebrow">THE GODFATHER / CONTROL PLANE</p>
             <h1>
               {section === "overview" && workspace
-                ? `${data?.workspaces.find((w) => w.id === workspace)?.name || "Workspace"} · Overview`
+                ? `${data?.workspaces.find((w) => w.id === workspace)?.name || "Workspace"} Â· Overview`
                 : labels[section]}
             </h1>
             <p>Real backend state, durable work and recovery activity.</p>
@@ -239,7 +242,7 @@ export default function CommandCenter({
             )}
             {!data && !state.error && (
               <p role="status" className="panel">
-                Loading authorized backend state…
+                Loading authorized backend stateâ€¦
               </p>
             )}
             {data && (
@@ -276,7 +279,7 @@ export default function CommandCenter({
                     </select>
                   </label>
                   <p role="status">
-                    {state.error ? "Stale data" : "Polling every 3 seconds"} ·
+                    {state.error ? "Stale data" : "Polling every 3 seconds"} Â·
                     Updated {localTime(data.generated_at)}
                     <small>
                       {data.workspace_id
@@ -395,7 +398,7 @@ export default function CommandCenter({
                           {nodeTab === "Downloads" ? (
                             <ConnectComputer />
                           ) : (
-                            <NodeTable data={data} />
+                            <NodeTable data={data} stale={!!state.error} />
                           )}
                         </section>
                       </>
@@ -525,7 +528,7 @@ function JobTable({
                 "Unassigned"
               )}
               <small>
-                Attempt {j.attempt_count} · Fence {j.fencing_token}
+                Attempt {j.attempt_count} Â· Fence {j.fencing_token}
               </small>
             </>
           ),
@@ -541,7 +544,13 @@ function JobTable({
   );
 }
 
-function NodeTable({ data }: { data: Snapshot }) {
+function NodeTable({
+  data,
+  stale = false,
+}: {
+  data: Snapshot;
+  stale?: boolean;
+}) {
   return (
     <DataTable
       caption="Registered worker nodes"
@@ -582,7 +591,7 @@ function NodeTable({ data }: { data: Snapshot }) {
             <>
               {n.os} / {n.architecture}
               <small>
-                {n.resources.cpu_count} CPUs · {bytes(n.resources.ram_bytes)}
+                {n.resources.cpu_count} CPUs Â· {bytes(n.resources.ram_bytes)}
               </small>
             </>
           ),
@@ -603,15 +612,24 @@ function NodeTable({ data }: { data: Snapshot }) {
           cell: (n) => (
             <>
               {n.scheduling_policy}
-              {n.share_with_workspaces && " · Workspace contribution"}
+              {n.share_with_workspaces && " Â· Workspace contribution"}
               <small>
-                {n.visible_active_jobs} visible jobs · {n.concurrency_limit}{" "}
+                {n.visible_active_jobs} visible jobs Â· {n.concurrency_limit}{" "}
                 slots
               </small>
             </>
           ),
         },
-        { label: "Heartbeat", cell: (n) => localTime(n.last_heartbeat_at) },
+        {
+          label: "Heartbeat",
+          cell: (n) => (
+            <NodeHeartbeat
+              at={n.last_heartbeat_at}
+              connection={n.connection_status}
+              stale={stale}
+            />
+          ),
+        },
       ]}
     />
   );
@@ -645,7 +663,7 @@ function Overview({ data }: { data: Snapshot }) {
         <Metric
           label="Enabled agent versions"
           value={data.agent_counts.enabled_versions}
-          detail={`${data.agent_counts.active_versions} active · ${data.agent_counts.compatible_online_versions ?? "Select a workspace to check"} compatible online · ${data.agent_counts.disabled_versions} disabled`}
+          detail={`${data.agent_counts.active_versions} active Â· ${data.agent_counts.compatible_online_versions ?? "Select a workspace to check"} compatible online Â· ${data.agent_counts.disabled_versions} disabled`}
         />
       </div>
       {!data.workspace_id && <WorkspaceList data={data} preview />}
@@ -669,7 +687,7 @@ function Overview({ data }: { data: Snapshot }) {
           Physical CPU utilization:{" "}
           {readings.length
             ? `${(readings.reduce((a, b) => a + b, 0) / readings.length).toFixed(1)}% mean of ${readings.length} reported nodes on this page`
-            : "Unavailable — no online physical readings"}
+            : "Unavailable â€” no online physical readings"}
           .
         </p>
         {data.workspace_id && (
@@ -716,6 +734,7 @@ function Overview({ data }: { data: Snapshot }) {
 function SubmitJob({ data }: { data: Snapshot }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   const [agentId, setAgentId] = useState(
     data.agents.find((a) => a.enabled)?.version_id || "",
   );
@@ -819,7 +838,7 @@ function SubmitJob({ data }: { data: Snapshot }) {
             busy || !data.workspace_id || !data.agents.some((a) => a.enabled)
           }
         >
-          {busy ? "Submitting…" : "Submit job"}
+          {busy ? "Submittingâ€¦" : "Submit job"}
         </Button>
         <p className="muted">
           Submission queues work. Execution requires a compatible authorized
@@ -850,7 +869,7 @@ function Inspection({
       <p role="status">
         {state.error
           ? "Record unavailable or permission denied."
-          : "Loading inspection…"}
+          : "Loading inspectionâ€¦"}
       </p>
     );
   return (
@@ -887,12 +906,13 @@ function JobInspection({
 
   const [artifact, setArtifact] = useState<unknown>(undefined);
   const [error, setError] = useState("");
+  useFeedback(error);
   return (
     <>
       <h2>
         {detail.context?.agent_name ||
           (j.type === "result.action" ? "Apply changes" : "Agent task")}{" "}
-        · Job {short(j.id)}
+        Â· Job {short(j.id)}
       </h2>
       <div className="state-strip">
         <StatusBadge value={j.status} />
@@ -1000,7 +1020,7 @@ function JobInspection({
                 label: "Attempt",
                 cell: (a) => (
                   <>
-                    {a.number} · {short(a.id)}
+                    {a.number} Â· {short(a.id)}
                     <small>Fence {a.fencing_token}</small>
                   </>
                 ),
@@ -1090,7 +1110,7 @@ function JobInspection({
             </p>
           )}
           {!checkpoints.data && !checkpoints.error && (
-            <p role="status">Loading checkpoints…</p>
+            <p role="status">Loading checkpointsâ€¦</p>
           )}
           {checkpoints.data && (
             <>
@@ -1117,7 +1137,7 @@ function JobInspection({
                       <>
                         <code>{c.artifact.id}</code>
                         <small title={c.artifact.checksum}>
-                          SHA-256 {short(c.artifact.checksum)} ·{" "}
+                          SHA-256 {short(c.artifact.checksum)} Â·{" "}
                           {c.artifact.size_bytes} bytes
                         </small>
                       </>
@@ -1214,7 +1234,7 @@ function NodeInspection({
         </dd>
         <dt>Platform</dt>
         <dd>
-          {n.os_version} / {n.architecture} · Protocol {n.protocol_version}
+          {n.os_version} / {n.architecture} Â· Protocol {n.protocol_version}
         </dd>
         <dt>Connection / heartbeat</dt>
         <dd>
@@ -1222,7 +1242,7 @@ function NodeInspection({
         </dd>
         <dt>CPU</dt>
         <dd>
-          {n.resources.cpu_name} · {n.resources.cpu_count} CPUs ·{" "}
+          {n.resources.cpu_name} Â· {n.resources.cpu_count} CPUs Â·{" "}
           {n.resources.cpu_percent == null
             ? "Unavailable"
             : `${n.resources.cpu_percent}%`}{" "}
@@ -1230,7 +1250,7 @@ function NodeInspection({
         </dd>
         <dt>RAM</dt>
         <dd>
-          {bytes(n.resources.ram_bytes)} total ·{" "}
+          {bytes(n.resources.ram_bytes)} total Â·{" "}
           {bytes(n.resources.available_ram_bytes)} available
         </dd>
         <dt>GPU / VRAM</dt>
@@ -1238,9 +1258,9 @@ function NodeInspection({
           {n.resources.gpus.length
             ? n.resources.gpus.map((g) => (
                 <p key={g.name}>
-                  {g.name} · {g.backend} ·{" "}
+                  {g.name} Â· {g.backend} Â·{" "}
                   {g.unified_memory ? "Unified memory" : bytes(g.memory_bytes)}{" "}
-                  ·{" "}
+                  Â·{" "}
                   {g.utilization_percent == null
                     ? "Unavailable"
                     : `${g.utilization_percent}%`}{" "}
@@ -1251,12 +1271,12 @@ function NodeInspection({
         </dd>
         <dt>Specialties</dt>
         <dd>
-          Primary: {n.primary_capabilities.join(", ")} · Secondary:{" "}
+          Primary: {n.primary_capabilities.join(", ")} Â· Secondary:{" "}
           {n.secondary_capabilities.join(", ") || "None"}
         </dd>
         <dt>Scheduling</dt>
         <dd>
-          {n.scheduling_policy} · {n.concurrency_limit} concurrent slots
+          {n.scheduling_policy} Â· {n.concurrency_limit} concurrent slots
         </dd>
         <dt>Contribution</dt>
         <dd>
@@ -1416,7 +1436,7 @@ function Models({
               <>
                 {m.deployment.context_window ?? "Unknown"} context tokens
                 <small>
-                  RAM {bytes(m.deployment.estimated_ram_bytes)} · VRAM{" "}
+                  RAM {bytes(m.deployment.estimated_ram_bytes)} Â· VRAM{" "}
                   {bytes(m.deployment.estimated_vram_bytes)}
                 </small>
               </>
@@ -1432,7 +1452,7 @@ function Models({
                 <>
                   {usage.duration_seconds?.toFixed(2)}s
                   <small>
-                    {usage.output_tokens ?? "Unknown"} output tokens ·{" "}
+                    {usage.output_tokens ?? "Unknown"} output tokens Â·{" "}
                     {usage.tokens_per_second?.toFixed(1) ?? "Unknown"} tokens/s
                   </small>
                 </>
@@ -1522,7 +1542,10 @@ function Activity({
                 {(key === "node_id"
                   ? data.nodes.map((n) => [n.node_id, n.name])
                   : key === "job_id"
-                    ? data.jobs.map((j) => [j.id, `${j.type} · ${short(j.id)}`])
+                    ? data.jobs.map((j) => [
+                        j.id,
+                        `${j.type} Â· ${short(j.id)}`,
+                      ])
                     : key === "agent_id"
                       ? [
                           ...new Map(
@@ -1589,7 +1612,7 @@ function Activity({
           Events unavailable. Check filter IDs, time range and permissions.
         </p>
       )}
-      {!state.data && !state.error && <p role="status">Loading events…</p>}
+      {!state.data && !state.error && <p role="status">Loading eventsâ€¦</p>}
       {state.data && (
         <Pager
           offset={offset}

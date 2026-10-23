@@ -13,6 +13,8 @@ from godfather_contracts.agents import (
     WorkflowSubmission,
 )
 from godfather_contracts.distributed import DISTRIBUTED_RUNTIME, DistributedSubmission
+from godfather_contracts.execution import Requirements
+from godfather_contracts.variables import VARIABLE_RUNTIME, references
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -42,7 +44,7 @@ from godfather_api.scheduler import (
 )
 
 router = APIRouter(
-    prefix="/api/v1/distributed/jobs", dependencies=[Depends(HTTPBearer(auto_error=False))]
+    prefix="/api/v1/distributed", dependencies=[Depends(HTTPBearer(auto_error=False))]
 )
 
 
@@ -159,6 +161,16 @@ def advance(session: Session, now: datetime) -> None:
                 WorkflowResult.model_validate(by_key[key].result_refs).final_output
                 for key in task.depends_on
             ]
+            if payload.template_values:
+                payload.template_values = {
+                    **payload.template_values,
+                    **{
+                        "tasks." + key + ".output": WorkflowResult.model_validate(
+                            by_key[key].result_refs
+                        ).final_output
+                        for key in task.depends_on
+                    },
+                }
             job.input_refs = payload.model_dump(mode="json")
             task.ready = True
             job_event(session, job, "dependencies_ready", now)
@@ -191,7 +203,8 @@ def summary(parent: DistributedJob) -> dict[str, object]:
     }
 
 
-@router.post("", status_code=201)
+@router.post("/jobs", status_code=201, include_in_schema=False)
+@router.post("/tasks", status_code=201)
 def submit(
     payload: DistributedSubmission, request: Request, session: SessionDep
 ) -> dict[str, object]:
@@ -252,11 +265,43 @@ def submit(
                 422,
                 "Dependent tasks must use model-only agents to combine predecessor outputs safely",
             )
+        variable_names = references(child_input.instruction, set(payload.variables))
+        if variable_names:
+            if any(step.kind != "model" for step in spec.workflow.steps):
+                raise HTTPException(422, "Task variables require a model-only agent")
+            workspace = session.get(Workspace, payload.workspace_id)
+            assert workspace is not None
+            selection = spec.requirements.model_selection
+            child_input.template_values = {
+                "job.name": parent.name,
+                "job.goal": parent.instruction,
+                "workspace.id": str(workspace.id),
+                "workspace.name": workspace.name,
+                "task.key": task.key,
+                "task.name": task.name,
+                "agent.id": str(task.agent_id),
+                "agent.name": spec.name,
+                "agent.version": str(task.agent_version),
+                "model.identifier": selection.identifier or "Capability selection"
+                if selection
+                else "None",
+                **{"vars." + key: value for key, value in payload.variables.items()},
+            }
+            job.input_refs = child_input.model_dump(mode="json")
+            job.requirements = {
+                **job.requirements,
+                "runtimes": list(dict.fromkeys([*child.requirements.runtimes, VARIABLE_RUNTIME])),
+            }
         if task.depends_on:
             job.requirements = {
                 **job.requirements,
                 "runtimes": list(
-                    dict.fromkeys([*child.requirements.runtimes, DISTRIBUTED_RUNTIME])
+                    dict.fromkeys(
+                        [
+                            *Requirements.model_validate(job.requirements).runtimes,
+                            DISTRIBUTED_RUNTIME,
+                        ]
+                    )
                 ),
             }
         for node_id in task.node_ids:
@@ -319,7 +364,8 @@ def submit(
     return summary(parent)
 
 
-@router.get("")
+@router.get("/jobs", include_in_schema=False)
+@router.get("/tasks")
 def list_jobs(
     request: Request,
     session: SessionDep,
@@ -357,7 +403,8 @@ def list_jobs(
     }
 
 
-@router.get("/options")
+@router.get("/jobs/options", include_in_schema=False)
+@router.get("/tasks/options")
 def options(
     workspace_id: UUID,
     request: Request,
@@ -411,6 +458,7 @@ def options(
                     node.last_heartbeat_at, datetime.now(UTC), request.app.state.settings
                 ),
                 "context_supported": DISTRIBUTED_RUNTIME in spec.runtimes,
+                "variables_supported": VARIABLE_RUNTIME in spec.runtimes,
                 "model_deployments": [
                     row["deployment"]
                     for row in models(workspace_id, request, session, 200, 0, node.id)
@@ -428,7 +476,8 @@ def options(
     }
 
 
-@router.get("/{parent_id}")
+@router.get("/jobs/{parent_id}", include_in_schema=False)
+@router.get("/tasks/{parent_id}")
 def detail(parent_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
     actor = authenticate(request, session, "human")
     parent = authorized(session, parent_id, actor.owner_id)
@@ -524,7 +573,8 @@ def detail(parent_id: UUID, request: Request, session: SessionDep) -> dict[str, 
     }
 
 
-@router.post("/{parent_id}/cancel")
+@router.post("/jobs/{parent_id}/cancel", include_in_schema=False)
+@router.post("/tasks/{parent_id}/cancel")
 def cancel(parent_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
     actor = authenticate(request, session, "human")
     parent = authorized(session, parent_id, actor.owner_id, True)

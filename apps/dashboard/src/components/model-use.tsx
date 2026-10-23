@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useState } from "react";
 import { control } from "../lib/control-client";
 import type { ModelInfo } from "../lib/contracts";
@@ -19,6 +21,7 @@ export function UseModel({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   const restricted = model.workspace_allowed === false;
   if (!restricted)
     return (

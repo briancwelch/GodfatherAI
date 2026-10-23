@@ -1,5 +1,8 @@
 "use client";
 
+import { control, ControlError } from "../lib/control-client";
+import { useFeedback } from "./toast-notifications";
+
 import {
   useCallback,
   useEffect,
@@ -43,7 +46,7 @@ export function InvitationDelivery({ invitation }: { invitation: Invitation }) {
   const [message, setMessage] = useState("");
   return (
     <div>
-      <span>No email sent · Share sign-in instructions</span>{" "}
+      <span>No email sent Â· Share sign-in instructions</span>{" "}
       <button
         type="button"
         onClick={async () => {
@@ -79,26 +82,13 @@ interface MachineCredential {
   node_id: string | null;
 }
 async function call<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/control/${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (response.status === 401) window.location.assign("/?auth=required");
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    throw new Error(
-      typeof payload?.detail === "string"
-        ? payload.detail
-        : response.status === 401
-          ? "Session expired or revoked. Sign in again."
-          : response.status === 403
-            ? "Permission denied."
-            : "Operation not confirmed; check backend availability and permissions.",
-    );
+  try {
+    return await control<T>(path, body);
+  } catch (error) {
+    if (error instanceof ControlError && error.status === 401)
+      window.location.assign("/?auth=required");
+    throw error;
   }
-  return response.json() as Promise<T>;
 }
 
 export default function Administration({
@@ -148,6 +138,7 @@ export default function Administration({
   const [secret, setSecret] = useState<unknown>(null);
   const [invited, setInvited] = useState<Invitation | null>(null);
   const [error, setError] = useState("");
+  useFeedback(error);
   const [busy, setBusy] = useState(false);
   const offset = pages[tab] || 0;
   const setOffset = (value: number) =>
@@ -319,7 +310,7 @@ export default function Administration({
             {error} <a href="/">Return to sign-in</a>
           </p>
         )}
-        {busy && <p role="status">Waiting for backend confirmation…</p>}
+        {busy && <p role="status">Waiting for backend confirmationâ€¦</p>}
         {platform && (
           <a href="/administration/appearance">Configure site appearance</a>
         )}
@@ -329,7 +320,7 @@ export default function Administration({
           value={tab}
           onChange={setTab}
         />
-        {loading && <p role="status">Loading {tab.toLowerCase()}…</p>}
+        {loading && <p role="status">Loading {tab.toLowerCase()}â€¦</p>}
         <div aria-busy={loading} inert={loading}>
           {page && !loading && (
             <Pager
@@ -347,10 +338,10 @@ export default function Administration({
           >
             <h2>Your account</h2>
             <p>
-              {user.display_name} · {user.email}
+              {user.display_name} Â· {user.email}
             </p>
             <p>
-              {user.roles.join(", ")} · Account ID {user.id}
+              {user.roles.join(", ")} Â· Account ID {user.id}
             </p>
             <ConfirmAction
               label="Revoke all my sessions"
@@ -397,7 +388,7 @@ export default function Administration({
           >
             <h2>{tab === "Permissions" ? "Permissions" : "Workspaces"}</h2>
             {!snapshot ? (
-              <p role="status">Loading authorized workspaces…</p>
+              <p role="status">Loading authorized workspacesâ€¦</p>
             ) : (
               <label>
                 Workspace
@@ -467,7 +458,7 @@ export default function Administration({
             {tab === "Permissions" && membership && (
               <>
                 <p>
-                  Owner {membership.owner_id} ·{" "}
+                  Owner {membership.owner_id} Â·{" "}
                   {membership.shared ? "Explicitly shared" : "Private"}
                 </p>
                 <Pager
@@ -767,7 +758,7 @@ export default function Administration({
                   </div>
                 )}
                 {invitations === null ? (
-                  <p>Loading invitations…</p>
+                  <p>Loading invitationsâ€¦</p>
                 ) : (
                   <DataTable
                     caption="Persisted invitations"
@@ -776,7 +767,7 @@ export default function Administration({
                     columns={[
                       {
                         label: "Email / roles",
-                        cell: (i) => `${i.email} · ${i.roles.join(", ")}`,
+                        cell: (i) => `${i.email} Â· ${i.roles.join(", ")}`,
                       },
                       {
                         label: "Status",
@@ -835,7 +826,7 @@ export default function Administration({
                   history are preserved.
                 </p>
                 {accounts === null ? (
-                  <p>Loading users…</p>
+                  <p>Loading usersâ€¦</p>
                 ) : accounts.length === 0 ? (
                   <p>No linked users.</p>
                 ) : (
@@ -852,7 +843,7 @@ export default function Administration({
                         const f = form(e);
                         if (
                           window.confirm(
-                            "Apply roles/account status and revoke this user’s sessions?",
+                            "Apply roles/account status and revoke this userâ€™s sessions?",
                           )
                         )
                           void operate(`administration/users/${account.id}`, {
@@ -869,7 +860,7 @@ export default function Administration({
                         {account.display_name}
                       </h3>
                       <p>
-                        {account.email} · {account.id}
+                        {account.email} Â· {account.id}
                       </p>
                       <RoleChoices selected={account.roles} />
                       <label>
@@ -905,7 +896,7 @@ export default function Administration({
               >
                 <h2>Security audit</h2>
                 {audit === null ? (
-                  <p>Loading audit history…</p>
+                  <p>Loading audit historyâ€¦</p>
                 ) : (
                   <DataTable
                     caption="Durable security events"
@@ -1079,7 +1070,7 @@ export function AccountPicker({
           </option>
         ))}
       </select>
-      {loading && <span role="status">Loading accounts…</span>}
+      {loading && <span role="status">Loading accountsâ€¦</span>}
       {error && <span role="alert">{error}</span>}
       {platform && page && (
         <Pager

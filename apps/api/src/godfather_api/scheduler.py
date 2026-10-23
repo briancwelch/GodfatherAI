@@ -56,6 +56,12 @@ def workspace_access(session: Session, owner_id: UUID, workspace_id: UUID) -> bo
 
 
 def permitted(session: Session, job: Job, node: Node) -> bool:
+    from godfather_api.shared_inference import group_permitted
+
+    return base_permitted(session, job, node) and group_permitted(session, job, node)
+
+
+def base_permitted(session: Session, job: Job, node: Node) -> bool:
     from godfather_api.authentication import permissions
     from godfather_api.distributed import participant_permitted
     from godfather_api.provider_connections import allowed
@@ -249,6 +255,15 @@ def deployment_for(
             capabilities.update(model.declared_capabilities)
         if (
             model.available
+            and model.shared_inference_group_id
+            == (requirements.shared_inference.id if requirements.shared_inference else None)
+            and (
+                not requirements.shared_inference
+                or (
+                    model.provider == "openai_compatible"
+                    and model.identifier == requirements.shared_inference.model
+                )
+            )
             and model.connection_id == selection.connection_id
             and (
                 model.provider not in ("openai", "anthropic")
@@ -305,7 +320,9 @@ def finish_failure(
     selection = Requirements.model_validate(job.requirements).model_selection
     if job.type == "result.action":
         retryable = False  # A lost side effect is always inspected, never reassigned/replayed.
-    if selection and selection.connection_id:
+    if (selection and selection.connection_id) or Requirements.model_validate(
+        job.requirements
+    ).shared_inference:
         retryable = False
     end_attempt(session, job, attempt, code, retryable and job.attempt_count <= job.retry_limit)
     attempt.status, attempt.finished_at = "FAILED", now
@@ -348,7 +365,16 @@ def maintain(session: Session, settings: Settings, now: datetime) -> None:
         )
         if attempt is None:
             continue
-        expired = attempt.lease_expires_at <= now
+        from godfather_api.shared_inference import group_permitted
+
+        group_lost = False
+        if Requirements.model_validate(job.requirements).shared_inference:
+            leader = session.get(Node, attempt.node_id)
+            group_lost = leader is None or not group_permitted(session, job, leader)
+            if group_lost and job.cancel_requested_at is None:
+                finish_failure(session, job, attempt, now, "permission_lost", False)
+                continue
+        expired = group_lost or attempt.lease_expires_at <= now
         timed_out = attempt.deadline_at is not None and attempt.deadline_at <= now
         if expired or timed_out:
             if job.cancel_requested_at is not None:
@@ -399,17 +425,30 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
     active_jobs = session.scalars(select(Job).where(Job.status.in_(ACTIVE))).all()
     reservations: dict[UUID, list[Requirements]] = {n.id: [] for n in nodes}
     active_by_owner = Counter(j.owner_id for j in active_jobs)
+
+    def reserve(job: Job, deployment: ModelDeployment | None) -> None:
+        requirements = Requirements.model_validate(job.requirements)
+        if requirements.shared_inference:
+            for member in requirements.shared_inference.node_ids:
+                if member in reservations:
+                    reservations[member].extend(
+                        [Requirements()]
+                        * max(0, views[member].concurrency_limit - len(reservations[member]))
+                    )
+        elif job.assigned_node_id in reservations:
+            reservations[job.assigned_node_id].append(reservation(requirements, deployment))
+
     for job in active_jobs:
-        if job.assigned_node_id in reservations:
+        if Requirements.model_validate(job.requirements).shared_inference:
+            reserve(job, None)
+        elif job.assigned_node_id in reservations:
             attempt = session.scalar(
                 select(Attempt).where(Attempt.job_id == job.id, Attempt.number == job.attempt_count)
             )
             deployment = None
             if attempt and attempt.result.get("deployment"):
                 deployment = ModelDeployment.model_validate(attempt.result["deployment"])
-            reservations[job.assigned_node_id].append(
-                reservation(Requirements.model_validate(job.requirements), deployment)
-            )
+            reserve(job, deployment)
     # No fixed queue window: an incompatible head cannot hide compatible queued jobs.
     pending = list(
         session.scalars(
@@ -471,26 +510,48 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 n
                 for n in nodes
                 if len(reservations[n.id]) < n.concurrency_limit
+                and (
+                    not requirements.shared_inference
+                    or all(
+                        member in reservations and not reservations[member]
+                        for member in requirements.shared_inference.node_ids
+                    )
+                )
                 and permitted(session, job, n)
                 and eligible(session, job, n, views[n.id])
                 and matches(requirements, views[n.id], reservations[n.id])
             ]
-            # A preferred owner gets first refusal while it has compatible queued work.
+
+            # Every participating owner retains first refusal on preferred computers.
+            def owner_waiting(member: Node, selected_job: Job = job) -> bool:
+                return (
+                    member.scheduling_policy == "preferred"
+                    and member.owner_id != selected_job.owner_id
+                    and any(
+                        queued.owner_id == member.owner_id
+                        and permitted(session, queued, member)
+                        and eligible(session, queued, member, views[member.id])
+                        and matches(
+                            Requirements.model_validate(queued.requirements),
+                            views[member.id],
+                            reservations[member.id],
+                        )
+                        for queued in pending
+                    )
+                )
+
             candidates = [
                 n
                 for n in candidates
-                if n.scheduling_policy != "preferred"
-                or n.owner_id == job.owner_id
-                or not any(
-                    queued.owner_id == n.owner_id
-                    and permitted(session, queued, n)
-                    and eligible(session, queued, n, views[n.id])
-                    and matches(
-                        Requirements.model_validate(queued.requirements),
-                        views[n.id],
-                        reservations[n.id],
+                if not any(
+                    owner_waiting(member)
+                    for member in nodes
+                    if member.id
+                    in (
+                        requirements.shared_inference.node_ids
+                        if requirements.shared_inference
+                        else [n.id]
                     )
-                    for queued in pending
                 )
             ]
             if not candidates:
@@ -551,6 +612,14 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
                 recovered_from_attempt_id=previous.id if previous else None,
                 resumed_checkpoint_version=checkpoint_version,
             )
+            if requirements.shared_inference:
+                attempt.result = {
+                    **attempt.result,
+                    "shared_sessions": {
+                        str(member): str(next(n.session_id for n in nodes if n.id == member))
+                        for member in requirements.shared_inference.node_ids
+                    },
+                }
             session.add(attempt)
             session.flush()
             job_event(session, job, "assigned", now, attempt, {"fencing_token": job.fencing_token})
@@ -573,7 +642,7 @@ def schedule(session: Session, settings: Settings, now: datetime) -> int:
             turn += 1
             users[job.owner_id].scheduling_turn = turn
             active_by_owner[job.owner_id] += 1
-            reservations[node.id].append(reservation(requirements, deployment))
+            reserve(job, deployment)
             pending.remove(job)
             count += 1
             selected = True

@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { BulkTable } from "./bulk-table";
 
 import {
@@ -68,6 +70,7 @@ export function AgentManagement({
   const selected = data.agents.find((a) => a.version_id === selectedId);
   const [options, setOptions] = useState<Options | null>(null);
   const [error, setError] = useState("");
+  useFeedback(error);
   const [editing, setEditing] = useState<AgentInfo | "new" | null>(() =>
     initialModel &&
     data.workspaces.some((w) => w.id === data.workspace_id && w.can_manage)
@@ -371,6 +374,7 @@ function AgentEditor({
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   const firstStep = initial?.definition.workflow.steps[0];
   const simpleWorkflow =
     !initial ||
@@ -800,6 +804,7 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   useEffect(() => {
     dialog.current?.showModal();
   }, []);
@@ -907,6 +912,7 @@ export function RepositorySelection({ workspace }: { workspace: string }) {
     { id: string; name: string; node_name: string; available: boolean }[]
   >([]);
   const [error, setError] = useState("");
+  useFeedback(error);
   useEffect(() => {
     let active = true;
     void control<typeof repositories>(

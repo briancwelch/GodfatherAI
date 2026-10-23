@@ -119,6 +119,8 @@ class AgentDefinition(Contract):
 
     @model_validator(mode="after")
     def portable_requirements(self) -> "AgentDefinition":
+        if self.requirements.shared_inference:
+            raise ValueError("Submit shared inference through Distributed Jobs")
         data_steps = [s for s in self.workflow.steps if s.kind in ("analytics", "report", "image")]
         if data_steps:
             if len(data_steps) != len(self.workflow.steps) or self.requirements.model_selection:
@@ -202,6 +204,10 @@ class ArtifactReference(Contract):
 
 class WorkflowInput(Contract):
     dependency_outputs: list[ArtifactReference] = Field(default_factory=list, max_length=16)
+    template_values: dict[
+        Annotated[str, Field(max_length=100)],
+        Annotated[str, Field(max_length=4096)] | ArtifactReference,
+    ] = Field(default_factory=dict, max_length=64)
     instruction: str = Field(min_length=1, max_length=4096)
     repository_id: UUID | None = None
     dataset: Dataset | None = None
@@ -217,6 +223,8 @@ class WorkflowInput(Contract):
         data: dict[str, Any] = handler(self)
         if not self.dependency_outputs:
             data.pop("dependency_outputs", None)
+        if not self.template_values:
+            data.pop("template_values", None)
         if self.repository_id is None:
             data.pop("repository_id", None)
         if not self.search_terms:

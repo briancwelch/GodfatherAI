@@ -74,9 +74,11 @@ export async function backend(
 const uuid = "[0-9a-fA-F-]{36}";
 export function allowedPath(path: string, method: string): boolean {
   const reads = [
-    "distributed/jobs",
-    "distributed/jobs/options",
-    `distributed/jobs/${uuid}`,
+    "distributed/(jobs|tasks)",
+    "distributed/(jobs|tasks)/options",
+    `distributed/(jobs|tasks)/${uuid}`,
+    "shared-inference/options",
+    "shared-inference/jobs",
     "appearance",
     "workloads/options",
     `workloads/jobs/${uuid}/files/${uuid}/[0-9]+`,
@@ -99,9 +101,12 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
-    "distributed/jobs",
-    `distributed/jobs/${uuid}/cancel`,
+    "distributed/(jobs|tasks)",
+    `distributed/(jobs|tasks)/${uuid}/cancel`,
+    "shared-inference/jobs",
     "account/profile",
+    "shared-inference/options",
+    "shared-inference/jobs",
     "appearance",
     "workloads/jobs",
     "account/providers/(openai|anthropic)(/(disconnect|computers))?",
@@ -154,7 +159,7 @@ export async function proxy(request: NextRequest, segments: string[]) {
   const bodyLimit =
     path === "workloads/jobs"
       ? 1500000
-      : path === "distributed/jobs"
+      : ["distributed/jobs", "distributed/tasks"].includes(path)
         ? 131072
         : 16384;
   if (Number(request.headers.get("content-length") ?? 0) > bodyLimit)

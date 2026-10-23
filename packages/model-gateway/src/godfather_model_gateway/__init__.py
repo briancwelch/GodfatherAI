@@ -34,6 +34,7 @@ class ProviderConfig(Contract):
     id: Label
     provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
     connection_id: UUID | None = None
+    shared_inference_group_id: UUID | None = None
     model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
     _api_key: SecretStr | None = PrivateAttr(default=None)
     _account_key: bool = PrivateAttr(default=False)
@@ -60,6 +61,12 @@ class ProviderConfig(Contract):
             if self.url not in ("http://127.0.0.1:11434", endpoint):
                 raise ValueError("Native providers require the official HTTPS API endpoint")
             self.url = endpoint
+        if self.shared_inference_group_id and (
+            self.provider != "openai_compatible" or self.connection_id
+        ):
+            raise ValueError(
+                "Shared inference requires an owner-configured local OpenAI-compatible engine"
+            )
         parsed = urlsplit(self.url)
         if (
             parsed.scheme not in ("http", "https")
@@ -77,6 +84,8 @@ class ProviderConfig(Contract):
             "api.anthropic.com",
         ):
             raise ValueError("Use the native provider with its independent credential connection")
+        if self.shared_inference_group_id and not loopback:
+            raise ValueError("Shared engine endpoints must remain on the leader worker loopback")
         if self.provider == "ollama" and not loopback:
             raise ValueError("Ollama endpoints must remain worker-local loopback")
         if parsed.scheme == "http" and not loopback:

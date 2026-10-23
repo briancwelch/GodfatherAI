@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useId, useRef, useState } from "react";
 import { CommandIcon } from "./command-icon";
 
@@ -28,6 +30,7 @@ export function WorkspaceDelete({
   const [downloaded, setDownloaded] = useState(false);
   const [skip, setSkip] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   const exporting = phase === "preparing" || phase === "downloading";
   const deleting = phase === "deleting";
   function close() {

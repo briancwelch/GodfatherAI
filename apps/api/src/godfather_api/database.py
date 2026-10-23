@@ -23,7 +23,12 @@ class Database:
             },
         )
         self.sessions: sessionmaker[Session] = sessionmaker(
-            self.engine, expire_on_commit=False, info={"test": settings.environment == "test"}
+            self.engine,
+            expire_on_commit=False,
+            info={
+                "test": settings.environment == "test",
+                "suspect_after_seconds": settings.suspect_after_seconds,
+            },
         )
 
     def ready(self) -> bool:

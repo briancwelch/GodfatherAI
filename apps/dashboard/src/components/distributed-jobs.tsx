@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { StatusBadge } from "./operational";
@@ -13,6 +15,8 @@ import type {
   Snapshot,
 } from "../lib/contracts";
 import { localTime } from "../lib/contracts";
+import { VariableLegend } from "./variable-legend";
+import { taskReferences } from "../lib/task-variables";
 
 interface ParticipantOption {
   node_id: string;
@@ -20,6 +24,7 @@ interface ParticipantOption {
   state: string;
   connection_status: string;
   context_supported: boolean;
+  variables_supported?: boolean;
   model_deployments: { identifier: string; available: boolean }[];
 }
 interface Options {
@@ -77,6 +82,7 @@ interface Draft {
   agent: string;
   node: string;
   backups: boolean;
+  depends_on: string[];
 }
 const makeDraft = (index: number): Draft => ({
   key: `task${index}`,
@@ -85,6 +91,7 @@ const makeDraft = (index: number): Draft => ({
   agent: "",
   node: "",
   backups: false,
+  depends_on: [],
 });
 const terminal = ["COMPLETED", "FAILED", "CANCELLED"];
 
@@ -340,8 +347,10 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
 export default function DistributedJobs({
   user,
   initialWorkspace = "",
+  initialJob = "",
 }: {
   initialWorkspace?: string;
+  initialJob?: string;
   user: { id: string; display_name: string; roles: string[] };
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
@@ -349,20 +358,29 @@ export default function DistributedJobs({
   const [options, setOptions] = useState<Options | null>(null);
   const [participants, setParticipants] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([makeDraft(1), makeDraft(2)]);
+  const [customVariables, setCustomVariables] = useState("");
   const [finalAgent, setFinalAgent] = useState("");
   const [finalNode, setFinalNode] = useState("");
   const [finalBackups, setFinalBackups] = useState(false);
   const [history, setHistory] = useState<Page<Summary> | null>(null);
   const [offset, setOffset] = useState(0);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialJob);
   const [detail, setDetail] = useState<DistributedDetail | null>(null);
   const [output, setOutput] = useState<{ job: string; value: Json } | null>(
     null,
   );
   const [error, setError] = useState("");
+  useFeedback(error);
   const [notice, setNotice] = useState("");
+  useFeedback("", notice);
   const [submissionErrors, setSubmissionErrors] = useState<string[]>([]);
   const [submissionNotice, setSubmissionNotice] = useState("");
+  useFeedback(
+    submissionErrors.length
+      ? `${submissionErrors[0]}${submissionErrors.length > 1 ? ` ${submissionErrors.length - 1} more requirements are listed beside Run.` : ""}`
+      : "",
+    submissionNotice,
+  );
   const submissionFeedback = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
@@ -382,7 +400,7 @@ export default function DistributedJobs({
           workspace || snapshot.workspace_id || snapshot.workspaces[0]?.id;
         const catalog = id
           ? await control<Options>(
-              `distributed/jobs/options?workspace_id=${id}`,
+              `distributed/tasks/options?workspace_id=${id}`,
             )
           : null;
         if (active) {
@@ -407,10 +425,10 @@ export default function DistributedJobs({
     const refresh = async () => {
       try {
         const page = await control<Page<Summary>>(
-          `distributed/jobs?workspace_id=${workspaceId}&offset=${offset}&limit=25`,
+          `distributed/tasks?workspace_id=${workspaceId}&offset=${offset}&limit=25`,
         );
         const current = selected
-          ? await control<DistributedDetail>(`distributed/jobs/${selected}`)
+          ? await control<DistributedDetail>(`distributed/tasks/${selected}`)
           : null;
         if (active) {
           setHistory(page);
@@ -501,7 +519,7 @@ export default function DistributedJobs({
         : `agent_offset=${options.agent_offset + 25}&node_offset=${options.node_offset}`;
     try {
       const page = await control<Options>(
-        `distributed/jobs/options?workspace_id=${workspaceId}&${query}`,
+        `distributed/tasks/options?workspace_id=${workspaceId}&${query}`,
       );
       setOptions({
         ...page,
@@ -520,17 +538,80 @@ export default function DistributedJobs({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const validation = [...blockers];
+    let variables: Record<string, string> = {};
+    try {
+      variables = customVariables.trim() ? JSON.parse(customVariables) : {};
+      if (
+        !variables ||
+        Array.isArray(variables) ||
+        typeof variables !== "object" ||
+        Object.keys(variables).length > 32 ||
+        Object.entries(variables).some(
+          ([key, value]) =>
+            !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(key) ||
+            typeof value !== "string" ||
+            value.length > 2000,
+        )
+      )
+        throw new Error();
+    } catch {
+      variables = {};
+      validation.push(
+        "Custom variables must be a JSON object with up to 32 named text values (2000 characters each).",
+      );
+    }
     if (!String(form.get("name") || "").trim())
       validation.push("Enter a job name.");
     if (!String(form.get("instruction") || "").trim())
       validation.push("Enter the shared goal.");
+    try {
+      taskReferences(
+        String(form.get("instruction") || ""),
+        [],
+        Object.keys(variables),
+      );
+    } catch (error) {
+      validation.push(
+        `Shared goal: ${error instanceof Error ? error.message : "Check variable references."}`,
+      );
+    }
     drafts.forEach((draft, index) => {
-      const prefix = `Parallel task ${index + 1}`;
+      const prefix = `Task ${index + 1}`;
       if (!draft.name.trim()) validation.push(`${prefix}: enter a task name.`);
       if (!agents.some((agent) => agent.version_id === draft.agent))
         validation.push(`${prefix}: choose an agent / model.`);
       if (!(draft.node || nodes[index % Math.max(1, nodes.length)]?.node_id))
         validation.push(`${prefix}: choose a participating computer.`);
+      let referenced: string[] = [];
+      try {
+        referenced = taskReferences(
+          draft.instruction,
+          drafts.slice(0, index).map((item) => item.key),
+          Object.keys(variables),
+        );
+      } catch (error) {
+        validation.push(
+          `${prefix}: ${error instanceof Error ? error.message : "Check variable references."}`,
+        );
+      }
+      if (
+        (referenced.length ||
+          draft.instruction.includes("{{") ||
+          String(form.get("instruction") || "").includes("{{")) &&
+        !(
+          draft.backups
+            ? nodes
+            : nodes.filter(
+                (node) =>
+                  node.node_id ===
+                  (draft.node ||
+                    nodes[index % Math.max(1, nodes.length)]?.node_id),
+              )
+        ).some((node) => node.variables_supported)
+      )
+        validation.push(
+          `${prefix}: choose a worker updated for task variables.`,
+        );
       if (!draft.instruction.trim())
         validation.push(`${prefix}: enter task instructions.`);
     });
@@ -574,7 +655,17 @@ export default function DistributedJobs({
           agent_version: agent.version,
           input: { instruction: draft.instruction },
           node_ids: draft.backups ? participants : [node],
-          depends_on: [],
+          depends_on: [
+            ...new Set([
+              ...draft.depends_on,
+              ...Array.from(
+                draft.instruction.matchAll(
+                  /\{\{\s*tasks\.([A-Za-z][A-Za-z0-9_-]*)\.output\s*\}\}/g,
+                ),
+                (match) => match[1],
+              ),
+            ]),
+          ],
           paid_consent: form.get("paid_consent") === "on",
         };
       });
@@ -610,12 +701,13 @@ export default function DistributedJobs({
           "Assign each selected computer to a task or enable its use as a compatible backup.",
         );
       const result = await control<{ id: string }>(
-        "distributed/jobs",
+        "distributed/tasks",
         {
           workspace_id: workspaceId,
           name: form.get("name"),
           instruction: form.get("instruction"),
           node_ids: participants,
+          variables,
           final_task: "final",
           tasks,
         },
@@ -625,7 +717,7 @@ export default function DistributedJobs({
       setOffset(0);
       setRevision((value) => value + 1);
       setSubmissionNotice(
-        "Distributed job created. Ready tasks are queued for the selected compatible computers; execution has not been confirmed yet.",
+        "Distributed tasks created. Ready tasks are queued for the selected compatible computers; execution has not been confirmed yet.",
       );
     } catch (e) {
       setSubmissionErrors([
@@ -650,7 +742,7 @@ export default function DistributedJobs({
     },
   );
   const pages = (
-    <div className="actions" aria-label="Distributed job pagination">
+    <div className="actions" aria-label="Distributed tasks pagination">
       <button
         type="button"
         className="action secondary"
@@ -676,7 +768,7 @@ export default function DistributedJobs({
   );
   return (
     <ApplicationShell
-      section="distributed"
+      section="distributed-tasks"
       data={data}
       account={user}
       stale={stale}
@@ -696,10 +788,11 @@ export default function DistributedJobs({
       }
     >
       <main id="main-content" className="distributed-page">
-        <h1>Distributed Jobs</h1>
+        <h1>Distributed Tasks</h1>
         <p>
           One goal, multiple selected computers, concurrent model tasks and one
-          combined result.
+          combined result. Independent tasks run in parallel; dependent tasks
+          wait for committed results.
         </p>
         {error && <p role="alert">{error}</p>}
         {notice && <p role="status">{notice}</p>}
@@ -709,7 +802,7 @@ export default function DistributedJobs({
           </p>
         )}
         <details className="panel" open>
-          <summary>Submit a distributed job</summary>
+          <summary>Submit distributed tasks</summary>
           {!data ? (
             <p>Loading authorized workspaces and participants...</p>
           ) : !data.workspaces.length ? (
@@ -826,7 +919,8 @@ export default function DistributedJobs({
                 )}
               </fieldset>
               <p>
-                Choose independent tasks. Each agent supplies its configured
+                Define tasks and optional dependencies. Use the variable legend
+                to reference earlier outputs. Each agent supplies its configured
                 model and checkpoints. Select different computers for concurrent
                 execution; incompatible or offline selections stay queued.
               </p>
@@ -836,9 +930,61 @@ export default function DistributedJobs({
                   read-only model agent in Agents or load more agents.
                 </p>
               )}
+              <VariableLegend
+                drafts={drafts}
+                customVariables={customVariables}
+              />
+              <details>
+                <summary>Custom variables</summary>
+                <label>
+                  Named text values (JSON object)
+                  <textarea
+                    value={customVariables}
+                    maxLength={66000}
+                    rows={3}
+                    placeholder={'{"project": "My project"}'}
+                    onChange={(event) => setCustomVariables(event.target.value)}
+                  />
+                </label>
+                <small>
+                  Use <code>{"{{vars.project}}"}</code> in task instructions.
+                  Values are literal text; secrets and filesystem access are not
+                  supported.
+                </small>
+              </details>
               {drafts.map((draft, index) => (
                 <fieldset key={draft.key}>
-                  <legend>Parallel task {index + 1}</legend>
+                  <legend>
+                    Task {index + 1} - {draft.key}
+                  </legend>
+                  {index > 0 && (
+                    <div className="task-dependencies">
+                      <strong>Wait for results from</strong>
+                      {drafts.slice(0, index).map((prior) => (
+                        <label className="check-label" key={prior.key}>
+                          <input
+                            type="checkbox"
+                            checked={draft.depends_on.includes(prior.key)}
+                            onChange={(event) =>
+                              patch(index, {
+                                depends_on: event.target.checked
+                                  ? [...draft.depends_on, prior.key]
+                                  : draft.depends_on.filter(
+                                      (key) => key !== prior.key,
+                                    ),
+                              })
+                            }
+                          />
+                          {prior.name} ({prior.key})
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <small>
+                    Result reference:{" "}
+                    <code>{`{{tasks.${draft.key}.output}}`}</code>. Referencing
+                    an earlier output automatically adds a dependency.
+                  </small>
                   <div className="workload-fields">
                     <label>
                       Task name
@@ -925,7 +1071,14 @@ export default function DistributedJobs({
                       className="action secondary"
                       onClick={() =>
                         setDrafts((items) =>
-                          items.filter((item) => item.key !== draft.key),
+                          items
+                            .filter((item) => item.key !== draft.key)
+                            .map((item) => ({
+                              ...item,
+                              depends_on: item.depends_on.filter(
+                                (key) => key !== draft.key,
+                              ),
+                            })),
                         )
                       }
                     >
@@ -1088,7 +1241,7 @@ export default function DistributedJobs({
                 >
                   <strong>
                     {submissionErrors.length
-                      ? "Distributed job was not confirmed"
+                      ? "Distributed tasks was not confirmed"
                       : "Submission confirmed"}
                   </strong>
                   {submissionErrors.length > 0 ? (
@@ -1115,7 +1268,7 @@ export default function DistributedJobs({
                 disabled={busy || stale}
                 aria-describedby="distributed-submit-help"
               >
-                {busy ? "Submitting..." : "Run distributed job"}
+                {busy ? "Submitting..." : "Run distributed tasks"}
               </button>
               <small id="distributed-submit-help">
                 Run checks the required fields and reports any blockers above. A
@@ -1126,16 +1279,16 @@ export default function DistributedJobs({
           )}
         </details>
         <section className="panel">
-          <h2>Distributed job history</h2>
+          <h2>Distributed tasks history</h2>
           {pages}
           <div
             className="table-scroll"
             tabIndex={0}
             role="region"
-            aria-label="Distributed job history"
+            aria-label="Distributed tasks history"
           >
             <table>
-              <caption>Workspace distributed jobs</caption>
+              <caption>Workspace distributed task groups</caption>
               <thead>
                 <tr>
                   <th>Job</th>
@@ -1169,7 +1322,9 @@ export default function DistributedJobs({
                 ))}
                 {history?.items.length === 0 && (
                   <tr>
-                    <td colSpan={4}>No distributed jobs in this workspace.</td>
+                    <td colSpan={4}>
+                      No distributed task groups in this workspace.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -1177,7 +1332,9 @@ export default function DistributedJobs({
           </div>
           {pages}
         </section>
-        {selected && !detail && <p role="status">Loading distributed job...</p>}
+        {selected && !detail && (
+          <p role="status">Loading distributed tasks...</p>
+        )}
         {detail && (
           <>
             <section className="panel" id="distributed-job-detail">
@@ -1201,13 +1358,16 @@ export default function DistributedJobs({
                   onClick={async () => {
                     if (
                       !window.confirm(
-                        "Cancel this distributed job and every unfinished subtask? Committed outputs will be retained.",
+                        "Cancel this task group and every unfinished subtask? Committed outputs will be retained.",
                       )
                     )
                       return;
                     setBusy(true);
                     try {
-                      await control(`distributed/jobs/${detail.id}/cancel`, {});
+                      await control(
+                        `distributed/tasks/${detail.id}/cancel`,
+                        {},
+                      );
                       setNotice(
                         "Cancellation confirmed. Committed results are retained.",
                       );
@@ -1223,7 +1383,7 @@ export default function DistributedJobs({
                     }
                   }}
                 >
-                  Cancel distributed job
+                  Cancel distributed tasks
                 </button>
               )}
               {output && output.job === finalJobId && (

@@ -3,6 +3,10 @@ import icons from "../lib/command-icons.json";
 
 export function CommandIcon({ label }: { label: string }) {
   const mapping: [RegExp, keyof typeof icons][] = [
+    [/warning|error/i, "warning"],
+    [/verified|success/i, "verified"],
+    [/notification/i, "notification"],
+    [/tasks/i, "run"],
     [/refresh/i, "refresh"],
     [/invit/i, "invitations"],
     [/users|account/i, "users"],

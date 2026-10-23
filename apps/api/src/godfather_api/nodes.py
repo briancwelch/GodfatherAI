@@ -337,6 +337,10 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
         and connection_at(node.last_heartbeat_at, now, settings) != "offline"
     ):
         raise HTTPException(409, "Node identity has an active worker process")
+    if any(node.id not in group.node_ids for group in payload.shared_inference_groups):
+        raise HTTPException(422, "Workers may consent only to groups containing their own node ID")
+    if len({g.id for g in payload.shared_inference_groups}) != len(payload.shared_inference_groups):
+        raise HTTPException(422, "Shared inference groups must have distinct IDs")
     node.os, node.os_version, node.architecture = (
         payload.os,
         payload.os_version,
@@ -362,6 +366,7 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
             "sandbox_modes",
             "discovery_warnings",
             "coding_repositories",
+            "shared_inference_groups",
         },
     )
     node.scheduling_policy, node.concurrency_limit = (

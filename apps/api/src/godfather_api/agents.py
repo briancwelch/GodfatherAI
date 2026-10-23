@@ -308,7 +308,7 @@ def coding_repositories(
 @router.post("/workflow/jobs", response_model=JobView, status_code=201)
 def submit_workflow(payload: WorkflowSubmission, request: Request, session: SessionDep) -> JobView:
     actor = authenticate(request, session, "human")
-    if payload.input.dependency_outputs:
+    if payload.input.dependency_outputs or payload.input.template_values:
         raise HTTPException(422, "Dependency outputs are assigned by the distributed coordinator")
     lock_workspace(session, payload.workspace_id)
     agent = find_agent(session, payload.agent_id, actor.owner_id, payload.agent_version)

@@ -31,7 +31,13 @@ async def discover_models(configs: list[ProviderConfig]) -> list[ModelDeployment
         try:
             # Startup/refresh must not block heartbeats for a provider's inference timeout.
             async with asyncio.timeout(5):
-                return await provider.discover()
+                deployments = await provider.discover()
+                return [
+                    m.model_copy(
+                        update={"shared_inference_group_id": config.shared_inference_group_id}
+                    )
+                    for m in deployments
+                ]
         except (GatewayError, TimeoutError) as error:
             # Omit unavailable providers; replacement registration withdraws old models.
             code = error.code if isinstance(error, GatewayError) else "provider_timeout"

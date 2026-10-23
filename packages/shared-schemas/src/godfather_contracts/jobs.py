@@ -48,6 +48,10 @@ class JobSubmission(Contract):
 
     @model_validator(mode="after")
     def execution_contract(self) -> "JobSubmission":
+        if self.requirements.shared_inference and (
+            self.type != "inference.text" or self.retry.limit
+        ):
+            raise ValueError("Shared inference uses one non-replaying inference attempt")
         if self.type == "inference.text":
             if (
                 not isinstance(self.input, InferenceInput)

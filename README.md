@@ -10,22 +10,24 @@ Workspace contribution replaces sharing ID entry with
 **Contribute this computer to my workspaces**. Install, connect, approve and use
 workspace membership for ordinary/distributed work. Existing computers keep their
 permissions until their owners opt in. See [simple contribution](docs/operations/simple-contribution.md).
-Models → Add / use model lists installed local and connected API models. The
+Models â†’ Add / use model lists installed local and connected API models. The
 worker update enables basic model-only agents while preserving existing settings.
 
-**Workload release: 0.4.0-rc.3 — Phase 12 images, analytics and reporting.** See the
+**Workload release: 0.4.0-rc.3 â€” Phase 12 images, analytics and reporting.** See the
 [Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
 bounded dataset uploads, deterministic calculations and downloadable reports.
 No real dataset or paid image call is authorized; live customer acceptance remains
 pending. Google Sign-In remains separate from data-source and provider consent.
 Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is preserved.
 
+**Local source update:** [Shared inference and Distributed Tasks](docs/operations/shared-inference-and-tasks-2026-10-22.md) separates one-model Distributed Jobs from the existing task graphs, adds named result variables, persistent corner job feedback and a factual Nodes heartbeat trace. Physical shared inference requires an owner-configured private engine and hardware acceptance; this source update is not deployed or packaged.
+
 ## Start here
 
 The [model setup guide](docs/operations/consigliere-ui.md#add-a-local-model)
 explains local/API model selection, workspace authorization and optional downloads.
 Installed models are labeled and cannot be selected for another download.
-All three updated installers are under **Nodes → Downloads**. Existing-model use,
+All three updated installers are under **Nodes â†’ Downloads**. Existing-model use,
 downloads and account API access retain their separate owner permissions; API
 runs require explicit provider consent.
 
@@ -39,14 +41,14 @@ The [deployment verification](docs/operations/command-center-management-verifica
 UI update adds normal window resizing, an embedded Projects tab, a compact
 navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
-Worker downloads are under **Nodes → Downloads**. Tailscale is detected when
+Worker downloads are under **Nodes â†’ Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
 configured. Consigliere **0.7.0-rc.1** is the current worker. The earlier coordinator
 release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
 Earlier release **0.3.2-rc.1** added accomplishment-first coding results and
-**Run agent → Preview changes → Apply to my project**. See the
+**Run agent â†’ Preview changes â†’ Apply to my project**. See the
 [result/application guide](docs/operations/results-and-apply.md). Application
 requires the updated worker and explicit local project permission. The versioned
 [result action design](docs/decisions/0018-result-preview-and-actions.md) keeps
@@ -66,7 +68,7 @@ and node history, using those unchanged worker installers. See the
 **Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
 The normal worker is a tray app with automatic browser pairing, saved OS credentials
 and outbound HTTPS. Tailscale is optional. Open
-[Command Center](https://app.the-godfather.ai) → **Nodes → Connect a computer**
+[Command Center](https://app.the-godfather.ai) â†’ **Nodes â†’ Connect a computer**
 for Windows, Apple silicon and Intel Mac downloads. The updated installers passed
 the [recorded local and native checks](docs/operations/phase-12-verification-2026-10-21.md).
 That report also records coordinator activation and public checks.

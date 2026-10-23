@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { useFeedback } from "./toast-notifications";
 import { control } from "../lib/control-client";
 import {
   appearanceStyle,
@@ -18,6 +19,7 @@ export function AppearanceSettings() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  useFeedback(error, message);
   useEffect(() => {
     let active = true;
     control<Appearance>("appearance")

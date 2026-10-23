@@ -161,6 +161,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from godfather_api.distributed import router as distributed_router
 
     app.include_router(distributed_router)
+    from godfather_api.shared_inference import router as shared_inference_router
+
+    app.include_router(shared_inference_router)
     from godfather_api.result_actions import router as result_actions_router
 
     app.include_router(result_actions_router)

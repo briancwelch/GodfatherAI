@@ -5,6 +5,7 @@ import {
   cloneElement,
   isValidElement,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
 import { AppearanceProvider, useAppearance } from "./appearance-provider";
@@ -12,12 +13,17 @@ import { WorkerBuildProvider } from "./node-identity";
 import { CommandIcon } from "./command-icon";
 import type { Snapshot } from "../lib/contracts";
 import { Avatar } from "./avatar";
+import {
+  clearNotifications,
+  resumeJobNotifications,
+} from "../lib/notifications";
 
 export const navigation = {
   overview: "Overview",
   workspaces: "Workspaces",
   jobs: "Jobs",
   distributed: "Distributed Jobs",
+  "distributed-tasks": "Distributed Tasks",
   nodes: "Nodes",
   agents: "Agents",
   models: "Models",
@@ -116,6 +122,10 @@ function DesktopShell({
   children: ReactNode;
 }) {
   const { settings, theme, setTheme } = useAppearance();
+  const actorId = data?.actor_id;
+  useEffect(() => {
+    if (actorId) resumeJobNotifications(actorId);
+  }, [actorId]);
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(
     null,
   );
@@ -131,7 +141,14 @@ function DesktopShell({
   const sectionHref = (key: string) => {
     const path = key === "overview" ? "/" : `/${key}`;
     return data?.workspace_id &&
-      ["jobs", "distributed", "agents", "models", "activity"].includes(key)
+      [
+        "jobs",
+        "distributed",
+        "distributed-tasks",
+        "agents",
+        "models",
+        "activity",
+      ].includes(key)
       ? `${path}?workspace=${data.workspace_id}`
       : path;
   };
@@ -179,8 +196,10 @@ function DesktopShell({
                 const response = await fetch("/api/auth/logout", {
                   method: "POST",
                 });
-                if (response.ok) window.location.assign("/");
-                else
+                if (response.ok) {
+                  clearNotifications();
+                  window.location.assign("/");
+                } else
                   window.alert(
                     "Logout not confirmed; retry when the API is available.",
                   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useState, type ComponentPropsWithoutRef } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -415,6 +417,7 @@ export function CodingResult({
   const [reviewed, setReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useFeedback(error);
   const [queued, setQueued] = useState("");
   const [confirm, setConfirm] = useState(false);
   const files = Array.isArray(data.files_changed)

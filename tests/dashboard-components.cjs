@@ -11,6 +11,7 @@ for (const extension of [".tsx", ".ts"]) {
     const source = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2017,
         jsx: ts.JsxEmit.ReactJSX,
         esModuleInterop: true,
       },
@@ -923,4 +924,124 @@ test("distributed bridge and navigation retain explicit scoped operations", () =
     false,
   );
   assert.equal(shell.navigation.distributed, "Distributed Jobs");
+});
+
+const notifications = require("../apps/dashboard/src/lib/notifications.ts");
+const toasts = require("../apps/dashboard/src/components/toast-notifications.tsx");
+const heartbeat = require("../apps/dashboard/src/components/node-heartbeat.tsx");
+const sharedInference = require("../apps/dashboard/src/components/shared-inference-jobs.tsx");
+test("toasts expose persistent errors, measured or indeterminate processing, type icons and dismissal", () => {
+  for (const kind of ["error", "success", "notification", "processing"]) {
+    const html = renderToStaticMarkup(
+      React.createElement(toasts.ToastCard, {
+        toast: { id: "test", kind, title: "Status", message: "Safe message" },
+        dismiss: () => {},
+      }),
+    );
+    assert.match(html, new RegExp(`toast-${kind}`));
+    assert.match(html, /Dismiss Status/);
+    assert.match(html, kind === "error" ? /role="alert"/ : /role="status"/);
+    if (kind === "processing") {
+      assert.match(html, /<progress/);
+      assert.doesNotMatch(html, /value="/);
+    }
+  }
+});
+test("pending and error toasts have no expiry while success expires; duplicates do not stack", (context) => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {};
+  const delays = [];
+  context.mock.method(globalThis, "setTimeout", (_fn, delay) => {
+    delays.push(delay);
+    return 1;
+  });
+  try {
+    notifications.clearNotifications();
+    notifications.notifyToast({
+      id: "pending",
+      kind: "processing",
+      title: "Job",
+      message: "Queued",
+    });
+    notifications.notifyToast({
+      id: "pending",
+      kind: "processing",
+      title: "Job",
+      message: "Running",
+    });
+    notifications.notifyError("Denied");
+    notifications.notifyError("Denied");
+    assert.equal(delays.length, 0);
+    assert.equal(notifications.toastSnapshot().length, 2);
+    notifications.notifyToast({
+      id: "pending",
+      kind: "success",
+      title: "Job",
+      message: "Completed",
+    });
+    assert.deepEqual(delays, [8000]);
+    assert.equal(notifications.toastSnapshot().length, 2);
+  } finally {
+    notifications.clearNotifications();
+    globalThis.window = originalWindow;
+  }
+});
+test("heartbeat graph marks only an actual recent receipt and stops for stale or unknown data", () => {
+  assert.equal(heartbeat.heartbeatPath(Infinity, true), "M0 14 H144");
+  assert.equal(heartbeat.heartbeatPath(31, true), "M0 14 H144");
+  assert.equal(heartbeat.heartbeatPath(1, false), "M0 14 H144");
+  assert.notEqual(
+    heartbeat.heartbeatPath(1, true),
+    heartbeat.heartbeatPath(15, true),
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(heartbeat.NodeHeartbeat, {
+      at: null,
+      connection: "offline",
+    }),
+  );
+  assert.match(html, /unknown.*offline/);
+});
+test("shared inference exposes all three distinct setups and both task and job navigation", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(sharedInference.InferenceSetups, {
+      mode: "single_host",
+      select: () => {},
+    }),
+  );
+  assert.match(html, /GPUs inside one computer/);
+  assert.match(html, /fast local network/);
+  assert.match(html, /across locations/);
+  assert.equal(shell.navigation["distributed-tasks"], "Distributed Tasks");
+  for (const path of [
+    "distributed/tasks",
+    "distributed/tasks/options",
+    "shared-inference/jobs",
+    "shared-inference/options",
+  ])
+    assert.equal(server.allowedPath(path, "GET"), true);
+  assert.equal(server.allowedPath("shared-inference/jobs", "POST"), true);
+  assert.equal(
+    server.allowedPath("shared-inference/execute-shell", "POST"),
+    false,
+  );
+});
+
+const taskVariables = require("../apps/dashboard/src/lib/task-variables.ts");
+test("task variables infer result dependencies and reject unknown, malformed or future outputs before posting", () => {
+  assert.deepEqual(
+    taskVariables.taskReferences(
+      "Add 2+2 and {{tasks.task1.output}} for {{workspace.name}} / {{vars.project}}",
+      ["task1"],
+      ["project"],
+    ),
+    ["task1"],
+  );
+  for (const text of [
+    "{{tasks.task2.output}}",
+    "{{workspace.secret}}",
+    "{{vars.missing}}",
+    "{{workspace.name",
+  ])
+    assert.throws(() => taskVariables.taskReferences(text, ["task1"], []));
 });

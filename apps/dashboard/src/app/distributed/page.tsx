@@ -1,4 +1,4 @@
-import DistributedJobs from "../../components/distributed-jobs";
+import DistributedJobs from "../../components/shared-inference-jobs";
 import { requireUser } from "../../lib/control-server";
 export default async function DistributedPage({
   searchParams,

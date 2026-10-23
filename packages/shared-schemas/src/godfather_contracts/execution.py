@@ -5,7 +5,14 @@ from uuid import UUID
 
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
-from godfather_contracts import Contract, Label, ModelInventory, ModelSelection, ToolReference
+from godfather_contracts import (
+    Contract,
+    Label,
+    ModelInventory,
+    ModelSelection,
+    SharedInferenceGroup,
+    ToolReference,
+)
 
 
 class Requirements(Contract):
@@ -22,13 +29,21 @@ class Requirements(Contract):
     sandbox_modes: list[Label] = Field(default_factory=list, max_length=16)
     models: list[ModelInventory] = Field(default_factory=list, max_length=32)
     model_selection: ModelSelection | None = None
+    shared_inference: SharedInferenceGroup | None = None
+    wide_area_consent: bool = False
     tools: list[ToolReference] = Field(default_factory=list, max_length=16)
     tool_permissions: list[Label] = Field(default_factory=list, max_length=16)
 
     @model_serializer(mode="wrap")
     def compatible_requirements(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
-        for field in ("model_selection", "tools", "tool_permissions"):
+        for field in (
+            "model_selection",
+            "tools",
+            "tool_permissions",
+            "shared_inference",
+            "wide_area_consent",
+        ):
             if not getattr(self, field):
                 data.pop(field, None)
         return data

@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from godfather_contracts import Contract
 from godfather_contracts.agents import WorkflowInput
+from godfather_contracts.variables import output_tasks
 
 DISTRIBUTED_RUNTIME = "distributed-context-v1"
 TaskKey = Annotated[str, Field(pattern=r"^[a-zA-Z][a-zA-Z0-9_-]{0,63}$")]
@@ -29,11 +30,16 @@ class DistributedSubmission(Contract):
     instruction: str = Field(min_length=1, max_length=2000)
     node_ids: list[UUID] = Field(min_length=2, max_length=64)
     tasks: list[DistributedTaskSpec] = Field(min_length=2, max_length=16)
+    variables: dict[TaskKey, Annotated[str, Field(max_length=2000)]] = Field(
+        default_factory=dict, max_length=32
+    )
     final_task: TaskKey
     priority: int = Field(default=0, ge=-100, le=100)
 
     @model_validator(mode="after")
     def graph(self) -> "DistributedSubmission":
+        if output_tasks(self.instruction, set(self.variables)):
+            raise ValueError("Task outputs belong in task instructions, not the shared goal")
         selected = set(self.node_ids)
         if len(selected) != len(self.node_ids):
             raise ValueError("Select distinct participating nodes")
@@ -41,12 +47,20 @@ class DistributedSubmission(Contract):
         used: set[UUID] = set()
         for task in self.tasks:
             nodes = set(task.node_ids)
+            if len(set(task.depends_on)) != len(task.depends_on):
+                raise ValueError("Task dependencies must be distinct")
+            implicit = output_tasks(task.input.instruction, set(self.variables))
+            task.depends_on = list(dict.fromkeys([*task.depends_on, *implicit]))
             dependencies = set(task.depends_on)
             if task.key in seen or not dependencies <= seen.keys():
                 raise ValueError("Task keys must be unique and dependencies must precede the task")
             if len(nodes) != len(task.node_ids) or not nodes <= selected:
                 raise ValueError("Each task must use distinct nodes from the selected participants")
-            if len(dependencies) != len(task.depends_on) or task.input.dependency_outputs:
+            if (
+                len(dependencies) != len(task.depends_on)
+                or task.input.dependency_outputs
+                or task.input.template_values
+            ):
                 raise ValueError("Dependency outputs are assigned only by the coordinator")
             if len(self.instruction + "\nTask:\n" + task.input.instruction) > 4096:
                 raise ValueError("Combined goal and task instruction must fit 4096 characters")

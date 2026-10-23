@@ -1,5 +1,7 @@
 "use client";
 
+import { useFeedback } from "./toast-notifications";
+
 import { useEffect, useRef, useState } from "react";
 import { control } from "../lib/control-client";
 import type { JobInfo, ModelInfo } from "../lib/contracts";
@@ -26,6 +28,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
   const [options, setOptions] = useState<InstallOptions | null>(null);
   const [nodeId, setNodeId] = useState("");
   const [error, setError] = useState("");
+  useFeedback(error);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"available" | "download">("available");
   const [provider, setProvider] = useState("");

@@ -526,3 +526,43 @@ def test_parallel_tasks_use_different_installed_models(h: Harness) -> None:
         "fixture",
         "specialist-model",
     }
+
+
+def test_named_output_variables_wait_and_resolve_committed_predecessor(h: Harness) -> None:
+    from godfather_contracts.variables import VARIABLE_RUNTIME
+
+    value = payload(h, setup(h))
+    for index in range(2):
+        registration = h.registrations[index].model_copy(
+            update={"runtimes": [*h.registrations[index].runtimes, VARIABLE_RUNTIME]}
+        )
+        assert (
+            h.client.post(
+                "/api/v1/workers/register",
+                headers=headers(h.workers[index]),
+                json=registration.model_dump(mode="json"),
+            ).status_code
+            == 200
+        )
+        h.registrations[index] = registration
+    value["variables"] = {"project": "Arithmetic"}
+    value["tasks"][0]["input"]["instruction"] = "Add 1+1"
+    value["tasks"][1]["input"]["instruction"] = (
+        "For {{workspace.name}} / {{vars.project}}, add 2+2 then add {{tasks.task0.output}}"
+    )
+    parent = submit(h, value)
+    assert h.tick() == 1 and h.poll(1) is None
+    first = h.poll(0)
+    assert first
+    run_worker(h, first, RecordingModel("2"), 0)
+    assert h.tick() == 1
+    second = h.poll(1)
+    assert second
+    model = RecordingModel("6")
+    run_worker(h, second, model, 1)
+    assert '"text": "2"' in model.prompts[0]
+    assert "Synthetic only / Arithmetic" in model.prompts[0]
+    assert "{{tasks.task0.output}}" not in model.prompts[0]
+    current = detail(h, parent["id"])
+    task = next(t for t in current["tasks"] if t["key"] == "task1")
+    assert task["depends_on"] == ["task0"] and task["status"] == "COMPLETED"
