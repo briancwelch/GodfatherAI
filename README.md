@@ -4,12 +4,14 @@ The Godfather lets you run AI jobs from a browser using your own computers and
 models. The **Command Center** is where you manage workspaces, agents and jobs.
 **Consigliere** is the worker app you install on each computer that will do the work.
 
-The current published coordinator and desktop worker release is **0.9.0-rc.2**.
-See the [release verification](docs/operations/worker-recovery-verification-2026-10-23.md)
-for the package hashes and checks performed.
+The current published coordinator release is **0.9.0-rc.3**; desktop workers remain
+**0.9.0-rc.2**. See the [image permission fix verification](docs/operations/image-workspace-verification-2026-10-23.md)
+and [worker release verification](docs/operations/worker-recovery-verification-2026-10-23.md)
+for package hashes and checks performed.
 
-This follow-up adds project-dependency recovery, a continuous heartbeat history
-and aligned Distributed Jobs choices.
+Images now shows cloud models that need workspace permission and lets workspace
+owners/administrators allow their selected model directly. No worker update is
+needed for this website correction.
 
 ## Sign in
 
