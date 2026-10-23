@@ -38,6 +38,7 @@ from godfather_worker.native_desktop import (
     set_login_startup,
 )
 from godfather_worker.pairing import await_approval
+from godfather_worker.project_readiness import PROJECT_ISSUES
 from godfather_worker.tailscale import detect as detect_tailscale
 
 
@@ -98,6 +99,9 @@ class Application:
         self.preferences = desktop_theme.load(folder)
         self.settings_dialog: Any = None
         self.project_editor: Any = None
+        self.project_issues: dict[str, str] = {}
+        self.projects_checked = False
+        self.project_warning = tk.StringVar(value="")
         self.command_images = {
             name: tk.PhotoImage(file=str(Path(__file__).parent / f"assets/command-{name}.png"))
             for name in (
@@ -289,6 +293,13 @@ class Application:
             style="Muted.TLabel",
             wraplength=280,
         ).pack(anchor="w")
+        self.project_notice = ttk.LabelFrame(network, text="PROJECT NEEDS ATTENTION", padding=12)
+        ttk.Label(self.project_notice, textvariable=self.project_warning, wraplength=260).pack(
+            anchor="w", fill="x"
+        )
+        ttk.Button(self.project_notice, text="Open Projects", command=self.projects).pack(
+            anchor="w", pady=(8, 0)
+        )
         ttk.Label(connection, textvariable=self.hardware, style="Muted.TLabel").grid(
             row=1, column=0, columnspan=2, sticky="w", pady=16
         )
@@ -803,6 +814,35 @@ class Application:
             self.set_connection_state("PAUSED")
             self.resume_button.configure(state="normal")
 
+    def show_project_readiness(self, issues: list[dict[str, str]]) -> None:
+        self.projects_checked = True
+        repositories = {str(repository.id): repository for repository in self.settings.repositories}
+        self.project_issues = {
+            issue["repository_id"]: issue["code"]
+            for issue in issues
+            if issue.get("repository_id") in repositories and issue.get("code") in PROJECT_ISSUES
+        }
+        messages = [
+            f"{repositories[identity].name}: {PROJECT_ISSUES[code][0]}"
+            for identity, code in self.project_issues.items()
+        ]
+        if messages:
+            others = (
+                f" {len(messages) - 1} more project(s) need attention; select them in Projects."
+                if len(messages) > 1
+                else ""
+            )
+            self.project_warning.set(
+                messages[0] + " Other enabled work can continue. "
+                "Open Projects for repair steps." + others
+            )
+            self.project_notice.pack(fill="x", pady=(12, 0))
+        else:
+            self.project_warning.set("")
+            self.project_notice.pack_forget()
+        if self.project_editor:
+            self.project_editor.refresh_projects()
+
     def pump(self) -> None:
         self.timer = None
         while not self.events.empty():
@@ -943,6 +983,8 @@ class Application:
                     if values.get("state", "online") != "disabled"
                     else "Node disabled by administrator"
                 )
+            elif name == "worker.project_readiness":
+                self.show_project_readiness(values["issues"])
             elif name == "worker.coordinator_unavailable":
                 self.set_connection_state("DISCONNECTED · RETRYING")
                 self.status.set("Connection lost. Reconnecting automatically...")

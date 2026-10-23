@@ -42,6 +42,8 @@ For updates, use **File > Check for updates**. If your old worker has no updater
 quit it from the tray and run the new installer. Keep your existing computer
 identity when reconnecting. See [worker installation and settings](docs/operations/consigliere-ui.md)
 and [workspace contribution](docs/operations/simple-contribution.md).
+For a missing project dependency or the older **Worker could not continue**
+message, see [project recovery](docs/operations/worker-project-recovery.md).
 Linux workers currently use the [portable/source instructions](docs/operations/worker-distribution.md);
 the current desktop installer catalog covers Windows and both Mac architectures.
 

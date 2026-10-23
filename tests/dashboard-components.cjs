@@ -1028,14 +1028,40 @@ test("pending and error toasts have no expiry while success expires; duplicates 
     globalThis.window = originalWindow;
   }
 });
-test("heartbeat graph marks only an actual recent receipt and stops for stale or unknown data", () => {
-  assert.equal(heartbeat.heartbeatPath(Infinity, true), "M0 14 H144");
-  assert.equal(heartbeat.heartbeatPath(31, true), "M0 14 H144");
-  assert.equal(heartbeat.heartbeatPath(1, false), "M0 14 H144");
-  assert.notEqual(
-    heartbeat.heartbeatPath(1, true),
-    heartbeat.heartbeatPath(15, true),
+test("heartbeat history retains real receipts, deduplicates refreshes and scrolls them out of a bounded window", () => {
+  const now = Date.parse("2026-10-23T15:00:00Z");
+  const first = new Date(now - 20_000).toISOString();
+  const second = new Date(now - 10_000).toISOString();
+  let receipts = heartbeat.recordHeartbeat([], first);
+  receipts = heartbeat.recordHeartbeat(receipts, second);
+  assert.deepEqual(receipts, [now - 20_000, now - 10_000]);
+  assert.deepEqual(heartbeat.recordHeartbeat(receipts, second), receipts);
+  assert.deepEqual(heartbeat.recordHeartbeat(receipts, null), receipts);
+  assert.deepEqual(heartbeat.recordHeartbeat(receipts, "invalid"), receipts);
+  assert.equal(
+    (heartbeat.heartbeatPath(receipts, now).match(/l3 -3/g) || []).length,
+    2,
   );
+  assert.notEqual(
+    heartbeat.heartbeatPath(receipts, now),
+    heartbeat.heartbeatPath(receipts, now + 100),
+  );
+  assert.equal(heartbeat.heartbeatPath(receipts, now + 61_000), "M0 14 H144");
+  assert.equal(heartbeat.heartbeatPath([now + 1000, NaN], now), "M0 14 H144");
+  assert.deepEqual(
+    heartbeat.recordHeartbeat(receipts, new Date(now + 60_000).toISOString()),
+    [now + 60_000],
+  );
+  assert.deepEqual(
+    heartbeat.recordHeartbeat(receipts, new Date(now - 80_000).toISOString()),
+    receipts,
+  );
+  for (let i = 0; i < 100; i++)
+    receipts = heartbeat.recordHeartbeat(
+      receipts,
+      new Date(now + i).toISOString(),
+    );
+  assert.equal(receipts.length, 64);
   const html = renderToStaticMarkup(
     React.createElement(heartbeat.NodeHeartbeat, {
       at: null,
@@ -1043,6 +1069,7 @@ test("heartbeat graph marks only an actual recent receipt and stops for stale or
     }),
   );
   assert.match(html, /unknown.*offline/);
+  assert.match(html, /60-second window/);
 });
 test("shared inference exposes all three distinct setups and both task and job navigation", () => {
   const html = renderToStaticMarkup(

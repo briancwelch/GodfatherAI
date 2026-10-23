@@ -168,33 +168,18 @@ def main(
                 repositories
             ):
                 raise ValueError("Configure one to eight distinct coding repositories")
-            from godfather_worker.coding import command, local_engine
+            from godfather_worker.project_readiness import available_projects
 
-            git_code, _ = asyncio.run(command(["git", "--version"], repositories[0].path))
-            if git_code:
-                raise ValueError("Coding requires an existing Git installation")
-
-            for repository in repositories:
-                endpoint = asyncio.run(local_engine(repository.path))
-                code, output = asyncio.run(
-                    command(
-                        [
-                            "docker",
-                            "--host",
-                            endpoint,
-                            "image",
-                            "inspect",
-                            "--format",
-                            "{{.Os}}",
-                            repository.image,
-                        ],
-                        repository.path,
-                    )
-                )
-                if code or output.strip() != "linux":
-                    raise ValueError(
-                        "Coding requires an existing pinned Linux image; no automatic downloads"
-                    )
+            repositories, issues = asyncio.run(available_projects(repositories))
+            notify("worker.project_readiness", issues=issues)
+            if not repositories:
+                args.allow_tool_permission = [
+                    permission
+                    for permission in args.allow_tool_permission
+                    if permission != "coding.workspace"
+                ]
+        else:
+            notify("worker.project_readiness", issues=[])
         if args.allow_model_installation and (not args.inference_config or args.simulate):
             raise ValueError(
                 "Model installation requires a physical worker and local inference configuration"

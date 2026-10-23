@@ -2399,6 +2399,7 @@ body {
 }
 .node-heartbeat svg {
   display: block;
+  overflow: hidden;
   background: repeating-linear-gradient(
     90deg,
     transparent 0 17px,

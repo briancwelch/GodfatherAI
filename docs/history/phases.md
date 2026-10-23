@@ -2261,3 +2261,13 @@ Data comes from authenticated workspace options/submission and persisted job out
 Browser tests must cover upload-to-job navigation, unavailable images, readable
 tables/charts, download links and narrow viewport layout. Technical diagnostics
 remain in existing Job detail disclosure.
+
+# Worker recovery and continuous heartbeat follow-up (2026-10-23)
+
+Owner-requested follow-up to the cloud image release: optional coding dependency
+failures no longer stop unrelated worker capabilities, and the Nodes EKG retains
+observed heartbeat history instead of resetting on each receipt. See
+[verification](../operations/worker-recovery-verification-2026-10-23.md),
+[project recovery](../operations/worker-project-recovery.md) and
+[ADR 0028](../decisions/0028-optional-project-readiness.md). Existing project
+consent, identity, scheduler compatibility and fencing remain in force.

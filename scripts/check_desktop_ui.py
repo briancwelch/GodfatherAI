@@ -192,6 +192,24 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     assert app.settings.repositories[0].allowed_user_ids == [
                         UUID(identity["owner_id"])
                     ]
+                    repo = app.settings.repositories[0]
+                    app.show_project_readiness(
+                        [{"repository_id": str(repo.id), "code": "image_missing"}]
+                    )
+                    app.notebook.select(0)  # type: ignore[no-untyped-call]
+                    root.update()
+                    assert app.project_notice.winfo_ismapped()
+                    assert "image is missing" in app.project_warning.get()
+                    if screenshot:
+                        from PIL import ImageGrab
+
+                        ImageGrab.grab(window=root.winfo_id()).save(
+                            screenshot.with_stem(screenshot.stem + "-project-warning")
+                        )
+                    app.projects()
+                    project.projects.selection_set(str(repo.id))
+                    project.selected_readiness()
+                    assert repo.image in project.readiness.get()
                     root.update()
                     if screenshot:
                         from PIL import ImageGrab
@@ -205,6 +223,8 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                         project.save_button.winfo_rooty() + project.save_button.winfo_height()
                         <= root.winfo_rooty() + root.winfo_height()
                     )
+                    app.show_project_readiness([])
+                    assert not app.project_notice.winfo_ismapped()
                     app.advanced()
                     dialog = app.settings_dialog
                     assert len(dialog.notebook.tabs()) == 6

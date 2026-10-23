@@ -12,6 +12,7 @@ from godfather_contracts.coding import CodingRepository, CodingSetupOptions
 from godfather_worker.coding_setup import check_project, local_images, project_config, setup_options
 from godfather_worker.desktop import save_settings
 from godfather_worker.desktop_layout import table_scroll
+from godfather_worker.project_readiness import PROJECT_ISSUES, project_issue_message
 
 if TYPE_CHECKING:
     from godfather_worker.desktop_app import Application
@@ -50,20 +51,31 @@ class Projects:
         rows.rowconfigure(0, weight=1)
         rows.columnconfigure(0, weight=1)
         self.projects = ttk.Treeview(
-            rows, columns=("project", "apply"), show="headings", selectmode="browse", height=6
+            rows,
+            columns=("project", "readiness", "apply"),
+            show="headings",
+            selectmode="browse",
+            height=6,
         )
         self.projects.heading("project", text="Project")
         self.projects.heading("apply", text="Changes")
-        self.projects.column("project", width=160, minwidth=100)
-        self.projects.column("apply", width=110, minwidth=90, stretch=False)
+        self.projects.heading("readiness", text="Availability")
+        self.projects.column("project", width=140, minwidth=80)
+        self.projects.column("readiness", width=110, minwidth=90)
+        self.projects.column("apply", width=100, minwidth=80, stretch=False)
         self.projects.grid(row=0, column=0, sticky="nsew")
         table_scroll(rows, self.projects)
+        self.readiness = tk.StringVar(value="Resume checks saved project dependencies.")
+        self.projects.bind("<<TreeviewSelect>>", self.selected_readiness)
         self.refresh_projects()
         controls = ttk.Frame(library)
         controls.pack(fill="x", pady=(8, 0))
         ttk.Button(controls, text="Remove", command=self.remove).pack(side="left")
         ttk.Button(controls, text="Allow / disable Apply", command=self.toggle_apply).pack(
             side="left", padx=6
+        )
+        ttk.Label(library, textvariable=self.readiness, wraplength=300).pack(
+            anchor="w", fill="x", pady=(10, 0)
         )
         self.name, self.folder = tk.StringVar(), tk.StringVar()
         self.workspace, self.image = tk.StringVar(), tk.StringVar()
@@ -206,14 +218,40 @@ class Projects:
         return True
 
     def refresh_projects(self) -> None:
+        selected = self.projects.selection()
         self.projects.delete(*self.projects.get_children())
         for repo in self.app.settings.repositories:
             self.projects.insert(
                 "",
                 tk.END,
                 iid=str(repo.id),
-                values=(repo.name, "Apply enabled" if repo.allow_apply else "Preview only"),
+                values=(
+                    repo.name,
+                    "Needs attention"
+                    if str(repo.id) in self.app.project_issues
+                    else "Ready"
+                    if self.app.projects_checked
+                    else "Check on Resume",
+                    "Apply enabled" if repo.allow_apply else "Preview only",
+                ),
             )
+        if selected and self.projects.exists(selected[0]):
+            self.projects.selection_set(selected)
+        self.selected_readiness()
+
+    def selected_readiness(self, _event: object = None) -> None:
+        selected = self.projects.selection()
+        repository = next(
+            (r for r in self.app.settings.repositories if selected and str(r.id) == selected[0]),
+            None,
+        )
+        code = self.app.project_issues.get(str(repository.id)) if repository else None
+        self.readiness.set(
+            project_issue_message(repository, code)
+            if repository and code and code in PROJECT_ISSUES
+            else "Pause and Resume to check saved project dependencies. "
+            "Unavailable projects stay saved and are withheld from coding jobs."
+        )
 
     def toggle_apply(self) -> None:
         selected = self.projects.selection()
@@ -230,6 +268,12 @@ class Projects:
         settings = self.app.settings.model_copy(update={"repositories": repositories})
         save_settings(self.app.folder / "settings.json", settings)
         self.app.settings = settings
+        self.app.show_project_readiness(
+            [
+                {"repository_id": identity, "code": code}
+                for identity, code in self.app.project_issues.items()
+            ]
+        )
         self.refresh_projects()
         self.status.set(
             "Saved. Resume the worker, then refresh the repository list in Command Center."

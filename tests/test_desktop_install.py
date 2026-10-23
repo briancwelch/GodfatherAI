@@ -54,7 +54,24 @@ def test_automatic_update_waits_for_worker_and_retains_owner_data(
     data = local / "The Godfather/Desktop Worker"
     data.mkdir(parents=True)
     identity = data / "settings.json"
-    identity.write_text("owner-data-preserved")
+    saved_settings = json.dumps(
+        {
+            "inference": True,
+            "account_providers": True,
+            "cloud_images": True,
+            "repositories": [
+                {
+                    "id": "existing-project",
+                    "image": "sha256:" + "a" * 64,
+                    "allowed_user_ids": ["existing-owner"],
+                    "allow_apply": True,
+                }
+            ],
+        }
+    )
+    identity.write_text(saved_settings)
+    coding = data / "coding.json"
+    coding.write_text("existing-local-project-scopes")
     monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
     monkeypatch.setattr("sys.argv", ["setup", "--auto-update", "--wait-pid", "12345"])
     monkeypatch.setenv("LOCALAPPDATA", str(local))
@@ -66,7 +83,8 @@ def test_automatic_update_waits_for_worker_and_retains_owner_data(
     monkeypatch.setattr("godfather_worker.windows_setup.subprocess.Popen", launched)
     assert windows_setup.main() == 0
     wait.assert_called_once()
-    assert identity.read_text() == "owner-data-preserved"
+    assert identity.read_text() == saved_settings
+    assert coding.read_text() == "existing-local-project-scopes"
     assert Path(launched.call_args.args[0][0]).read_bytes() == b"new application fixture"
 
 

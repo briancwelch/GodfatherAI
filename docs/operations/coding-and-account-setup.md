@@ -70,6 +70,11 @@ Docker. Its selected Linux image must contain `/bin/sh`, `cp`, test tools and
 offline dependencies. Merely connecting a worker requires none of those tools.
 Setup does not install them or execute commands on the host.
 
+If an existing project's folder, Git, Docker engine or pinned image becomes
+unavailable, see [project recovery](worker-project-recovery.md). The updated
+worker retains that grant, shows the specific problem and withholds the project
+from jobs while other enabled work can connect. Pause/Resume rechecks after repair.
+
 Git trust is limited to the approved project directory for each worker Git
 command. No global Git setting is changed. Network fetches, optional locks and
 filesystem-monitor commands remain disabled.

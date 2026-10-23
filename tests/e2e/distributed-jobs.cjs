@@ -98,7 +98,8 @@ const detail = () => ({
 });
 let sharedSubmitted = null,
   sharedStatus = "RUNNING",
-  nodeOffline = false;
+  nodeOffline = false,
+  nodeHeartbeatAt = null;
 const sharedId = uuid(90);
 const inferenceGroups = ["single_host", "local_network", "wide_area"].map(
   (mode, index) => ({
@@ -135,7 +136,7 @@ const nodeInventory = () =>
     architecture: "x86_64",
     state: nodeOffline ? "offline" : "online",
     connection_status: nodeOffline ? "offline" : "online",
-    last_heartbeat_at: new Date().toISOString(),
+    last_heartbeat_at: nodeHeartbeatAt || new Date().toISOString(),
     protocol_version: 1,
     resources: {
       source: "physical",
@@ -471,7 +472,10 @@ const server = http.createServer(async (req, res) => {
       3,
     );
     assert.deepEqual(submitted.tasks[1].depends_on, ["task1"]);
-    await page.locator(".toast-processing progress").first().waitFor();
+    await page
+      .locator('.toast-processing [role="progressbar"]')
+      .first()
+      .waitFor();
     assert.match(
       await page
         .getByRole("region", { name: "Node contribution", exact: true })
@@ -490,7 +494,10 @@ const server = http.createServer(async (req, res) => {
     });
     // Pending toasts outlive the notification duration; terminal state replaces them.
     await page.waitForTimeout(8500);
-    assert.equal(await page.locator(".toast-processing progress").count(), 1);
+    assert.equal(
+      await page.locator('.toast-processing [role="progressbar"]').count(),
+      1,
+    );
     parentStatus = "COMPLETED";
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await page
@@ -590,6 +597,7 @@ const server = http.createServer(async (req, res) => {
       .locator(".toast-success")
       .filter({ hasText: "Completed successfully" })
       .waitFor();
+    nodeHeartbeatAt = new Date(Date.now() - 20_000).toISOString();
     await page.goto(`${origin}/nodes`);
     await page.locator(".node-heartbeat svg").first().waitFor();
     await page.waitForFunction(
@@ -597,12 +605,50 @@ const server = http.createServer(async (req, res) => {
         document.querySelector(".node-heartbeat path")?.getAttribute("d") !==
         "M0 14 H144",
     );
+    nodeHeartbeatAt = new Date(Date.now() - 1000).toISOString();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page.waitForFunction(
+      () =>
+        (
+          document
+            .querySelector(".node-heartbeat path")
+            ?.getAttribute("d")
+            ?.match(/l3 -3/g) || []
+        ).length === 2,
+    );
+    const movingTrace = await page
+      .locator(".node-heartbeat path")
+      .first()
+      .getAttribute("d");
+    await page.waitForFunction(
+      (previous) =>
+        document.querySelector(".node-heartbeat path")?.getAttribute("d") !==
+        previous,
+      movingTrace,
+    );
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    assert.equal(
+      (
+        await page.locator(".node-heartbeat path").first().getAttribute("d")
+      ).match(/l3 -3/g).length,
+      2,
+    );
     await page
       .locator(".node-heartbeat")
       .first()
       .screenshot({ path: path.join(folder, "heartbeat.png") });
     nodeOffline = true;
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page.locator(".heartbeat-stale").first().waitFor();
+    assert.equal(
+      (
+        await page.locator(".node-heartbeat path").first().getAttribute("d")
+      ).match(/l3 -3/g).length,
+      2,
+    );
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.install();
+    await page.clock.fastForward(61_000);
     await page.waitForFunction(
       () =>
         document.querySelector(".node-heartbeat path")?.getAttribute("d") ===
@@ -637,7 +683,7 @@ const server = http.createServer(async (req, res) => {
             "three shared inference setup choices",
             "cross-location prompt consent before submission",
             "processing tracking restored after reload",
-            "received and offline heartbeat EKG",
+            "scrolling heartbeat history survives new and duplicate receipts, dims offline, and expires without invented pulses",
           ],
           pageErrors: errors,
         },
