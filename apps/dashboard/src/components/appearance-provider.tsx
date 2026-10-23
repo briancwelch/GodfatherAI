@@ -50,7 +50,7 @@ export function AppearanceProvider({
       if (document.visibilityState !== "hidden")
         void control<Appearance>("appearance")
           .then((data) => {
-            if (active) setSettings(data);
+            if (active) setSettings({ ...defaults, ...data });
           })
           .catch(() => {});
     };
@@ -70,6 +70,7 @@ export function AppearanceProvider({
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.theme = theme;
+    root.dataset.bsTheme = theme;
     for (const [key, value] of Object.entries(appearanceStyle(settings, theme)))
       root.style.setProperty(key, String(value));
     root.dataset.stripes = String(settings.striped_tables);

@@ -5,6 +5,8 @@ import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { notifyError } from "../lib/notifications";
 import { control } from "../lib/control-client";
 import type { Snapshot } from "../lib/contracts";
+import { CommandIcon } from "./command-icon";
+import { StatusBadge } from "./operational";
 
 interface Options {
   nodes: {
@@ -15,6 +17,48 @@ interface Options {
     image_models: string[];
   }[];
   sql_note: string;
+}
+
+export function WorkerAvailabilityList({
+  nodes,
+  workflow,
+}: {
+  nodes: Options["nodes"];
+  workflow: "images" | "analytics";
+}) {
+  return (
+    <ul className="worker-availability-list" aria-label="Worker availability">
+      {nodes.map((node) => (
+        <li key={node.id} className="worker-availability-row">
+          <div className="worker-availability-heading">
+            <strong>{node.name}</strong>
+            <StatusBadge value={node.available ? "Online" : "Unavailable"} />
+          </div>
+          <div className="worker-capabilities">
+            {workflow === "images" ? (
+              node.image_models.length ? (
+                node.image_models.map((model) => (
+                  <span className="status worker-capability" key={model}>
+                    Image model: {model}
+                  </span>
+                ))
+              ) : (
+                <span className="status status-warning">No image models</span>
+              )
+            ) : (
+              <span
+                className={`status ${node.analytics ? "status-available" : "status-warning"}`}
+              >
+                {node.analytics
+                  ? "Analytics configured"
+                  : "Analytics unavailable"}
+              </span>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function Workloads({
@@ -75,7 +119,7 @@ export default function Workloads({
       workspace || data?.workspace_id || data?.workspaces[0]?.id;
     if (!workspaceId) return;
     setBusy(true);
-    setStatus("Validating upload and submittingâ€¦");
+    setStatus("Validating upload and submitting…");
     try {
       let dataset;
       const file = form.get("dataset");
@@ -141,10 +185,10 @@ export default function Workloads({
       refresh={() => setRevision((v) => v + 1)}
       ribbon={
         <RibbonGroup label="Workloads">
-          <a className="action secondary" href="/jobs">
+          <a className="btn btn-outline-primary action secondary" href="/jobs">
             Job history
           </a>
-          <a className="action secondary" href="/nodes">
+          <a className="btn btn-outline-primary action secondary" href="/nodes">
             Worker computers
           </a>
         </RibbonGroup>
@@ -152,9 +196,12 @@ export default function Workloads({
     >
       <main
         id="main-content"
-        className={`workload-layout ${setupOpen ? "" : "setup-collapsed"}`}
+        className={
+          "container-fluid " +
+          `workload-layout ${setupOpen ? "" : "setup-collapsed"}`
+        }
       >
-        <section className="panel">
+        <section className="card panel">
           <h1>{workflow === "images" ? "Images" : "Analytics and Reports"}</h1>
           <p>
             {workflow === "images"
@@ -165,7 +212,7 @@ export default function Workloads({
             {status}
           </p>
           {!data ? (
-            <p>Loading workspaces and worker capabilitiesâ€¦</p>
+            <p>Loading workspaces and worker capabilities…</p>
           ) : !data.workspaces.length ? (
             <p>No authorized workspace is available.</p>
           ) : (
@@ -173,6 +220,7 @@ export default function Workloads({
               <label>
                 Workspace
                 <select
+                  className="form-select"
                   value={
                     workspace || data.workspace_id || data.workspaces[0]?.id
                   }
@@ -192,22 +240,23 @@ export default function Workloads({
                 <label>
                   Workflow
                   <select
+                    className="form-select"
                     value={kind}
                     onChange={(e) => setKind(e.target.value)}
                   >
-                    <option value="report">Analytics â†’ report</option>
+                    <option value="report">Analytics → report</option>
                     <option value="analytics">Analytics only</option>
                   </select>
                 </label>
               )}
               {!available && (
-                <p className="notice">
+                <p className="alert alert-warning notice">
                   {kind === "image"
                     ? "Image generation unavailable: no permitted online worker advertises a configured local image model. No paid fallback is used."
                     : "No opted-in analytics worker is online. Connect a worker with a preinstalled Python sandbox image and explicit data-analysis permission."}{" "}
                   <button
                     type="button"
-                    className="action secondary"
+                    className="btn btn-outline-primary action secondary"
                     onClick={() => setSetupOpen(true)}
                   >
                     Show worker setup
@@ -219,6 +268,7 @@ export default function Workloads({
                   ? "Image prompt"
                   : "Analysis request / report context"}
                 <textarea
+                  className="form-control"
                   name="instruction"
                   required
                   maxLength={4096}
@@ -229,13 +279,13 @@ export default function Workloads({
                 <>
                   <label>
                     Provider
-                    <select name="backend">
+                    <select className="form-select" name="backend">
                       <option>AUTOMATIC1111 (local)</option>
                     </select>
                   </label>
                   <label>
                     Installed model
-                    <select name="model" required>
+                    <select className="form-select" name="model" required>
                       {models.map((m) => (
                         <option key={m}>{m}</option>
                       ))}
@@ -245,7 +295,11 @@ export default function Workloads({
                     {["width", "height"].map((name) => (
                       <label key={name}>
                         {name === "width" ? "Width" : "Height"}
-                        <select name={name} defaultValue="512">
+                        <select
+                          className="form-select"
+                          name={name}
+                          defaultValue="512"
+                        >
                           {[256, 512, 768, 1024].map((n) => (
                             <option key={n}>{n}</option>
                           ))}
@@ -255,6 +309,7 @@ export default function Workloads({
                     <label>
                       Images
                       <input
+                        className="form-control"
                         name="count"
                         type="number"
                         min="1"
@@ -265,6 +320,7 @@ export default function Workloads({
                     <label>
                       Quality (sampling steps)
                       <input
+                        className="form-control"
                         name="steps"
                         type="number"
                         min="1"
@@ -275,6 +331,7 @@ export default function Workloads({
                     <label>
                       Seed (-1: random)
                       <input
+                        className="form-control"
                         name="seed"
                         type="number"
                         min="-1"
@@ -289,6 +346,7 @@ export default function Workloads({
                   <label>
                     Authorized dataset
                     <input
+                      className="form-control"
                       name="dataset"
                       type="file"
                       accept=".csv,.json,.xlsx"
@@ -304,21 +362,33 @@ export default function Workloads({
                   <div className="workload-fields">
                     <label>
                       Group by column
-                      <input name="group_by" maxLength={120} />
+                      <input
+                        className="form-control"
+                        name="group_by"
+                        maxLength={120}
+                      />
                     </label>
                     <label>
                       ISO date column
-                      <input name="date_column" maxLength={120} />
+                      <input
+                        className="form-control"
+                        name="date_column"
+                        maxLength={120}
+                      />
                     </label>
                     <label>
                       Value column (blank: count)
-                      <input name="value_column" maxLength={120} />
+                      <input
+                        className="form-control"
+                        name="value_column"
+                        maxLength={120}
+                      />
                     </label>
                   </div>
                   {kind === "report" && (
                     <label>
                       Report format
-                      <select name="report_format">
+                      <select className="form-select" name="report_format">
                         <option value="html">HTML with chart</option>
                         <option value="markdown">Markdown</option>
                         <option value="csv">CSV</option>
@@ -335,6 +405,7 @@ export default function Workloads({
                   <label>
                     Minimum memory (MiB)
                     <input
+                      className="form-control"
                       type="number"
                       name="memory_mb"
                       min="512"
@@ -345,6 +416,7 @@ export default function Workloads({
                   <label>
                     Minimum GPU memory (MiB)
                     <input
+                      className="form-control"
                       type="number"
                       name="vram_mb"
                       min="0"
@@ -360,22 +432,22 @@ export default function Workloads({
                 </p>
               </details>
               <label className="check-label">
-                <input type="checkbox" required /> I authorize processing this
-                data or prompt on a worker permitted by this workspace and its
-                owner.
+                <input className="form-check-input" type="checkbox" required />{" "}
+                I authorize processing this data or prompt on a worker permitted
+                by this workspace and its owner.
               </label>
               <button
-                className="action"
+                className="btn btn-primary action"
                 type="submit"
                 disabled={busy || !available}
               >
-                {busy ? "Submittingâ€¦" : "Run workload"}
+                {busy ? "Submitting…" : "Run workload"}
               </button>
             </form>
           )}
         </section>
         <aside
-          className="panel worker-readiness"
+          className="card panel worker-readiness"
           id="workload-setup"
           aria-label="Worker setup and availability"
         >
@@ -386,7 +458,11 @@ export default function Workloads({
             onClick={() => setSetupOpen(!setupOpen)}
             title={setupOpen ? "Collapse worker setup" : "Expand worker setup"}
           >
-            {setupOpen ? "â€¹â€¹" : "â€ºâ€º"}
+            <CommandIcon
+              label={
+                setupOpen ? "Collapse worker setup" : "Expand worker setup"
+              }
+            />
             <span>Worker setup and availability</span>
           </button>
           <div id="readiness-content" hidden={!setupOpen}>
@@ -437,17 +513,16 @@ export default function Workloads({
               {workflow === "analytics" &&
                 " Google account file connections are unavailable in this version; export your authorized spreadsheet and upload it above."}
             </p>
-            <ul>
-              {options?.nodes.map((n) => (
-                <li key={n.id}>
-                  {n.name}: {n.available ? "online" : "unavailable"};
-                  {workflow === "images"
-                    ? `image models ${n.image_models.join(", ") || "none"}`
-                    : `analytics/reporting ${n.analytics ? "configured" : "unavailable"}`}
-                </li>
-              ))}
-            </ul>
-            <a className="action" href="/nodes">
+            {options && (
+              <WorkerAvailabilityList
+                nodes={options.nodes}
+                workflow={workflow}
+              />
+            )}
+            <a
+              className="btn btn-primary action readiness-action"
+              href="/nodes"
+            >
               Connect or inspect a worker
             </a>
           </div>

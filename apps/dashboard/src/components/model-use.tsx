@@ -25,7 +25,10 @@ export function UseModel({
   const restricted = model.workspace_allowed === false;
   if (!restricted)
     return (
-      <a className="action" href={modelAgentUrl(workspace, model)}>
+      <a
+        className="btn btn-primary action"
+        href={modelAgentUrl(workspace, model)}
+      >
         Use model / create agent
       </a>
     );
@@ -33,7 +36,7 @@ export function UseModel({
     <div>
       <button
         type="button"
-        className="action"
+        className="btn btn-primary action"
         disabled={busy || !model.can_enable}
         onClick={async () => {
           setBusy(true);

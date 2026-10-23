@@ -86,6 +86,21 @@ class Appearance(BaseModel):
     sticky_header: bool = False
     reduced_motion: bool = False
     ribbon_size: Literal["normal", "compact"] = "normal"
+    button_variant: Literal["solid", "outline"] = "solid"
+    control_size: Literal["small", "medium", "large"] = "medium"
+    panel_shadow: Literal["none", "small", "medium"] = "small"
+    panel_padding: int = Field(default=20, ge=12, le=32)
+    table_hover: bool = True
+    table_borders: bool = False
+    toast_position: Literal["top-start", "top-end", "bottom-start", "bottom-end"] = "bottom-end"
+    toast_width: int = Field(default=380, ge=280, le=560)
+    progress_height: int = Field(default=12, ge=8, le=24)
+    progress_striped: bool = True
+    progress_animated: bool = True
+    success_color: Color = "#198754"
+    warning_color: Color = "#ffc107"
+    danger_color: Color = "#dc3545"
+    info_color: Color = "#0dcaf0"
 
 
 @router.get("")

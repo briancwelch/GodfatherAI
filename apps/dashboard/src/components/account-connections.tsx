@@ -84,7 +84,7 @@ export default function AccountConnections({
       account={user}
       refresh={() => setRevision((r) => r + 1)}
     >
-      <main id="main-content" className="provider-page">
+      <main id="main-content" className="container-fluid provider-page">
         <h1>Account settings · AI connections</h1>
         <p>
           Connect your own OpenAI or Anthropic API account. Google Sign-In only
@@ -110,7 +110,7 @@ export default function AccountConnections({
             const nodes =
               data?.nodes.filter((n) => n.owner_id === user.id) ?? [];
             return (
-              <section className="panel" key={provider}>
+              <section className="card panel" key={provider}>
                 <h2>{name}</h2>
                 <p>
                   {connection?.connected
@@ -136,6 +136,7 @@ export default function AccountConnections({
                   <label>
                     API key
                     <input
+                      className="form-control"
                       name="api_key"
                       type="password"
                       autoComplete="off"
@@ -155,6 +156,7 @@ export default function AccountConnections({
                     {nodes.map((node) => (
                       <label className="check-label" key={node.node_id}>
                         <input
+                          className="form-check-input"
                           name="node"
                           type="checkbox"
                           value={node.node_id}
@@ -178,7 +180,7 @@ export default function AccountConnections({
                     worker app. The saved key is never shown again.
                   </p>
                   <button
-                    className="action"
+                    className="btn btn-primary action"
                     disabled={
                       !!busy || !account?.storage_available || !nodes.length
                     }
@@ -192,7 +194,7 @@ export default function AccountConnections({
                 </form>
                 {connection?.connected && (
                   <button
-                    className="action secondary"
+                    className="btn btn-outline-primary action secondary"
                     disabled={!!busy}
                     onClick={async () => {
                       setBusy(provider);

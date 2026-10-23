@@ -51,16 +51,22 @@ export default function AccountProfile({
       refresh={() => window.location.reload()}
       ribbon={
         <RibbonGroup label="Account">
-          <a className="action secondary" href="/providers">
+          <a
+            className="btn btn-outline-primary action secondary"
+            href="/providers"
+          >
             AI connections
           </a>
         </RibbonGroup>
       }
     >
-      <main id="main-content">
+      <main className="container-fluid" id="main-content">
         <h1>Account settings</h1>
         <p>Your profile and personal preferences.</p>
-        <form className="panel profile-form" onSubmit={(e) => void save(e)}>
+        <form
+          className="card panel profile-form"
+          onSubmit={(e) => void save(e)}
+        >
           <h2>
             <Avatar name={user.display_name} picture={user.picture} /> Your
             profile
@@ -68,6 +74,7 @@ export default function AccountProfile({
           <label>
             Display name
             <input
+              className="form-control"
               name="display_name"
               required
               maxLength={200}
@@ -77,6 +84,7 @@ export default function AccountProfile({
           <label>
             Avatar image address
             <input
+              className="form-control"
               name="picture"
               type="url"
               maxLength={2048}
@@ -91,6 +99,7 @@ export default function AccountProfile({
           <label>
             Location (optional)
             <input
+              className="form-control"
               name="location"
               maxLength={120}
               defaultValue={user.location || ""}
@@ -100,17 +109,17 @@ export default function AccountProfile({
           <p>
             {user.email} · {user.roles.join(", ")}
           </p>
-          <button className="action" disabled={busy}>
+          <button className="btn btn-primary action" disabled={busy}>
             {busy ? "Saving…" : "Save profile"}
           </button>
           <p role="status">{status}</p>
         </form>
-        <section className="panel">
+        <section className="card panel">
           <h2>AI connections</h2>
           <p>
             Manage your provider keys and the computers authorized to use them.
           </p>
-          <a className="action" href="/providers">
+          <a className="btn btn-primary action" href="/providers">
             Manage AI connections
           </a>
         </section>

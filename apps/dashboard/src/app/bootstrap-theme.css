@@ -1,0 +1,483 @@
+/* Bootstrap owns component presentation; React owns behavior and state. */
+:root,
+.appearance-preview {
+  --bs-body-color: var(--foreground);
+  --bs-body-bg: var(--background);
+  --bs-body-font-family: var(--ui-font, "Segoe UI", system-ui, sans-serif);
+  --bs-body-font-size: var(--ui-font-size, 14px);
+  --bs-body-line-height: var(--ui-line-height, 1.5);
+  --bs-primary: var(--primary);
+  --bs-primary-rgb: 8, 127, 140;
+  --bs-secondary-color: var(--muted-foreground);
+  --bs-tertiary-bg: var(--muted);
+  --bs-border-color: var(--border);
+  --bs-border-radius: var(--radius, 6px);
+  --bs-border-radius-sm: var(--radius, 6px);
+  --bs-border-radius-lg: calc(var(--radius, 6px) + 2px);
+  --bs-link-color: var(--primary);
+  --bs-link-hover-color: var(--primary);
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+.btn,
+.action.btn {
+  --bs-btn-padding-x: 0.8rem;
+  --bs-btn-padding-y: 0.5rem;
+  --bs-btn-font-size: var(--gf-control-font, 1em);
+  --bs-btn-border-radius: var(--radius, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: var(--gf-control-padding, 0.5rem 0.8rem);
+  font-size: var(--gf-control-font, 1em);
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: normal;
+  border-radius: var(--radius, 6px);
+}
+.btn-primary,
+.action.btn-primary {
+  --bs-btn-color: var(--gf-button-color, var(--primary-foreground));
+  --bs-btn-bg: var(--gf-button-bg, var(--primary));
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-color: var(--primary-foreground);
+  --bs-btn-hover-bg: var(--primary);
+  --bs-btn-hover-border-color: var(--primary);
+  --bs-btn-active-bg: var(--primary);
+  --bs-btn-active-color: var(--primary-foreground);
+  --bs-btn-active-border-color: var(--primary);
+  --bs-btn-disabled-color: var(--primary-foreground);
+  --bs-btn-disabled-bg: var(--primary);
+  --bs-btn-disabled-border-color: var(--primary);
+  color: var(--bs-btn-color);
+  background: var(--bs-btn-bg);
+  border-color: var(--bs-btn-border-color);
+}
+.btn-outline-primary,
+.action.secondary {
+  --bs-btn-color: var(--primary);
+  --bs-btn-border-color: var(--primary);
+  --bs-btn-hover-color: var(--primary-foreground);
+  --bs-btn-hover-bg: var(--primary);
+  --bs-btn-hover-border-color: var(--primary);
+  --bs-btn-active-color: var(--primary-foreground);
+  --bs-btn-active-bg: var(--primary);
+  --bs-btn-active-border-color: var(--primary);
+  --bs-btn-disabled-color: var(--muted-foreground);
+  --bs-btn-disabled-border-color: var(--border);
+  color: var(--primary);
+  background: transparent;
+  border-color: var(--primary);
+}
+.btn:hover:not(:disabled),
+.action.btn:hover:not(:disabled) {
+  color: var(--bs-btn-hover-color);
+  background: var(--bs-btn-hover-bg);
+  border-color: var(--bs-btn-hover-border-color);
+}
+.btn-danger {
+  --bs-btn-bg: var(--bs-danger);
+  --bs-btn-color: var(--gf-danger-text, #fff);
+  --bs-btn-hover-bg: var(--bs-danger);
+  --bs-btn-hover-color: var(--gf-danger-text, #fff);
+  background: var(--bs-danger);
+  color: var(--gf-danger-text, #fff);
+  border-color: var(--bs-danger);
+}
+.form-control,
+.form-select {
+  background-color: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  font-size: var(--gf-control-font, 1em);
+  padding: var(--gf-control-padding, 0.5rem 0.8rem);
+  line-height: 1.5;
+}
+.form-select {
+  padding-right: 2.25rem;
+}
+.form-control:focus,
+.form-select:focus {
+  color: var(--foreground);
+  background-color: var(--card);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--focus) 22%, transparent);
+}
+.form-check-input {
+  width: 1.1em;
+  height: 1.1em;
+  padding: 0;
+  flex: none;
+  background-color: var(--card);
+  border-color: var(--border);
+}
+.form-check-input:checked {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+input[type="radio"].form-check-input {
+  border-radius: 50%;
+}
+.card,
+.desktop-application .card {
+  --bs-card-bg: var(--card);
+  --bs-card-color: var(--foreground);
+  --bs-card-border-color: var(--border);
+  --bs-card-border-radius: var(--radius, 6px);
+  --bs-card-spacer-y: var(--gf-panel-padding, 20px);
+  --bs-card-spacer-x: var(--gf-panel-padding, 20px);
+  border-radius: var(--bs-card-border-radius);
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--gf-panel-shadow, 0 0.125rem 0.25rem #00000013);
+}
+.card.panel,
+.card.metric {
+  padding: var(--gf-panel-padding, 20px);
+  margin-bottom: 16px;
+}
+h1 {
+  font-size: clamp(1.35rem, 1.2rem + 0.3vw, 1.65rem);
+  margin-bottom: 0.75rem;
+}
+h2 {
+  font-size: 1.1rem;
+  margin-bottom: 0.75rem;
+}
+h3 {
+  font-size: 1rem;
+}
+.table {
+  --bs-table-color: var(--foreground);
+  --bs-table-bg: var(--card);
+  --bs-table-border-color: var(--border);
+  --bs-table-hover-bg: var(--gf-table-hover, var(--muted));
+  --bs-table-striped-bg: var(--gf-table-stripe, transparent);
+  --bs-table-striped-color: var(--foreground);
+  font-size: inherit;
+  margin-bottom: 0;
+}
+.table > :not(caption) > * > * {
+  padding: var(--ui-cell-padding, 9px 12px);
+  color: var(--foreground);
+  border-inline-width: var(--gf-table-border-width, 0px);
+}
+.table tbody tr:nth-of-type(even) > * {
+  --bs-table-bg: var(--gf-table-stripe, var(--card));
+}
+.table tbody tr:hover > * {
+  --bs-table-bg-state: var(--gf-table-hover, var(--muted));
+}
+.table thead th {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.table-scroll {
+  border-radius: var(--radius, 6px);
+}
+.badge,
+.status {
+  border-radius: var(--radius, 6px);
+  font-size: 0.8em;
+  padding: 0.4em 0.65em;
+  line-height: 1.2;
+}
+.status {
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+.status-online,
+.status-completed,
+.status-available,
+.status-enabled {
+  color: var(--gf-success-text, #fff) !important;
+  background: var(--bs-success);
+  border-color: var(--bs-success);
+}
+.status-failed,
+.status-error,
+.status-review_required {
+  color: var(--gf-danger-text, #fff);
+  background: var(--bs-danger);
+  border-color: var(--bs-danger);
+}
+.status-warning,
+.status-suspect,
+.status-draining,
+.status-retry_wait {
+  color: var(--gf-warning-text, #000);
+  background: var(--bs-warning);
+  border-color: var(--bs-warning);
+}
+.status-running,
+.status-assigned {
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.alert {
+  border-radius: var(--radius, 6px);
+  padding: 1rem;
+}
+.alert-warning {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--bs-warning) 12%, var(--card));
+  border-color: var(--bs-warning);
+}
+.alert-danger {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--bs-danger) 12%, var(--card));
+  border-color: var(--bs-danger);
+}
+.application-tabs.nav {
+  gap: 0.25rem;
+  padding: 0.65rem 1rem 0;
+  flex-wrap: nowrap;
+}
+.application-tabs.nav a {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius, 6px) var(--radius, 6px) 0 0;
+}
+.application-tabs.nav a[aria-current] {
+  border-color: var(--border) var(--border) var(--background);
+}
+.utility-panel nav a {
+  border-radius: var(--radius, 6px);
+  border-left: 0;
+}
+.utility-panel nav a[aria-current] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.application-ribbon {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  gap: 1rem;
+}
+.ribbon-group .actions {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.ribbon-group .action.btn {
+  flex-direction: row;
+  min-height: 38px;
+  min-width: auto;
+  background: var(--card);
+  color: var(--primary);
+  padding: var(--gf-control-padding, 0.5rem 0.8rem);
+}
+.ribbon-group > small {
+  background: none;
+  text-align: left;
+  padding: 0.35rem 0 0;
+}
+.ribbon-group .command-icon {
+  height: 16px;
+  width: 16px;
+}
+.section-tabs.nav {
+  gap: 0.4rem;
+  padding-bottom: 0;
+  margin-block: 1rem;
+}
+.section-tabs .nav-link {
+  border-radius: var(--radius, 6px) var(--radius, 6px) 0 0;
+  color: var(--primary);
+}
+.section-tabs .nav-link[aria-selected="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-bottom-color: var(--card);
+}
+.workload-layout {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 20px;
+}
+.workload-layout.setup-collapsed {
+  grid-template-columns: minmax(0, 1fr) 54px;
+}
+.worker-readiness .readiness-action {
+  margin-top: 18px;
+  min-height: 44px;
+}
+.worker-capabilities .status {
+  font-size: 0.85em;
+}
+.progress {
+  --bs-progress-height: var(--gf-progress-height, 12px);
+  --bs-progress-bg: var(--muted);
+  --bs-progress-bar-bg: var(--primary);
+  height: var(--bs-progress-height);
+  width: 100%;
+  margin-block: 0.5rem;
+  border-radius: var(--radius, 6px);
+  overflow: hidden;
+  flex: none;
+}
+.progress-bar {
+  background-color: var(--primary);
+}
+.progress-bar-striped {
+  background-image: var(
+    --gf-progress-stripes,
+    linear-gradient(
+      45deg,
+      #ffffff26 25%,
+      transparent 25%,
+      transparent 50%,
+      #ffffff26 50%,
+      #ffffff26 75%,
+      transparent 75%,
+      transparent
+    )
+  );
+}
+.progress-bar-animated {
+  animation: var(
+    --gf-progress-animation,
+    progress-bar-stripes 1s linear infinite
+  );
+}
+.progress-indeterminate .progress-bar {
+  opacity: 0.55;
+}
+.corner-toasts.toast-container {
+  width: min(var(--gf-toast-width, 380px), calc(100vw - 32px));
+  top: var(--gf-toast-top, auto);
+  bottom: var(--gf-toast-bottom, 44px);
+  left: var(--gf-toast-left, auto);
+  right: var(--gf-toast-right, 16px);
+  z-index: 1090;
+}
+.corner-toast.toast {
+  --bs-toast-bg: var(--card);
+  --bs-toast-color: var(--foreground);
+  --bs-toast-header-bg: var(--card);
+  --bs-toast-header-color: var(--foreground);
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--toast-accent);
+  border-radius: var(--radius, 6px);
+  box-shadow: var(--gf-panel-shadow, 0 0.125rem 0.25rem #00000013);
+  color: var(--foreground);
+  background: var(--card);
+}
+.toast .toast-header {
+  gap: 0.6rem;
+  padding: 0.75rem;
+  color: var(--foreground);
+  background: var(--card);
+  border-bottom-color: var(--border);
+}
+.toast .toast-header strong {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.toast .toast-header .command-icon {
+  color: var(--toast-accent);
+  width: 18px;
+  height: 18px;
+}
+.toast .toast-body {
+  padding: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.toast .toast-action {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: var(--primary);
+}
+.toast .btn-close {
+  flex: none;
+  margin: 0;
+  padding: 0.5rem;
+}
+.toast-error {
+  --toast-accent: var(--bs-danger);
+}
+.toast-success {
+  --toast-accent: var(--bs-success);
+}
+.toast-notification {
+  --toast-accent: var(--bs-info);
+}
+.toast-processing {
+  --toast-accent: var(--primary);
+}
+.appearance-settings fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 6px);
+  padding: 1rem;
+  margin-block: 1rem;
+}
+.appearance-settings legend {
+  float: none;
+  width: auto;
+  font-size: 1rem;
+  padding-inline: 0.5rem;
+}
+.appearance-preview .preview-workspace {
+  padding: var(--gf-panel-padding, 20px);
+}
+@media (max-width: 1000px) {
+  .workload-layout,
+  .workload-layout.setup-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .application-bar {
+    flex-wrap: wrap;
+  }
+  .account-controls {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 600px) {
+  .card.panel {
+    padding: min(var(--gf-panel-padding, 20px), 16px);
+  }
+  .scope-bar {
+    flex-wrap: wrap;
+  }
+  .ribbon-group {
+    max-width: 100%;
+  }
+  .application-tabs.nav {
+    padding-inline: 0.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-animated {
+    animation: none;
+  }
+}
+
+/* Tables use the same theme variables in the admin preview and live screens. */
+:root[data-stripes] .desktop-application .table tbody tr:nth-child(even),
+.table tbody tr:hover {
+  background: transparent;
+}
+.badge:not(.status) {
+  color: var(--foreground);
+  background: var(--muted);
+}
+.badge.worker-outdated {
+  color: var(--gf-warning-text, #000);
+  background: var(--bs-warning);
+}
+
+/* Semantic visibility must win over Bootstrap flex/grid component displays. */
+[hidden] {
+  display: none !important;
+}

@@ -13,7 +13,7 @@ export function CreateWorkspace() {
   const [error, setError] = useState("");
   useFeedback(error);
   return (
-    <details className="panel workspace-create">
+    <details className="card panel workspace-create">
       <summary>Create workspace</summary>
       <form
         onSubmit={async (event) => {
@@ -39,9 +39,14 @@ export function CreateWorkspace() {
       >
         <label>
           Workspace name
-          <input name="name" required maxLength={200} />
+          <input
+            className="form-control"
+            name="name"
+            required
+            maxLength={200}
+          />
         </label>
-        <button className="action" disabled={busy}>
+        <button className="btn btn-primary action" disabled={busy}>
           {busy ? "Creating…" : "Create workspace"}
         </button>
         {error && <p role="alert">{error}</p>}
@@ -63,7 +68,7 @@ export function WorkspaceList({
     w.name.toLowerCase().includes(search.toLowerCase()),
   );
   return (
-    <section className="panel">
+    <section className="card panel">
       <h2>
         Your workspaces <span className="badge">{data.workspaces.length}</span>
       </h2>
@@ -72,6 +77,7 @@ export function WorkspaceList({
         <label>
           Find workspace
           <input
+            className="form-control"
             type="search"
             value={search}
             onChange={(event) => {
@@ -86,7 +92,7 @@ export function WorkspaceList({
           .slice(preview ? 0 : offset, preview ? 6 : offset + 25)
           .map((w) => (
             <a
-              className="workspace-entry"
+              className="card workspace-entry"
               href={`/workspaces/${w.id}`}
               key={w.id}
             >
@@ -149,7 +155,7 @@ export default function WorkspaceDirectory({
       stale={!!error}
       refresh={() => setRevision((v) => v + 1)}
     >
-      <main id="main-content">
+      <main className="container-fluid" id="main-content">
         <h1>Workspaces</h1>
         <p>The home for your agents, jobs and results.</p>
         <CreateWorkspace />

@@ -33,6 +33,21 @@ export interface Appearance {
   sticky_header: boolean;
   reduced_motion: boolean;
   ribbon_size: "normal" | "compact";
+  button_variant: "solid" | "outline";
+  control_size: "small" | "medium" | "large";
+  panel_shadow: "none" | "small" | "medium";
+  panel_padding: number;
+  table_hover: boolean;
+  table_borders: boolean;
+  toast_position: "top-start" | "top-end" | "bottom-start" | "bottom-end";
+  toast_width: number;
+  progress_height: number;
+  progress_striped: boolean;
+  progress_animated: boolean;
+  success_color: string;
+  warning_color: string;
+  danger_color: string;
+  info_color: string;
 }
 export const defaults: Appearance = {
   light: {
@@ -80,6 +95,21 @@ export const defaults: Appearance = {
   sticky_header: false,
   reduced_motion: false,
   ribbon_size: "normal",
+  button_variant: "solid",
+  control_size: "medium",
+  panel_shadow: "small",
+  panel_padding: 20,
+  table_hover: true,
+  table_borders: false,
+  toast_position: "bottom-end",
+  toast_width: 380,
+  progress_height: 12,
+  progress_striped: true,
+  progress_animated: true,
+  success_color: "#198754",
+  warning_color: "#ffc107",
+  danger_color: "#dc3545",
+  info_color: "#0dcaf0",
 };
 export const fonts = {
   system: '"Segoe UI", system-ui, sans-serif',
@@ -107,7 +137,71 @@ export function appearanceStyle(
   settings: Appearance,
   theme: "light" | "dark",
 ): CSSProperties {
-  const variables: Record<string, string | number> = {};
+  settings = { ...defaults, ...settings };
+  const palette = settings[theme];
+  const rgb = (hex: string) =>
+    [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ");
+  const variables: Record<string, string | number> = {
+    "--bs-primary-rgb": rgb(palette.primary),
+    "--gf-control-font":
+      settings.control_size === "small"
+        ? "0.875em"
+        : settings.control_size === "large"
+          ? "1.125em"
+          : "1em",
+    "--gf-control-padding":
+      settings.control_size === "small"
+        ? "0.3rem 0.6rem"
+        : settings.control_size === "large"
+          ? "0.7rem 1rem"
+          : "0.5rem 0.8rem",
+    "--gf-button-bg":
+      settings.button_variant === "outline" ? "transparent" : palette.primary,
+    "--gf-button-color":
+      settings.button_variant === "outline"
+        ? palette.primary
+        : palette.primary_foreground,
+    "--gf-panel-shadow":
+      settings.panel_shadow === "none"
+        ? "none"
+        : settings.panel_shadow === "small"
+          ? "0 0.125rem 0.25rem #00000013"
+          : "0 0.5rem 1rem #00000026",
+    "--gf-panel-padding": settings.panel_padding + "px",
+    "--gf-table-hover": settings.table_hover ? palette.muted : palette.card,
+    "--gf-table-border-width": settings.table_borders ? "1px" : "0px",
+    "--gf-table-stripe": settings.striped_tables
+      ? palette.muted
+      : "transparent",
+    "--gf-toast-width": settings.toast_width + "px",
+    "--gf-toast-top": settings.toast_position.startsWith("top")
+      ? "16px"
+      : "auto",
+    "--gf-toast-bottom": settings.toast_position.startsWith("bottom")
+      ? "44px"
+      : "auto",
+    "--gf-toast-left": settings.toast_position.endsWith("start")
+      ? "16px"
+      : "auto",
+    "--gf-toast-right": settings.toast_position.endsWith("end")
+      ? "16px"
+      : "auto",
+    "--gf-progress-height": settings.progress_height + "px",
+    "--gf-progress-stripes": settings.progress_striped
+      ? "linear-gradient(45deg, #ffffff26 25%, transparent 25%, transparent 50%, #ffffff26 50%, #ffffff26 75%, transparent 75%, transparent)"
+      : "none",
+    "--gf-progress-animation":
+      settings.progress_animated && !settings.reduced_motion
+        ? "progress-bar-stripes 1s linear infinite"
+        : "none",
+  };
+  for (const name of ["success", "warning", "danger", "info"] as const) {
+    const color = settings[`${name}_color`];
+    variables[`--bs-${name}`] = color;
+    variables[`--bs-${name}-rgb`] = rgb(color);
+    variables[`--gf-${name}-text`] =
+      contrast(color, "#ffffff") >= 4.5 ? "#ffffff" : "#000000";
+  }
   for (const [key, value] of Object.entries(settings[theme]))
     variables[`--${key.replaceAll("_", "-")}`] = value;
   return {

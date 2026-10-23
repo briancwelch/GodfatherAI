@@ -30,6 +30,18 @@ def test_appearance_persists_and_requires_platform_permission(h: Harness) -> Non
         "font_size": 15,
         "striped_tables": True,
         "navigation_width": 240,
+        "button_variant": "outline",
+        "control_size": "large",
+        "panel_padding": 24,
+        "panel_shadow": "medium",
+        "table_borders": True,
+        "table_hover": False,
+        "toast_position": "top-start",
+        "toast_width": 420,
+        "progress_height": 18,
+        "progress_striped": False,
+        "progress_animated": False,
+        "warning_color": "#f9bc00",
     }
     assert h.client.post(endpoint, json=updated, headers=headers(h.admin)).json() == updated
     # Read via a new API process lifespan; PostgreSQL, not process/browser state, is authoritative.

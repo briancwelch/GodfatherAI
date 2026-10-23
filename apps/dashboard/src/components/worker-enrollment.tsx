@@ -91,7 +91,7 @@ export default function WorkerEnrollment() {
     }
   }
   return (
-    <main className="panel connect-panel">
+    <main className="card container-fluid panel connect-panel">
       <h1>Connect your computer</h1>
       <p>
         Only approve a connection you started in Consigliere by The Godfather AI
@@ -99,7 +99,11 @@ export default function WorkerEnrollment() {
       </p>
       {status && <p role="status">{status}</p>}
       {approved && (
-        <button className="action" disabled={busy} onClick={revoke}>
+        <button
+          className="btn btn-primary action"
+          disabled={busy}
+          onClick={revoke}
+        >
           Cancel pairing approval
         </button>
       )}
@@ -119,6 +123,7 @@ export default function WorkerEnrollment() {
           <label>
             Node display name
             <input
+              className="form-control"
               name="name"
               required
               maxLength={100}
@@ -134,7 +139,11 @@ export default function WorkerEnrollment() {
             permissions.
           </p>
           <label>
-            <input type="checkbox" name="reconnect" />
+            <input
+              className="form-check-input"
+              type="checkbox"
+              name="reconnect"
+            />
             Reconnect this computer, keeping its name and history.
           </label>
           <p>
@@ -144,10 +153,10 @@ export default function WorkerEnrollment() {
             on your device.
           </p>
           <label>
-            <input type="checkbox" required />
+            <input className="form-check-input" type="checkbox" required />
             The code matches my computer, and I approve its registration.
           </label>
-          <button className="action" disabled={busy}>
+          <button className="btn btn-primary action" disabled={busy}>
             {busy ? "Approving…" : "Approve this computer"}
           </button>
         </form>

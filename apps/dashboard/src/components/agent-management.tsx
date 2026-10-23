@@ -142,7 +142,7 @@ export function AgentManagement({
       <RibbonGroup label="Definitions">
         {manage && options ? (
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             onClick={() => setEditing("new")}
           >
             Create agent
@@ -161,7 +161,7 @@ export function AgentManagement({
           <UnavailableCommand label="Edit / New version" reason={editReason} />
         ) : (
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             onClick={() => selected && setEditing(selected)}
           >
             Edit / New version
@@ -187,7 +187,10 @@ export function AgentManagement({
       </RibbonGroup>
       <RibbonGroup label="Execution">
         {selected?.enabled ? (
-          <button className="action" onClick={() => setRunning(true)}>
+          <button
+            className="btn btn-primary action"
+            onClick={() => setRunning(true)}
+          >
             Run agent
           </button>
         ) : (
@@ -207,7 +210,7 @@ export function AgentManagement({
     <>
       {host ? createPortal(commands, host) : commands}
       {error && (
-        <p className="notice error" role="alert">
+        <p className="alert alert-danger notice error" role="alert">
           {error}
         </p>
       )}
@@ -278,7 +281,7 @@ export function AgentManagement({
         />
         {selected && (
           <aside
-            className="panel record-inspector"
+            className="card panel record-inspector"
             aria-label="Agent inspector"
           >
             <div className="actions">
@@ -286,7 +289,7 @@ export function AgentManagement({
                 {selected.definition.name} · v{selected.version}
               </h2>
               <button
-                className="action secondary"
+                className="btn btn-outline-primary action secondary"
                 onClick={() => setSelectedId("")}
               >
                 Close inspector
@@ -522,6 +525,7 @@ function AgentEditor({
           <label>
             Name
             <input
+              className="form-control"
               name="name"
               defaultValue={initial?.definition.name}
               required
@@ -532,6 +536,7 @@ function AgentEditor({
           <label>
             Workspace
             <select
+              className="form-select"
               name="workspace"
               defaultValue={initial?.workspace_id || data.workspace_id || ""}
               disabled={!!initial}
@@ -557,6 +562,7 @@ function AgentEditor({
           <label className="full-width">
             Description
             <textarea
+              className="form-control"
               name="description"
               aria-label="Description"
               maxLength={2000}
@@ -567,6 +573,7 @@ function AgentEditor({
           <label>
             Model requirement
             <select
+              className="form-select"
               name="model"
               aria-label="Model requirement"
               value={modelChoice}
@@ -600,14 +607,20 @@ function AgentEditor({
           {paid && (
             <>
               <label className="check-label">
-                <input type="checkbox" name="paid" required /> Allow this agent
-                to request paid API inference and send task data to the selected
-                provider. Each run requires confirmation.
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  name="paid"
+                  required
+                />{" "}
+                Allow this agent to request paid API inference and send task
+                data to the selected provider. Each run requires confirmation.
               </label>
               {chosenOwner && chosenOwner !== data.actor_id && (
                 <label>
                   Owner-issued access grant (shared connection)
                   <input
+                    className="form-control"
                     name="grant"
                     defaultValue={String(existingSelection?.grant_id || "")}
                   />
@@ -622,6 +635,7 @@ function AgentEditor({
           <label>
             Approved local fallback models (comma separated)
             <input
+              className="form-control"
               name="fallbacks"
               disabled={paid}
               defaultValue={
@@ -638,6 +652,7 @@ function AgentEditor({
           <label>
             Supported workflow
             <select
+              className="form-select"
               value={workflow}
               onChange={(e) => setWorkflow(e.target.value)}
             >
@@ -662,6 +677,7 @@ function AgentEditor({
             ].map((c) => (
               <label className="check-label" key={c}>
                 <input
+                  className="form-check-input"
                   type="checkbox"
                   name="capabilities"
                   value={c}
@@ -685,6 +701,7 @@ function AgentEditor({
             {options.tools.map((t) => (
               <label className="check-label" key={key(t.reference)}>
                 <input
+                  className="form-check-input"
                   type="checkbox"
                   name="tools"
                   value={key(t.reference)}
@@ -708,6 +725,7 @@ function AgentEditor({
             <label className="full-width">
               Sequential workflow steps (JSON)
               <textarea
+                className="form-control"
                 name="steps"
                 defaultValue={JSON.stringify(
                   initial?.definition.workflow.steps || [],
@@ -726,6 +744,7 @@ function AgentEditor({
             <label className="full-width">
               Model step instruction
               <textarea
+                className="form-control"
                 name="instruction"
                 rows={4}
                 required
@@ -742,6 +761,7 @@ function AgentEditor({
               <label>
                 Maximum output tokens
                 <input
+                  className="form-control"
                   name="max_tokens"
                   type="number"
                   min={1}
@@ -755,6 +775,7 @@ function AgentEditor({
               <label>
                 Step timeout (seconds)
                 <input
+                  className="form-control"
                   name="step_timeout"
                   type="number"
                   min={1}
@@ -767,6 +788,7 @@ function AgentEditor({
           )}
           <label className="check-label">
             <input
+              className="form-check-input"
               type="checkbox"
               name="enabled"
               defaultChecked={initial?.enabled ?? true}
@@ -775,21 +797,21 @@ function AgentEditor({
           </label>
         </div>
         {error && (
-          <p role="alert" className="notice error">
+          <p role="alert" className="alert alert-danger notice error">
             {error}
           </p>
         )}
         <div className="actions">
           <button
             type="button"
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             disabled={busy}
             onClick={close}
           >
             Cancel
           </button>
           <button
-            className="action"
+            className="btn btn-primary action"
             disabled={busy || (!models.length && !existingSelection)}
           >
             {busy ? "Saving…" : initial ? "Save new version" : "Create agent"}
@@ -862,14 +884,21 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
           agent.definition.requirements.model_selection as Record<string, Json>
         )?.connection_id && (
           <label className="check-label">
-            <input type="checkbox" name="paid_consent" required /> I authorize
-            using my selected API account and sending this task to the provider.
-            Billing and spending limits are managed at the provider.
+            <input
+              className="form-check-input"
+              type="checkbox"
+              name="paid_consent"
+              required
+            />{" "}
+            I authorize using my selected API account and sending this task to
+            the provider. Billing and spending limits are managed at the
+            provider.
           </label>
         )}
         <label>
           Instruction
           <textarea
+            className="form-control"
             name="instruction"
             required
             maxLength={4096}
@@ -880,6 +909,7 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
         <label>
           Priority
           <input
+            className="form-control"
             type="number"
             name="priority"
             defaultValue={0}
@@ -892,13 +922,13 @@ function RunAgent({ agent, close }: { agent: AgentInfo; close: () => void }) {
         <div className="actions">
           <button
             type="button"
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             disabled={busy}
             onClick={close}
           >
             Cancel
           </button>
-          <button className="action" disabled={busy}>
+          <button className="btn btn-primary action" disabled={busy}>
             {busy ? "Submitting…" : "Submit run"}
           </button>
         </div>
@@ -932,7 +962,7 @@ export function RepositorySelection({ workspace }: { workspace: string }) {
     <>
       <label>
         Owner-approved repository
-        <select name="repository_id" required>
+        <select className="form-select" name="repository_id" required>
           <option value="">
             {error ||
               (repositories.length
@@ -953,7 +983,7 @@ export function RepositorySelection({ workspace }: { workspace: string }) {
       </label>
       <label>
         Code search terms (optional, comma separated)
-        <input name="code_search" maxLength={1024} />
+        <input className="form-control" name="code_search" maxLength={1024} />
         <small>
           Literal matches in approved committed files are supplied to the agent.
         </small>

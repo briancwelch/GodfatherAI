@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import "bootstrap/dist/css/bootstrap.min.css";
 import "./globals.css";
+import "./bootstrap-theme.css";
 import { ToastNotifications } from "../components/toast-notifications";
 
 export const metadata: Metadata = {

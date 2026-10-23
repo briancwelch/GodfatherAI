@@ -64,6 +64,7 @@ export function InferenceSetups({
           className={`inference-setup ${mode === setup.id ? "selected" : ""}`}
         >
           <input
+            className="form-check-input"
             type="radio"
             name="inference-mode"
             value={setup.id}
@@ -209,7 +210,7 @@ export default function SharedInferenceJobs({
   const pages = (
     <div className="actions" aria-label="Distributed inference pagination">
       <button
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={!offset}
         onClick={() => setOffset(Math.max(0, offset - 25))}
       >
@@ -221,7 +222,7 @@ export default function SharedInferenceJobs({
           : "No jobs"}
       </span>
       <button
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={!history || offset + 25 >= history.total}
         onClick={() => setOffset(offset + 25)}
       >
@@ -239,18 +240,18 @@ export default function SharedInferenceJobs({
       ribbon={
         <RibbonGroup label="Related work">
           <a
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             href={`/distributed-tasks?workspace=${workspaceId}`}
           >
             Distributed Tasks
           </a>
-          <a className="action secondary" href="/nodes">
+          <a className="btn btn-outline-primary action secondary" href="/nodes">
             Worker computers
           </a>
         </RibbonGroup>
       }
     >
-      <main id="main-content" className="distributed-page">
+      <main id="main-content" className="container-fluid distributed-page">
         <h1>Distributed Jobs</h1>
         <p>
           One job, one coordinated model, one answer. A configured engine shares
@@ -262,12 +263,13 @@ export default function SharedInferenceJobs({
             Connection interrupted. Displayed availability may be stale.
           </p>
         )}
-        <details className="panel" open>
+        <details className="card panel" open>
           <summary>Submit a shared inference job</summary>
           <form onSubmit={(event) => void submit(event)} noValidate>
             <label>
               Workspace
               <select
+                className="form-select"
                 value={workspaceId}
                 onChange={(event) => {
                   setWorkspace(event.target.value);
@@ -294,6 +296,7 @@ export default function SharedInferenceJobs({
             <label>
               Inference group
               <select
+                className="form-select"
                 value={groupId}
                 onChange={(event) => setGroupId(event.target.value)}
               >
@@ -329,13 +332,23 @@ export default function SharedInferenceJobs({
             )}
             <label>
               Job prompt
-              <textarea name="prompt" maxLength={32768} required rows={5} />
+              <textarea
+                className="form-control"
+                name="prompt"
+                maxLength={32768}
+                required
+                rows={5}
+              />
             </label>
             {mode === "wide_area" && (
               <label className="check-label">
-                <input type="checkbox" name="wide_area_consent" />I confirm
-                sharing this prompt across the selected locations and understand
-                that generation may be slower.
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  name="wide_area_consent"
+                />
+                I confirm sharing this prompt across the selected locations and
+                understand that generation may be slower.
               </label>
             )}
             <p className="muted">
@@ -343,12 +356,12 @@ export default function SharedInferenceJobs({
               disconnect ends the attempt; GPU state cannot be resumed.
               Performance remains unverified until benchmarked on these devices.
             </p>
-            <button className="action" disabled={busy || stale}>
+            <button className="btn btn-primary action" disabled={busy || stale}>
               {busy ? "Submitting..." : "Run distributed job"}
             </button>
           </form>
         </details>
-        <section className="panel">
+        <section className="card panel">
           <h2>Distributed job history</h2>
           {pages}
           <div
@@ -357,7 +370,7 @@ export default function SharedInferenceJobs({
             role="region"
             aria-label="Shared inference jobs"
           >
-            <table>
+            <table className="table align-middle">
               <caption>One model request per job</caption>
               <thead>
                 <tr>
@@ -377,7 +390,7 @@ export default function SharedInferenceJobs({
                     <td>{localTime(job.created_at)}</td>
                     <td>
                       <button
-                        className="action secondary"
+                        className="btn btn-outline-primary action secondary"
                         onClick={() => {
                           setSelected(job.id);
                           setDetail(null);
@@ -401,7 +414,7 @@ export default function SharedInferenceJobs({
           {pages}
         </section>
         {detail && (
-          <section className="panel">
+          <section className="card panel">
             <h2>Job information</h2>
             <StatusBadge value={detail.job.status} />
             <JobResult detail={detail} />

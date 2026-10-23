@@ -37,7 +37,7 @@ export function VariableLegend({
     <div className="variable-legend">
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         aria-expanded={open}
         aria-controls="task-variable-legend"
         onClick={() => setOpen(!open)}
@@ -67,6 +67,7 @@ export function VariableLegend({
             ].map(([key, description]) => (
               <li key={key}>
                 <button
+                  className="btn btn-outline-primary"
                   type="button"
                   onClick={async () => {
                     try {
@@ -98,7 +99,7 @@ export function VariableLegend({
           </p>
           <button
             type="button"
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             onClick={() => setOpen(false)}
           >
             Close variables

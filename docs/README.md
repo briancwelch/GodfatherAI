@@ -23,6 +23,9 @@ The worker readiness guide supersedes the older manual Ollama-only setup in the
 Consigliere guide. Distributed Tasks is the current name for the task graphs called
 Distributed Jobs in older guides; Distributed Jobs now means shared inference.
 
+For shared colors, Bootstrap components, toasts and progress bars, see
+[website appearance settings](operations/bootstrap-ui.md).
+
 ## Running a Command Center
 
 - [Docker installation, updates and backups](operations/coordinator-installation.md)

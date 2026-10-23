@@ -49,7 +49,7 @@ export function ConnectComputer() {
       .finally(() => setAddress(window.location.origin));
   }, []);
   return (
-    <section className="panel connect-computer">
+    <section className="card panel connect-computer">
       <h2>Consigliere downloads</h2>
       <ol>
         <li>
@@ -65,10 +65,10 @@ export function ConnectComputer() {
       <div className="connect-address">
         <label>
           Command Center address
-          <input readOnly value={address} />
+          <input className="form-control" readOnly value={address} />
         </label>
         <button
-          className="action"
+          className="btn btn-primary action"
           disabled={!address}
           onClick={() => {
             void navigator.clipboard
@@ -83,8 +83,12 @@ export function ConnectComputer() {
       {status && <p role="status">{status}</p>}
       <div className="worker-downloads" aria-label="Worker downloads">
         {downloads.map((item) => (
-          <div className="worker-download" key={item.filename}>
-            <a className="action" href={`/downloads/${item.filename}`} download>
+          <div className="card worker-download" key={item.filename}>
+            <a
+              className="btn btn-primary action"
+              href={`/downloads/${item.filename}`}
+              download
+            >
               Download for {item.platform}
             </a>
             <p>{item.signing}</p>

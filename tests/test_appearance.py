@@ -19,6 +19,14 @@ def test_default_palettes_and_full_settings_round_trip() -> None:
         ("font_size", 8),
         ("navigation_width", 500),
         ("font", "remote"),
+        ("button_variant", "custom-css"),
+        ("control_size", "huge"),
+        ("panel_padding", 100),
+        ("panel_shadow", "url(https://untrusted.invalid)"),
+        ("toast_position", "arbitrary"),
+        ("toast_width", 10000),
+        ("progress_height", 1),
+        ("danger_color", "url(https://untrusted.invalid)"),
         ("unknown_css", "anything"),
     ):
         with pytest.raises(ValidationError):
@@ -36,3 +44,13 @@ def test_native_build_version_is_read_without_guessing_source_version(
     for value in ('{"version":"unknown"}', "{}", "[]", "invalid"):
         manifest.write_text(value)
         assert build_info.worker_version() is None
+
+
+def test_pre_bootstrap_settings_receive_compatible_defaults() -> None:
+    settings = Appearance.model_validate({"font_size": 15, "striped_tables": True})
+    assert settings.font_size == 15
+    assert settings.striped_tables is True
+    assert settings.button_variant == "solid"
+    assert settings.toast_position == "bottom-end"
+    assert settings.progress_height == 12
+    assert settings.progress_striped is True

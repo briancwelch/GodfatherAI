@@ -2,6 +2,9 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useFeedback } from "./toast-notifications";
+import { ToastCard } from "./toast-notifications";
+import { ProgressBar } from "./progress-bar";
+import { BootstrapSettings } from "./bootstrap-settings";
 import { control } from "../lib/control-client";
 import {
   appearanceStyle,
@@ -24,7 +27,7 @@ export function AppearanceSettings() {
     let active = true;
     control<Appearance>("appearance")
       .then((data) => {
-        if (active) setDraft(data);
+        if (active) setDraft({ ...defaults, ...data });
       })
       .catch((e) => {
         if (active)
@@ -66,7 +69,10 @@ export function AppearanceSettings() {
     }
   }
   return (
-    <section className="panel appearance-settings" aria-label="Site appearance">
+    <section
+      className="card panel appearance-settings"
+      aria-label="Site appearance"
+    >
       <h2>Site appearance</h2>
       <p>
         Platform administrators set the shared site defaults. Preview changes
@@ -74,7 +80,7 @@ export function AppearanceSettings() {
         dark.
       </p>
       {error && (
-        <p role="alert" className="notice error">
+        <p role="alert" className="alert alert-danger notice error">
           {error}
         </p>
       )}
@@ -91,6 +97,7 @@ export function AppearanceSettings() {
             <label>
               Palette to edit{" "}
               <select
+                className="form-select"
                 value={theme}
                 onChange={(e) => setTheme(e.target.value as "light" | "dark")}
               >
@@ -103,6 +110,7 @@ export function AppearanceSettings() {
                 <label key={key}>
                   {paletteLabels[key]}
                   <input
+                    className="form-control"
                     type="color"
                     value={draft[theme][key]}
                     onChange={(e) =>
@@ -120,6 +128,7 @@ export function AppearanceSettings() {
               <label>
                 Default theme
                 <select
+                  className="form-select"
                   value={draft.default_theme}
                   onChange={(e) =>
                     change("default_theme", e.target.value as "light" | "dark")
@@ -132,6 +141,7 @@ export function AppearanceSettings() {
               <label>
                 Font
                 <select
+                  className="form-select"
                   value={draft.font}
                   onChange={(e) =>
                     change("font", e.target.value as Appearance["font"])
@@ -154,6 +164,7 @@ export function AppearanceSettings() {
                 <label key={key}>
                   {label}
                   <input
+                    className="form-control"
                     type="number"
                     required
                     value={draft[key]}
@@ -167,6 +178,7 @@ export function AppearanceSettings() {
               <label>
                 Table density
                 <select
+                  className="form-select"
                   value={draft.density}
                   onChange={(e) =>
                     change("density", e.target.value as Appearance["density"])
@@ -180,6 +192,7 @@ export function AppearanceSettings() {
               <label>
                 Content width
                 <select
+                  className="form-select"
                   value={draft.content_width}
                   onChange={(e) =>
                     change(
@@ -196,6 +209,7 @@ export function AppearanceSettings() {
               <label>
                 Ribbon size
                 <select
+                  className="form-select"
                   value={draft.ribbon_size}
                   onChange={(e) =>
                     change(
@@ -219,6 +233,7 @@ export function AppearanceSettings() {
               ).map(([key, label]) => (
                 <label key={key}>
                   <input
+                    className="form-check-input"
                     type="checkbox"
                     checked={draft[key]}
                     onChange={(e) => change(key, e.target.checked)}
@@ -228,9 +243,11 @@ export function AppearanceSettings() {
               ))}
             </div>
           </fieldset>
+          <BootstrapSettings draft={draft} change={change} disabled={busy} />
           <section
             className="appearance-preview"
             aria-label="Appearance preview"
+            data-bs-theme={theme}
             style={appearanceStyle(draft, theme)}
           >
             <div className="preview-header">
@@ -249,10 +266,27 @@ export function AppearanceSettings() {
                   <span className="muted">secondary information</span> and{" "}
                   <a href="#appearance-preview-table">actions</a>.
                 </p>
-                <button type="button" className="action">
+                <button type="button" className="btn btn-primary action">
                   Example action
                 </button>
-                <table id="appearance-preview-table">
+                <ProgressBar
+                  value={65}
+                  aria-label="Example measured progress"
+                />
+                <ToastCard
+                  toast={{
+                    id: "appearance-preview",
+                    kind: "error",
+                    title: "Example warning",
+                    message:
+                      "Preview only. Important messages stay visible until dismissed.",
+                  }}
+                  dismiss={() => {}}
+                />
+                <table
+                  className="table align-middle"
+                  id="appearance-preview-table"
+                >
                   <tbody>
                     {["Online computer", "Queued job"].map((label) => (
                       <tr key={label}>
@@ -266,7 +300,7 @@ export function AppearanceSettings() {
             </div>
           </section>
           {!!errors.length && (
-            <div role="alert" className="notice error">
+            <div role="alert" className="alert alert-danger notice error">
               <p>Adjust these colors before saving:</p>
               <ul>
                 {errors.map((e) => (
@@ -276,12 +310,15 @@ export function AppearanceSettings() {
             </div>
           )}
           <div className="actions">
-            <button className="action" disabled={busy || !!errors.length}>
+            <button
+              className="btn btn-primary action"
+              disabled={busy || !!errors.length}
+            >
               {busy ? "Saving..." : "Save site appearance"}
             </button>
             <button
               type="button"
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               disabled={busy}
               onClick={() => {
                 setDraft(structuredClone(defaults));

@@ -9,7 +9,7 @@ import { localTime, short } from "../lib/contracts";
 
 export function StatusBadge({ value }: { value: string }) {
   return (
-    <span className={`status status-${value.toLowerCase()}`}>
+    <span className={`badge status status-${value.toLowerCase()}`}>
       {value.replaceAll("_", " ")}
     </span>
   );
@@ -25,7 +25,7 @@ export function Metric({
   detail?: string;
 }) {
   return (
-    <article className="metric">
+    <article className="card metric">
       <p>{label}</p>
       <strong>{value}</strong>
       {detail && <small>{detail}</small>}
@@ -70,13 +70,14 @@ export function DataTable<T>({
       role="region"
       aria-label={caption}
     >
-      <table>
+      <table className="table align-middle">
         <caption>{caption}</caption>
         <thead>
           <tr>
             {selection && (
               <th scope="col">
                 <input
+                  className="form-check-input"
                   type="checkbox"
                   aria-label={`Select all eligible ${caption.toLowerCase()} on this page`}
                   checked={allSelected}
@@ -104,6 +105,7 @@ export function DataTable<T>({
               {selection && (
                 <td onClick={(e) => e.stopPropagation()}>
                   <input
+                    className="form-check-input"
                     type="checkbox"
                     aria-label={`Select ${selection.label(row)}`}
                     checked={selection.ids.includes(selection.key(row))}
@@ -209,7 +211,7 @@ export function ConfirmAction({
     <>
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={disabled}
         onClick={() => {
           setError("");
@@ -231,7 +233,7 @@ export function ConfirmAction({
         <div className="actions">
           <button
             type="button"
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             disabled={busy}
             onClick={() => dialog.current?.close()}
           >
@@ -239,7 +241,7 @@ export function ConfirmAction({
           </button>
           <button
             type="button"
-            className="action"
+            className="btn btn-primary action"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -285,7 +287,7 @@ export function Pager({
       </span>
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={offset === 0}
         onClick={() => onChange(Math.max(0, offset - limit))}
       >
@@ -293,7 +295,7 @@ export function Pager({
       </button>
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={offset + limit >= total}
         onClick={() => onChange(offset + limit)}
       >
@@ -316,9 +318,14 @@ export function SectionTabs({
 }) {
   const id = useId();
   return (
-    <div className="section-tabs" role="tablist" aria-label={label}>
+    <div
+      className="nav nav-tabs section-tabs"
+      role="tablist"
+      aria-label={label}
+    >
       {tabs.map((tab, index) => (
         <button
+          className="btn btn-outline-primary nav-link"
           key={tab}
           type="button"
           role="tab"

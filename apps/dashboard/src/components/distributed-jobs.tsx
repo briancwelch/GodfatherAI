@@ -1,5 +1,7 @@
 "use client";
 
+import { ProgressBar } from "./progress-bar";
+
 import { useFeedback } from "./toast-notifications";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -225,7 +227,7 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
   const names = new Map(detail.nodes.map((node) => [node.id, node.name]));
   return (
     <>
-      <section className="panel" aria-label="Task dependency graph">
+      <section className="card panel" aria-label="Task dependency graph">
         <h2>Workload graph</h2>
         <p>
           Independent tasks run together. Arrows show results required before
@@ -233,7 +235,7 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
         </p>
         <WorkloadGraph detail={detail} />
       </section>
-      <section className="panel" aria-label="Node contribution">
+      <section className="card panel" aria-label="Node contribution">
         <h2>Participating computers</h2>
         <p>{detail.contribution_basis}</p>
         <p>
@@ -251,9 +253,9 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
               />
             </div>
             <div className="distributed-meter">
-              <progress
+              <ProgressBar
                 max={100}
-                value={node.contribution_percent ?? 0}
+                value={node.contribution_percent ?? undefined}
                 aria-label={`${node.name} share of recorded execution time`}
               />
               <span>
@@ -284,7 +286,7 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
           </div>
         ))}
       </section>
-      <section className="panel">
+      <section className="card panel">
         <h2>Tasks and durable checkpoints</h2>
         <div
           className="table-scroll"
@@ -292,7 +294,7 @@ export function DistributedWorkload({ detail }: { detail: DistributedDetail }) {
           role="region"
           aria-label="Distributed tasks"
         >
-          <table>
+          <table className="table align-middle">
             <caption>Assignments, dependencies and recovery</caption>
             <thead>
               <tr>
@@ -745,7 +747,7 @@ export default function DistributedJobs({
     <div className="actions" aria-label="Distributed tasks pagination">
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={offset === 0}
         onClick={() => setOffset(Math.max(0, offset - 25))}
       >
@@ -758,7 +760,7 @@ export default function DistributedJobs({
       </span>
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={!history || offset + 25 >= history.total}
         onClick={() => setOffset(offset + 25)}
       >
@@ -776,18 +778,18 @@ export default function DistributedJobs({
       ribbon={
         <RibbonGroup label="Distributed work">
           <a
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             href={`/agents?workspace=${workspaceId}`}
           >
             Manage agents
           </a>
-          <a className="action secondary" href="/nodes">
+          <a className="btn btn-outline-primary action secondary" href="/nodes">
             Worker computers
           </a>
         </RibbonGroup>
       }
     >
-      <main id="main-content" className="distributed-page">
+      <main id="main-content" className="container-fluid distributed-page">
         <h1>Distributed Tasks</h1>
         <p>
           One goal, multiple selected computers, concurrent model tasks and one
@@ -801,7 +803,7 @@ export default function DistributedJobs({
             Status is stale. Waiting for the API; controls are disabled.
           </p>
         )}
-        <details className="panel" open>
+        <details className="card panel" open>
           <summary>Submit distributed tasks</summary>
           {!data ? (
             <p>Loading authorized workspaces and participants...</p>
@@ -815,6 +817,7 @@ export default function DistributedJobs({
               <label>
                 Workspace
                 <select
+                  className="form-select"
                   value={workspaceId}
                   onChange={(e) => {
                     setWorkspace(e.target.value);
@@ -844,11 +847,17 @@ export default function DistributedJobs({
               <div className="workload-fields">
                 <label>
                   Job name
-                  <input name="name" required maxLength={200} />
+                  <input
+                    className="form-control"
+                    name="name"
+                    required
+                    maxLength={200}
+                  />
                 </label>
                 <label>
                   Shared goal
                   <textarea
+                    className="form-control"
                     name="instruction"
                     required
                     maxLength={2000}
@@ -871,6 +880,7 @@ export default function DistributedJobs({
                   options.nodes.map((node) => (
                     <label className="check-label" key={node.node_id}>
                       <input
+                        className="form-check-input"
                         type="checkbox"
                         checked={participants.includes(node.node_id)}
                         disabled={
@@ -911,7 +921,7 @@ export default function DistributedJobs({
                 {options && options.node_offset + 25 < options.node_total && (
                   <button
                     type="button"
-                    className="action secondary"
+                    className="btn btn-outline-primary action secondary"
                     onClick={() => void more("nodes")}
                   >
                     Load more computers
@@ -939,6 +949,7 @@ export default function DistributedJobs({
                 <label>
                   Named text values (JSON object)
                   <textarea
+                    className="form-control"
                     value={customVariables}
                     maxLength={66000}
                     rows={3}
@@ -963,6 +974,7 @@ export default function DistributedJobs({
                       {drafts.slice(0, index).map((prior) => (
                         <label className="check-label" key={prior.key}>
                           <input
+                            className="form-check-input"
                             type="checkbox"
                             checked={draft.depends_on.includes(prior.key)}
                             onChange={(event) =>
@@ -989,6 +1001,7 @@ export default function DistributedJobs({
                     <label>
                       Task name
                       <input
+                        className="form-control"
                         required
                         maxLength={200}
                         value={draft.name}
@@ -998,6 +1011,7 @@ export default function DistributedJobs({
                     <label>
                       Agent / model
                       <select
+                        className="form-select"
                         required
                         value={draft.agent}
                         onChange={(e) =>
@@ -1025,6 +1039,7 @@ export default function DistributedJobs({
                     <label>
                       Computer
                       <select
+                        className="form-select"
                         required
                         value={
                           draft.node ||
@@ -1045,6 +1060,7 @@ export default function DistributedJobs({
                   <label>
                     Task instructions
                     <textarea
+                      className="form-control"
                       required
                       maxLength={1800}
                       rows={2}
@@ -1056,6 +1072,7 @@ export default function DistributedJobs({
                   </label>
                   <label className="check-label">
                     <input
+                      className="form-check-input"
                       type="checkbox"
                       checked={draft.backups}
                       onChange={(e) =>
@@ -1068,7 +1085,7 @@ export default function DistributedJobs({
                   {drafts.length > 2 && (
                     <button
                       type="button"
-                      className="action secondary"
+                      className="btn btn-outline-primary action secondary"
                       onClick={() =>
                         setDrafts((items) =>
                           items
@@ -1090,7 +1107,7 @@ export default function DistributedJobs({
               <div className="actions">
                 <button
                   type="button"
-                  className="action secondary"
+                  className="btn btn-outline-primary action secondary"
                   disabled={drafts.length >= 15}
                   onClick={() =>
                     setDrafts((items) => [
@@ -1108,7 +1125,7 @@ export default function DistributedJobs({
                 {options && options.agent_offset + 25 < options.agent_total && (
                   <button
                     type="button"
-                    className="action secondary"
+                    className="btn btn-outline-primary action secondary"
                     onClick={() => void more("agents")}
                   >
                     Load more agents
@@ -1123,6 +1140,7 @@ export default function DistributedJobs({
                   <label>
                     Synthesis agent
                     <select
+                      className="form-select"
                       required
                       value={finalAgent}
                       onChange={(e) => setFinalAgent(e.target.value)}
@@ -1138,6 +1156,7 @@ export default function DistributedJobs({
                   <label>
                     Synthesis computer
                     <select
+                      className="form-select"
                       required
                       value={finalNode || contextNodes[0]?.node_id || ""}
                       onChange={(e) => setFinalNode(e.target.value)}
@@ -1153,6 +1172,7 @@ export default function DistributedJobs({
                 </div>
                 <label className="check-label">
                   <input
+                    className="form-check-input"
                     type="checkbox"
                     checked={finalBackups}
                     onChange={(event) => setFinalBackups(event.target.checked)}
@@ -1170,9 +1190,14 @@ export default function DistributedJobs({
               </fieldset>
               {paid && (
                 <label className="check-label">
-                  <input name="paid_consent" type="checkbox" required />I
-                  authorize the explicitly selected paid models and sending this
-                  goal and predecessor results to their providers. Provider
+                  <input
+                    className="form-check-input"
+                    name="paid_consent"
+                    type="checkbox"
+                    required
+                  />
+                  I authorize the explicitly selected paid models and sending
+                  this goal and predecessor results to their providers. Provider
                   billing applies.
                 </label>
               )}
@@ -1264,7 +1289,7 @@ export default function DistributedJobs({
                 </p>
               )}
               <button
-                className="action"
+                className="btn btn-primary action"
                 disabled={busy || stale}
                 aria-describedby="distributed-submit-help"
               >
@@ -1278,7 +1303,7 @@ export default function DistributedJobs({
             </form>
           )}
         </details>
-        <section className="panel">
+        <section className="card panel">
           <h2>Distributed tasks history</h2>
           {pages}
           <div
@@ -1287,7 +1312,7 @@ export default function DistributedJobs({
             role="region"
             aria-label="Distributed tasks history"
           >
-            <table>
+            <table className="table align-middle">
               <caption>Workspace distributed task groups</caption>
               <thead>
                 <tr>
@@ -1308,7 +1333,7 @@ export default function DistributedJobs({
                     <td>
                       <button
                         type="button"
-                        className="action secondary"
+                        className="btn btn-outline-primary action secondary"
                         onClick={() => {
                           setSelected(job.id);
                           setDetail(null);
@@ -1337,7 +1362,7 @@ export default function DistributedJobs({
         )}
         {detail && (
           <>
-            <section className="panel" id="distributed-job-detail">
+            <section className="card panel" id="distributed-job-detail">
               <h2>{detail.name}</h2>
               <StatusBadge value={detail.status} />
               {detail.status === "PENDING" && (
@@ -1353,7 +1378,7 @@ export default function DistributedJobs({
               {detail.can_control && !terminal.includes(detail.status) && (
                 <button
                   type="button"
-                  className="action secondary"
+                  className="btn btn-outline-primary action secondary"
                   disabled={busy || stale}
                   onClick={async () => {
                     if (

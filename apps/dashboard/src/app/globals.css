@@ -2002,6 +2002,85 @@ body {
 .worker-readiness p {
   line-height: 1.6;
 }
+.worker-readiness h2 {
+  margin-block: 10px 8px;
+}
+.worker-readiness p {
+  margin-block: 12px;
+}
+.worker-readiness .worker-outdated {
+  margin-left: 0;
+}
+.worker-availability-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin-block: 16px;
+  list-style: none;
+}
+.worker-availability-row {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+}
+.worker-availability-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.worker-availability-heading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.worker-availability-heading .status {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.worker-availability-heading .status-online {
+  border-width: 2px;
+}
+.worker-availability-heading .status-online::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.worker-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.worker-capabilities .status {
+  max-width: 100%;
+  padding: 4px 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.worker-capability {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--card);
+}
+.worker-readiness .readiness-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  margin-top: 18px;
+  padding: 10px 14px;
+  text-align: center;
+  text-decoration: none;
+  white-space: normal;
+}
 @media (max-width: 1000px) {
   .workload-layout,
   .workload-layout.setup-collapsed {

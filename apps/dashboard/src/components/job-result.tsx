@@ -22,7 +22,7 @@ function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
   return (
     <div className="result-code">
       <button
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         type="button"
         onClick={async (event) => {
           const text =
@@ -160,7 +160,7 @@ export function ReadableValue({ value }: { value: Json }) {
     const columns = data.columns.map(String);
     return (
       <div className="table-scroll">
-        <table>
+        <table className="table align-middle">
           <caption>
             {typeof data.title === "string" ? data.title : "Analysis results"}
           </caption>
@@ -265,7 +265,7 @@ export function ReadableValue({ value }: { value: Json }) {
     )
       return (
         <a
-          className="action"
+          className="btn btn-primary action"
           href={src}
           download={
             data.media_type === "application/pdf"
@@ -377,7 +377,7 @@ function WorkloadResult({
             )}{" "}
             {url && (
               <a
-                className="action secondary"
+                className="btn btn-outline-primary action secondary"
                 href={url}
                 download={String(file.filename)}
               >
@@ -479,12 +479,12 @@ export function CodingResult({
         </span>
       </div>
       {failed > 0 && (
-        <p className="notice">
+        <p className="alert alert-warning notice">
           Tests need attention. Review the failures before applying this patch.
         </p>
       )}
       {!tests.length && (
-        <p className="notice">
+        <p className="alert alert-warning notice">
           This patch is untested. Review it carefully before applying.
         </p>
       )}
@@ -583,6 +583,7 @@ export function CodingResult({
             </p>
             <label className="check-label">
               <input
+                className="form-check-input"
                 type="checkbox"
                 checked={reviewed}
                 onChange={(e) => setReviewed(e.target.checked)}
@@ -596,7 +597,7 @@ export function CodingResult({
               .
             </label>
             <button
-              className="action"
+              className="btn btn-primary action"
               disabled={!canApply || !reviewed || busy}
               onClick={() => setConfirm(true)}
             >
@@ -608,7 +609,9 @@ export function CodingResult({
               </p>
             )}
             {detail.context?.apply_enabled === false && (
-              <p className="notice">{detail.context.apply_reason}</p>
+              <p className="alert alert-warning notice">
+                {detail.context.apply_reason}
+              </p>
             )}
             {confirm && (
               <div
@@ -624,7 +627,7 @@ export function CodingResult({
                 </p>
                 <div className="actions">
                   <button
-                    className="action"
+                    className="btn btn-primary action"
                     disabled={busy}
                     onClick={async () => {
                       setBusy(true);
@@ -653,7 +656,7 @@ export function CodingResult({
                     {busy ? "Requesting application…" : "Confirm and apply"}
                   </button>
                   <button
-                    className="action secondary"
+                    className="btn btn-outline-primary action secondary"
                     disabled={busy}
                     onClick={() => setConfirm(false)}
                   >
@@ -733,7 +736,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
     typeof object(data).summary === "string";
   const instruction = detail.job.input?.instruction ?? detail.job.input?.prompt;
   return (
-    <section className="job-result" aria-label="Task result">
+    <section className="card job-result" aria-label="Task result">
       <h3>{completed ? "Result" : "Output so far"}</h3>
       {typeof instruction === "string" && (
         <p className="result-task">
@@ -741,7 +744,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
         </p>
       )}
       {detail.workflow?.status === "REVIEW_REQUIRED" && (
-        <p className="notice">
+        <p className="alert alert-warning notice">
           Recovery requires review:{" "}
           {detail.workflow.recovery_error?.replaceAll("_", " ") ||
             "inspect committed artifacts and execution history"}
@@ -752,14 +755,14 @@ export function JobResult({ detail }: { detail: JobDetail }) {
         <p role="alert">{snapshot.output_error}</p>
       )}
       {!!selection.connection_id && detail.job.status === "FAILED" && (
-        <p className="notice">
+        <p className="alert alert-warning notice">
           Paid attempts require usage and reservation review. Submit a
           separately authorized new task rather than replaying an uncertain paid
           call.
         </p>
       )}
       {result.finish_reason === "length" && (
-        <p className="notice">
+        <p className="alert alert-warning notice">
           Output reached the configured token limit and may be incomplete.
         </p>
       )}
@@ -781,7 +784,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
             was downloaded and verified on the worker.
           </p>
           <a
-            className="action"
+            className="btn btn-primary action"
             href={`/models?workspace=${detail.job.workspace_id}`}
           >
             Use installed model in this workspace
@@ -832,7 +835,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
       {hasOutput && (
         <div className="actions">
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(
@@ -849,7 +852,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
             Copy result
           </button>
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             onClick={() => {
               const url = URL.createObjectURL(
                 new Blob(
@@ -872,7 +875,7 @@ export function JobResult({ detail }: { detail: JobDetail }) {
           </button>
           {typeof artifact.id === "string" && (
             <a
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               href={`/api/control/workflow/jobs/${detail.job.id}/artifacts/${artifact.id}?download=1`}
             >
               Download verified artifact
@@ -896,7 +899,7 @@ function DownloadText({
 }) {
   return (
     <button
-      className="action secondary"
+      className="btn btn-outline-primary action secondary"
       onClick={() => {
         const url = URL.createObjectURL(
           new Blob([text], { type: "text/plain;charset=utf-8" }),

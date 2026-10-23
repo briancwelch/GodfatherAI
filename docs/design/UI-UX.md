@@ -24,6 +24,22 @@ This document governs the design and interaction of the browser-based Command Ce
    Preview changes → Apply to my project. Producing a patch and applying it are
    separate, explicitly labeled outcomes.
 
+## Bootstrap component revision (owner authorized 2026-10-22)
+
+Use locally bundled Bootstrap 5.3.8 for screen components and responsive layout,
+retaining Godfather color branding. React/TSX owns state, navigation, dismissals,
+confirmation, tabs and measured/indeterminate progress. Do not load Bootstrap
+JavaScript plugins or a third-party CDN. Python/FastAPI remains the backend.
+This revision supersedes the earlier shadcn-first component direction and compact
+component styling below; preserve existing workflows, permissions and content.
+
+Cards, buttons, forms, tables, alerts, navigation, toasts and progress bars share
+the Bootstrap theme. Platform administrators configure the supported palette,
+typography, density, sizing, corners, panels, tables, toasts and progress options
+under **Admin settings > Site appearance**. See
+[Bootstrap administration](../operations/bootstrap-ui.md) and
+[the architecture decision](../decisions/0026-bootstrap-command-center.md).
+
 ## Design system
 - Current authorized desktop direction: navy Core `#14283D` application bar, Ion
   `#58D5DE` highlights, Ion Ink `#087F8C` actions and Chalk `#F4F8FC` workspace.

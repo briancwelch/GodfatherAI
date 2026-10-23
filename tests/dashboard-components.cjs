@@ -942,8 +942,8 @@ test("toasts expose persistent errors, measured or indeterminate processing, typ
     assert.match(html, /Dismiss Status/);
     assert.match(html, kind === "error" ? /role="alert"/ : /role="status"/);
     if (kind === "processing") {
-      assert.match(html, /<progress/);
-      assert.doesNotMatch(html, /value="/);
+      assert.match(html, /role="progressbar"/);
+      assert.doesNotMatch(html, /aria-valuenow="/);
     }
   }
 });
@@ -1044,4 +1044,151 @@ test("task variables infer result dependencies and reject unknown, malformed or 
     "{{workspace.name",
   ])
     assert.throws(() => taskVariables.taskReferences(text, ["task1"], []));
+});
+
+test("dashboard sources are valid UTF-8 without corrupted display characters", () => {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const corrupted =
+    /\u00c2[\u0080-\u00bf]|\u00c3[\u0080-\u00bf]|\u00e2[\u0080-\u00bf\u20ac\u2020]|\u00f0\u0178|[\u0080-\u009f\ufffd]/u;
+  function inspect(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const filename = path.join(directory, entry.name);
+      if (entry.isDirectory()) inspect(filename);
+      else {
+        const source = decoder.decode(fs.readFileSync(filename));
+        assert.doesNotMatch(source, corrupted, filename);
+      }
+    }
+  }
+  inspect(path.join(__dirname, "../apps/dashboard/src"));
+});
+
+test("worker readiness distinguishes online state from configured image models", () => {
+  const {
+    WorkerAvailabilityList,
+  } = require("../apps/dashboard/src/components/workloads.tsx");
+  const nodes = [
+    {
+      id: "a",
+      name: "Ready computer",
+      available: true,
+      analytics: true,
+      image_models: ["Local XL", "Alternate model"],
+    },
+    {
+      id: "b",
+      name: "Needs setup",
+      available: true,
+      analytics: false,
+      image_models: [],
+    },
+    {
+      id: "c",
+      name: "Disconnected computer",
+      available: false,
+      analytics: true,
+      image_models: ["Installed offline model"],
+    },
+  ];
+  const html = renderToStaticMarkup(
+    React.createElement(WorkerAvailabilityList, { nodes, workflow: "images" }),
+  );
+  assert.match(html, /aria-label="Worker availability"/);
+  assert.equal((html.match(/status-online/g) || []).length, 2);
+  assert.match(html, /status-unavailable[^>]*>Unavailable/);
+  assert.match(html, /Image model: Local XL/);
+  assert.match(html, /Image model: Alternate model/);
+  assert.match(html, /Image model: Installed offline model/);
+  assert.match(html, /status-warning[^>]*>No image models/);
+  assert.equal(
+    (html.match(/class="worker-availability-row"/g) || []).length,
+    3,
+  );
+  const analytics = renderToStaticMarkup(
+    React.createElement(WorkerAvailabilityList, {
+      nodes,
+      workflow: "analytics",
+    }),
+  );
+  assert.match(analytics, /Analytics configured/);
+  assert.match(analytics, /Analytics unavailable/);
+  assert.doesNotMatch(analytics, /Image model:/);
+});
+
+test("Bootstrap progress bars preserve measured zero and never invent unknown progress", () => {
+  const {
+    ProgressBar,
+  } = require("../apps/dashboard/src/components/progress-bar.tsx");
+  for (const [value, expected] of [
+    [0, 0],
+    [42, 42],
+    [120, 100],
+    [-5, 0],
+  ]) {
+    const html = renderToStaticMarkup(
+      React.createElement(ProgressBar, { value, "aria-label": "Job progress" }),
+    );
+    assert.match(html, new RegExp('aria-valuenow="' + expected + '"'));
+    assert.match(html, new RegExp("width:" + expected + "%"));
+    assert.match(
+      html,
+      /progress-bar progress-bar-striped progress-bar-animated/,
+    );
+  }
+  for (const value of [undefined, NaN]) {
+    const html = renderToStaticMarkup(
+      React.createElement(ProgressBar, { value, "aria-label": "Job progress" }),
+    );
+    assert.match(html, /Progress not reported/);
+    assert.doesNotMatch(html, /aria-valuenow/);
+  }
+});
+
+test("Bootstrap admin controls bind to validated shared settings and safe theme variables", () => {
+  const {
+    BootstrapSettings,
+  } = require("../apps/dashboard/src/components/bootstrap-settings.tsx");
+  const appearance = require("../apps/dashboard/src/lib/appearance.ts");
+  const html = renderToStaticMarkup(
+    React.createElement(BootstrapSettings, {
+      draft: appearance.defaults,
+      change() {},
+      disabled: false,
+    }),
+  );
+  for (const label of [
+    "Button style",
+    "Control size",
+    "Panel shadow",
+    "Toast position",
+    "Progress bar height",
+    "Striped progress bars",
+    "Error / danger color",
+  ])
+    assert.ok(html.includes(label));
+  const custom = {
+    ...appearance.defaults,
+    button_variant: "outline",
+    toast_position: "top-start",
+    progress_animated: false,
+    table_hover: false,
+    toast_width: 420,
+  };
+  const style = appearance.appearanceStyle(custom, "dark");
+  assert.equal(style["--gf-button-bg"], "transparent");
+  assert.equal(style["--gf-toast-top"], "16px");
+  assert.equal(style["--gf-toast-right"], "auto");
+  assert.equal(style["--gf-toast-width"], "420px");
+  assert.equal(style["--gf-progress-animation"], "none");
+  assert.equal(style["--gf-table-hover"], appearance.defaults.dark.card);
+  const reduced = appearance.appearanceStyle(
+    { ...appearance.defaults, reduced_motion: true },
+    "light",
+  );
+  assert.equal(reduced["--gf-progress-animation"], "none");
+  const legacySettings = { ...appearance.defaults };
+  delete legacySettings.progress_height;
+  const legacy = appearance.appearanceStyle(legacySettings, "light");
+  assert.equal(legacy["--gf-progress-height"], "12px");
+  assert.equal(legacy["--primary"], appearance.defaults.light.primary);
 });

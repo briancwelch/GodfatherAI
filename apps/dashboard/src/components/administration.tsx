@@ -46,8 +46,9 @@ export function InvitationDelivery({ invitation }: { invitation: Invitation }) {
   const [message, setMessage] = useState("");
   return (
     <div>
-      <span>No email sent Â· Share sign-in instructions</span>{" "}
+      <span>No email sent · Share sign-in instructions</span>{" "}
       <button
+        className="btn btn-outline-primary"
         type="button"
         onClick={async () => {
           const instructions = `You are invited to The Godfather. Open ${window.location.origin}/ and select Continue with Google using ${invitation.email}. No invitation code is needed. Accept before ${new Date(invitation.expires_at).toLocaleString()}. Tailscale access is separate.`;
@@ -278,7 +279,7 @@ export default function Administration({
             "Settings",
           ].map((label) => (
             <button
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               key={label}
               disabled={!platform && ["Users", "Invitations"].includes(label)}
               aria-pressed={tab === label}
@@ -290,7 +291,10 @@ export default function Administration({
         </RibbonGroup>
       }
     >
-      <main id="main-content" className="command-body administration-page">
+      <main
+        id="main-content"
+        className="container-fluid command-body administration-page"
+      >
         <div className="page-heading">
           <div>
             <a href="/">The Godfather / Command Center</a>
@@ -298,7 +302,7 @@ export default function Administration({
             <p>Persisted identities, owner permissions and security history.</p>
           </div>
           <button
-            className="action"
+            className="btn btn-primary action"
             disabled={busy}
             onClick={() => void load().catch((e) => setError(e.message))}
           >
@@ -306,11 +310,11 @@ export default function Administration({
           </button>
         </div>
         {error && (
-          <p role="alert" className="notice error">
+          <p role="alert" className="alert alert-danger notice error">
             {error} <a href="/">Return to sign-in</a>
           </p>
         )}
-        {busy && <p role="status">Waiting for backend confirmationâ€¦</p>}
+        {busy && <p role="status">Waiting for backend confirmation…</p>}
         {platform && (
           <a href="/administration/appearance">Configure site appearance</a>
         )}
@@ -320,7 +324,7 @@ export default function Administration({
           value={tab}
           onChange={setTab}
         />
-        {loading && <p role="status">Loading {tab.toLowerCase()}â€¦</p>}
+        {loading && <p role="status">Loading {tab.toLowerCase()}…</p>}
         <div aria-busy={loading} inert={loading}>
           {page && !loading && (
             <Pager
@@ -334,14 +338,14 @@ export default function Administration({
             role="tabpanel"
             aria-label="Settings"
             hidden={tab !== "Settings"}
-            className="panel"
+            className="card panel"
           >
             <h2>Your account</h2>
             <p>
-              {user.display_name} Â· {user.email}
+              {user.display_name} · {user.email}
             </p>
             <p>
-              {user.roles.join(", ")} Â· Account ID {user.id}
+              {user.roles.join(", ")} · Account ID {user.id}
             </p>
             <ConfirmAction
               label="Revoke all my sessions"
@@ -355,7 +359,7 @@ export default function Administration({
               }}
             />
             <button
-              className="action"
+              className="btn btn-primary action"
               onClick={async () => {
                 const response = await fetch("/api/auth/logout", {
                   method: "POST",
@@ -368,14 +372,17 @@ export default function Administration({
             </button>
           </section>
           {secret !== null && (
-            <section className="panel">
+            <section className="card panel">
               <h2>One-time delivery</h2>
               <p>
                 Deliver this secret through an approved private channel. It will
                 not be shown again. Never paste it into logs or source control.
               </p>
               <pre>{JSON.stringify(secret, null, 2)}</pre>
-              <button className="action" onClick={() => setSecret(null)}>
+              <button
+                className="btn btn-primary action"
+                onClick={() => setSecret(null)}
+              >
                 Dismiss secret
               </button>
             </section>
@@ -384,15 +391,16 @@ export default function Administration({
             role="tabpanel"
             aria-label={tab === "Permissions" ? "Permissions" : "Workspaces"}
             hidden={!["Workspaces", "Permissions"].includes(tab)}
-            className="panel"
+            className="card panel"
           >
             <h2>{tab === "Permissions" ? "Permissions" : "Workspaces"}</h2>
             {!snapshot ? (
-              <p role="status">Loading authorized workspacesâ€¦</p>
+              <p role="status">Loading authorized workspaces…</p>
             ) : (
               <label>
                 Workspace
                 <select
+                  className="form-select"
                   value={workspace}
                   onChange={(e) => {
                     setMembership(null);
@@ -449,16 +457,21 @@ export default function Administration({
             >
               <label>
                 New private workspace name
-                <input name="name" required maxLength={200} />
+                <input
+                  className="form-control"
+                  name="name"
+                  required
+                  maxLength={200}
+                />
               </label>
-              <button className="action" disabled={busy}>
+              <button className="btn btn-primary action" disabled={busy}>
                 Create workspace
               </button>
             </form>
             {tab === "Permissions" && membership && (
               <>
                 <p>
-                  Owner {membership.owner_id} Â·{" "}
+                  Owner {membership.owner_id} ·{" "}
                   {membership.shared ? "Explicitly shared" : "Private"}
                 </p>
                 <Pager
@@ -538,6 +551,7 @@ export default function Administration({
                     ].map((model) => (
                       <label className="check-label" key={model}>
                         <input
+                          className="form-check-input"
                           type="checkbox"
                           name="models"
                           value={model}
@@ -559,6 +573,7 @@ export default function Administration({
                     ].map((tool) => (
                       <label className="check-label" key={tool}>
                         <input
+                          className="form-check-input"
                           type="checkbox"
                           name="tools"
                           value={tool}
@@ -570,7 +585,7 @@ export default function Administration({
                       </label>
                     ))}
                   </fieldset>
-                  <button className="action" disabled={busy}>
+                  <button className="btn btn-primary action" disabled={busy}>
                     Apply execution policy
                   </button>
                   <p>
@@ -588,7 +603,7 @@ export default function Administration({
               role="tabpanel"
               aria-label="Computers"
               hidden={tab !== "Computers"}
-              className="panel"
+              className="card panel"
             >
               <ConnectComputer />
               <h2>Owned computers and credentials</h2>
@@ -615,9 +630,14 @@ export default function Administration({
                   >
                     <label>
                       Unique node name
-                      <input name="name" required maxLength={100} />
+                      <input
+                        className="form-control"
+                        name="name"
+                        required
+                        maxLength={100}
+                      />
                     </label>
-                    <button className="action" disabled={busy}>
+                    <button className="btn btn-primary action" disabled={busy}>
                       Create worker credential
                     </button>
                   </form>
@@ -707,7 +727,7 @@ export default function Administration({
                 role="tabpanel"
                 aria-label="Invitations"
                 hidden={tab !== "Invitations"}
-                className="panel"
+                className="card panel"
               >
                 <h2>Invitations</h2>
                 <p>
@@ -730,12 +750,19 @@ export default function Administration({
                 >
                   <label>
                     Google account email
-                    <input name="email" type="email" required maxLength={320} />
+                    <input
+                      className="form-control"
+                      name="email"
+                      type="email"
+                      required
+                      maxLength={320}
+                    />
                   </label>
                   <RoleChoices selected={["member"]} />
                   <label>
                     Valid hours
                     <input
+                      className="form-control"
                       name="hours"
                       type="number"
                       min={1}
@@ -744,7 +771,7 @@ export default function Administration({
                       required
                     />
                   </label>
-                  <button className="action" disabled={busy}>
+                  <button className="btn btn-primary action" disabled={busy}>
                     Create invitation
                   </button>
                 </form>
@@ -758,7 +785,7 @@ export default function Administration({
                   </div>
                 )}
                 {invitations === null ? (
-                  <p>Loading invitationsâ€¦</p>
+                  <p>Loading invitations…</p>
                 ) : (
                   <DataTable
                     caption="Persisted invitations"
@@ -767,7 +794,7 @@ export default function Administration({
                     columns={[
                       {
                         label: "Email / roles",
-                        cell: (i) => `${i.email} Â· ${i.roles.join(", ")}`,
+                        cell: (i) => `${i.email} · ${i.roles.join(", ")}`,
                       },
                       {
                         label: "Status",
@@ -817,7 +844,7 @@ export default function Administration({
                 role="tabpanel"
                 aria-label="Users"
                 hidden={tab !== "Users"}
-                className="panel"
+                className="card panel"
               >
                 <h2>Users</h2>
                 <p>
@@ -826,14 +853,14 @@ export default function Administration({
                   history are preserved.
                 </p>
                 {accounts === null ? (
-                  <p>Loading usersâ€¦</p>
+                  <p>Loading users…</p>
                 ) : accounts.length === 0 ? (
                   <p>No linked users.</p>
                 ) : (
                   accounts.map((account) => (
                     <form
                       method="post"
-                      className="panel"
+                      className="card panel"
                       key={
                         account.id +
                         account.roles.join() +
@@ -843,7 +870,7 @@ export default function Administration({
                         const f = form(e);
                         if (
                           window.confirm(
-                            "Apply roles/account status and revoke this userâ€™s sessions?",
+                            "Apply roles/account status and revoke this user’s sessions?",
                           )
                         )
                           void operate(`administration/users/${account.id}`, {
@@ -860,18 +887,22 @@ export default function Administration({
                         {account.display_name}
                       </h3>
                       <p>
-                        {account.email} Â· {account.id}
+                        {account.email} · {account.id}
                       </p>
                       <RoleChoices selected={account.roles} />
                       <label>
                         <input
+                          className="form-check-input"
                           type="checkbox"
                           name="enabled"
                           defaultChecked={account.enabled}
                         />{" "}
                         Account enabled
                       </label>
-                      <button className="action" disabled={busy}>
+                      <button
+                        className="btn btn-primary action"
+                        disabled={busy}
+                      >
                         Save account and revoke sessions
                       </button>
                       <ConfirmAction
@@ -892,11 +923,11 @@ export default function Administration({
                 role="tabpanel"
                 aria-label="Audit"
                 hidden={tab !== "Audit"}
-                className="panel"
+                className="card panel"
               >
                 <h2>Security audit</h2>
                 {audit === null ? (
-                  <p>Loading audit historyâ€¦</p>
+                  <p>Loading audit history…</p>
                 ) : (
                   <DataTable
                     caption="Durable security events"
@@ -963,6 +994,7 @@ export function RoleChoices({ selected }: { selected: string[] }) {
       {["platform_admin", "contributor", "member"].map((role) => (
         <label key={role}>
           <input
+            className="form-check-input"
             type="checkbox"
             name="roles"
             value={role}
@@ -1031,6 +1063,7 @@ export function AccountPicker({
     <span className="account-picker">
       {platform && (
         <input
+          className="form-control"
           type="search"
           aria-label="Search invited accounts"
           placeholder="Search by name or email"
@@ -1050,6 +1083,7 @@ export function AccountPicker({
         />
       )}
       <select
+        className="form-select"
         name="user_id"
         required
         aria-label="Invited account"
@@ -1070,7 +1104,7 @@ export function AccountPicker({
           </option>
         ))}
       </select>
-      {loading && <span role="status">Loading accountsâ€¦</span>}
+      {loading && <span role="status">Loading accounts…</span>}
       {error && <span role="alert">{error}</span>}
       {platform && page && (
         <Pager
@@ -1171,7 +1205,11 @@ export function PermissionEditor({
       {error && (
         <p role="alert">
           {error}{" "}
-          <button type="button" onClick={() => setRevision((r) => r + 1)}>
+          <button
+            className="btn btn-outline-primary"
+            type="button"
+            onClick={() => setRevision((r) => r + 1)}
+          >
             Retry loading
           </button>
         </p>
@@ -1204,6 +1242,7 @@ export function PermissionEditor({
             <label>
               Workspace role
               <select
+                className="form-select"
                 name="role"
                 defaultValue={access.role === "none" ? "member" : access.role}
                 disabled={busy || access.role === "owner"}
@@ -1217,7 +1256,7 @@ export function PermissionEditor({
               </select>
             </label>
             <button
-              className="action"
+              className="btn btn-primary action"
               disabled={busy || access.role === "owner"}
             >
               {access.role === "none"
@@ -1249,6 +1288,7 @@ export function PermissionEditor({
                 <RoleChoices selected={access.account.roles} />
                 <label>
                   <input
+                    className="form-check-input"
                     name="enabled"
                     type="checkbox"
                     defaultChecked={access.account.enabled}
@@ -1260,7 +1300,7 @@ export function PermissionEditor({
                 Current permissions:{" "}
                 {access.account.permissions.join(", ") || "None"}
               </p>
-              <button className="action" disabled={busy}>
+              <button className="btn btn-primary action" disabled={busy}>
                 Save platform access and revoke sessions
               </button>
             </form>

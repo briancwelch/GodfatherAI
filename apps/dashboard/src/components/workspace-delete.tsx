@@ -1,5 +1,7 @@
 "use client";
 
+import { ProgressBar } from "./progress-bar";
+
 import { useFeedback } from "./toast-notifications";
 
 import { useId, useRef, useState } from "react";
@@ -120,7 +122,7 @@ export function WorkspaceDelete({
     <>
       <button
         type="button"
-        className="action secondary"
+        className="btn btn-outline-primary action secondary"
         disabled={disabled}
         onClick={() => {
           setPhase("idle");
@@ -215,7 +217,7 @@ export function WorkspaceDelete({
                   : "Verifying workspace data"}
               </span>
             </div>
-            <progress
+            <ProgressBar
               aria-label="Workspace archive progress"
               max={100}
               value={
@@ -233,7 +235,7 @@ export function WorkspaceDelete({
           </p>
         )}
         {error && (
-          <p role="alert" className="notice error">
+          <p role="alert" className="alert alert-danger notice error">
             {error}
           </p>
         )}
@@ -244,6 +246,7 @@ export function WorkspaceDelete({
         {!downloaded && (
           <label className="archive-skip">
             <input
+              className="form-check-input"
               type="checkbox"
               checked={skip}
               disabled={exporting || deleting}
@@ -255,7 +258,7 @@ export function WorkspaceDelete({
         <div className="actions archive-dialog-actions">
           <button
             type="button"
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             disabled={deleting}
             onClick={close}
           >
@@ -263,7 +266,7 @@ export function WorkspaceDelete({
           </button>
           <button
             type="button"
-            className="action archive-download"
+            className="btn btn-primary action archive-download"
             disabled={exporting || deleting}
             onClick={() => void archive()}
           >
@@ -272,7 +275,7 @@ export function WorkspaceDelete({
           </button>
           <button
             type="button"
-            className="action archive-delete"
+            className="btn btn-danger action archive-delete"
             disabled={exporting || deleting || (!downloaded && !skip)}
             onClick={async () => {
               setError("");

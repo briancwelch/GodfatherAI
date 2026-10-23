@@ -1,5 +1,7 @@
 "use client";
 
+import { ProgressBar } from "./progress-bar";
+
 import { useEffect, useSyncExternalStore } from "react";
 import { CommandIcon } from "./command-icon";
 import {
@@ -38,11 +40,11 @@ export function ToastCard({
 }) {
   return (
     <article
-      className={`corner-toast toast-${toast.kind}`}
+      className={`toast show corner-toast toast-${toast.kind}`}
       role={toast.kind === "error" ? "alert" : "status"}
       aria-atomic="true"
     >
-      <span className="toast-symbol">
+      <div className="toast-header">
         <CommandIcon
           label={
             toast.kind === "error"
@@ -54,13 +56,18 @@ export function ToastCard({
                   : "Notification"
           }
         />
-      </span>
-      <div className="toast-copy">
         <strong>{toast.title}</strong>
+        <button
+          type="button"
+          className="btn-close"
+          onClick={dismiss}
+          aria-label={`Dismiss ${toast.title}`}
+        />
+      </div>
+      <div className="toast-body">
         <span>{toast.message}</span>
         {toast.kind === "processing" && (
-          <progress
-            max={100}
+          <ProgressBar
             value={toast.progress}
             aria-label={
               toast.progress === undefined
@@ -69,20 +76,12 @@ export function ToastCard({
             }
           />
         )}
+        {toast.href && (
+          <a className="toast-action" href={toast.href}>
+            View
+          </a>
+        )}
       </div>
-      {toast.href && (
-        <a className="toast-action" href={toast.href}>
-          View
-        </a>
-      )}
-      <button
-        type="button"
-        className="toast-dismiss"
-        onClick={dismiss}
-        aria-label={`Dismiss ${toast.title}`}
-      >
-        {"\u00d7"}
-      </button>
     </article>
   );
 }
@@ -206,7 +205,11 @@ export function ToastNotifications() {
   }, []);
   if (!messages.length) return null;
   return (
-    <aside className="corner-toasts" aria-label="Notifications" tabIndex={-1}>
+    <aside
+      className="toast-container corner-toasts"
+      aria-label="Notifications"
+      tabIndex={-1}
+    >
       {messages.map((toast) => (
         <ToastCard
           key={toast.id}

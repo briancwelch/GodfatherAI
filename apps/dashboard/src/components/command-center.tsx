@@ -146,7 +146,7 @@ export default function CommandCenter({
           <RibbonGroup label={labels[section]}>
             {section === "jobs" && (
               <button
-                className="action secondary"
+                className="btn btn-outline-primary action secondary"
                 disabled={!data}
                 onClick={() => {
                   const panel =
@@ -164,13 +164,16 @@ export default function CommandCenter({
               </button>
             )}
             {section === "nodes" && (
-              <a className="action secondary" href="/models">
+              <a
+                className="btn btn-outline-primary action secondary"
+                href="/models"
+              >
                 Models
               </a>
             )}
             {section === "models" && (
               <button
-                className="action secondary"
+                className="btn btn-outline-primary action secondary"
                 disabled={!data?.workspace_id}
                 onClick={() =>
                   document.getElementById("model-install-launch")?.click()
@@ -181,18 +184,27 @@ export default function CommandCenter({
             )}
             {section === "overview" && (
               <>
-                <a className="action secondary" href="/jobs">
+                <a
+                  className="btn btn-outline-primary action secondary"
+                  href="/jobs"
+                >
                   <CommandIcon label="Jobs" />
                   Jobs
                 </a>
-                <a className="action secondary" href="/nodes">
+                <a
+                  className="btn btn-outline-primary action secondary"
+                  href="/nodes"
+                >
                   <CommandIcon label="Nodes" />
                   Nodes
                 </a>
               </>
             )}
             {section === "activity" && (
-              <a className="action secondary" href="#event-filters">
+              <a
+                className="btn btn-outline-primary action secondary"
+                href="#event-filters"
+              >
                 Filters
               </a>
             )}
@@ -210,13 +222,13 @@ export default function CommandCenter({
         )
       }
     >
-      <main id="main-content">
+      <main className="container-fluid" id="main-content">
         <div className="page-heading">
           <div>
             <p className="eyebrow">THE GODFATHER / CONTROL PLANE</p>
             <h1>
               {section === "overview" && workspace
-                ? `${data?.workspaces.find((w) => w.id === workspace)?.name || "Workspace"} Â· Overview`
+                ? `${data?.workspaces.find((w) => w.id === workspace)?.name || "Workspace"} · Overview`
                 : labels[section]}
             </h1>
             <p>Real backend state, durable work and recovery activity.</p>
@@ -232,7 +244,7 @@ export default function CommandCenter({
         ) : (
           <>
             {state.error && (
-              <p role="alert" className="notice error">
+              <p role="alert" className="alert alert-danger notice error">
                 {state.error === "401"
                   ? "Session expired or revoked. Sign in again."
                   : state.error === "403"
@@ -241,8 +253,8 @@ export default function CommandCenter({
               </p>
             )}
             {!data && !state.error && (
-              <p role="status" className="panel">
-                Loading authorized backend stateâ€¦
+              <p role="status" className="card panel">
+                Loading authorized backend state…
               </p>
             )}
             {data && (
@@ -251,6 +263,7 @@ export default function CommandCenter({
                   <label>
                     Workspace
                     <select
+                      className="form-select"
                       value={workspace || data.workspace_id || ""}
                       onChange={(e) => {
                         if (section === "overview") {
@@ -279,7 +292,7 @@ export default function CommandCenter({
                     </select>
                   </label>
                   <p role="status">
-                    {state.error ? "Stale data" : "Polling every 3 seconds"} Â·
+                    {state.error ? "Stale data" : "Polling every 3 seconds"} ·
                     Updated {localTime(data.generated_at)}
                     <small>
                       {data.workspace_id
@@ -305,6 +318,7 @@ export default function CommandCenter({
                           <label>
                             Search {section}
                             <input
+                              className="form-control"
                               type="search"
                               placeholder="Name, owner, platform or ID"
                               value={search}
@@ -318,6 +332,7 @@ export default function CommandCenter({
                             <label>
                               Status
                               <select
+                                className="form-select"
                                 value={status}
                                 onChange={(e) => {
                                   setStatus(e.target.value);
@@ -528,7 +543,7 @@ function JobTable({
                 "Unassigned"
               )}
               <small>
-                Attempt {j.attempt_count} Â· Fence {j.fencing_token}
+                Attempt {j.attempt_count} · Fence {j.fencing_token}
               </small>
             </>
           ),
@@ -591,7 +606,7 @@ function NodeTable({
             <>
               {n.os} / {n.architecture}
               <small>
-                {n.resources.cpu_count} CPUs Â· {bytes(n.resources.ram_bytes)}
+                {n.resources.cpu_count} CPUs · {bytes(n.resources.ram_bytes)}
               </small>
             </>
           ),
@@ -612,9 +627,9 @@ function NodeTable({
           cell: (n) => (
             <>
               {n.scheduling_policy}
-              {n.share_with_workspaces && " Â· Workspace contribution"}
+              {n.share_with_workspaces && " · Workspace contribution"}
               <small>
-                {n.visible_active_jobs} visible jobs Â· {n.concurrency_limit}{" "}
+                {n.visible_active_jobs} visible jobs · {n.concurrency_limit}{" "}
                 slots
               </small>
             </>
@@ -663,11 +678,11 @@ function Overview({ data }: { data: Snapshot }) {
         <Metric
           label="Enabled agent versions"
           value={data.agent_counts.enabled_versions}
-          detail={`${data.agent_counts.active_versions} active Â· ${data.agent_counts.compatible_online_versions ?? "Select a workspace to check"} compatible online Â· ${data.agent_counts.disabled_versions} disabled`}
+          detail={`${data.agent_counts.active_versions} active · ${data.agent_counts.compatible_online_versions ?? "Select a workspace to check"} compatible online · ${data.agent_counts.disabled_versions} disabled`}
         />
       </div>
       {!data.workspace_id && <WorkspaceList data={data} preview />}
-      <section className="panel">
+      <section className="card panel">
         <h2>Cluster state</h2>
         <div className="state-strip">
           {["online", "suspect", "offline", "draining", "disabled"].map((s) => (
@@ -687,7 +702,7 @@ function Overview({ data }: { data: Snapshot }) {
           Physical CPU utilization:{" "}
           {readings.length
             ? `${(readings.reduce((a, b) => a + b, 0) / readings.length).toFixed(1)}% mean of ${readings.length} reported nodes on this page`
-            : "Unavailable â€” no online physical readings"}
+            : "Unavailable — no online physical readings"}
           .
         </p>
         {data.workspace_id && (
@@ -702,17 +717,17 @@ function Overview({ data }: { data: Snapshot }) {
           telemetry is distinct from zero.
         </p>
       </section>
-      <section className="panel">
+      <section className="card panel">
         <h2>Recent jobs</h2>
         <JobTable rows={data.jobs.slice(0, 8)} />
       </section>
-      <section className="panel">
+      <section className="card panel">
         <h2>Worker health and readiness</h2>
         <NodeTable data={{ ...data, nodes: data.nodes.slice(0, 8) }} />
         <a href="/nodes">View all permitted nodes</a>
       </section>
       <div className="two-columns">
-        <section className="panel">
+        <section className="card panel">
           <h2>Recent failover and recovery</h2>
           <EventTimeline
             events={data.events.items
@@ -722,7 +737,7 @@ function Overview({ data }: { data: Snapshot }) {
               .slice(0, 8)}
           />
         </section>
-        <section className="panel">
+        <section className="card panel">
           <h2>Recent events and errors</h2>
           <EventTimeline events={data.events.items.slice(0, 8)} />
         </section>
@@ -771,13 +786,14 @@ function SubmitJob({ data }: { data: Snapshot }) {
     }
   }
   return (
-    <details className="panel submission" open>
+    <details className="card panel submission" open>
       <summary>Submit a job</summary>
       <form onSubmit={submit}>
         <p>Execute a pinned workflow on an authorized worker.</p>
         <label>
           Agent and pinned version
           <select
+            className="form-select"
             name="agent"
             required
             value={agentId}
@@ -805,20 +821,33 @@ function SubmitJob({ data }: { data: Snapshot }) {
           >
         )?.connection_id && (
           <label className="check-label">
-            <input type="checkbox" name="paid_consent" required /> I authorize
-            using my selected API account and sending this task to the provider.
-            Billing and spending limits are managed at the provider.
+            <input
+              className="form-check-input"
+              type="checkbox"
+              name="paid_consent"
+              required
+            />{" "}
+            I authorize using my selected API account and sending this task to
+            the provider. Billing and spending limits are managed at the
+            provider.
           </label>
         )}
         <label>
           Instruction
-          <textarea name="instruction" required maxLength={4096} rows={3} />
+          <textarea
+            className="form-control"
+            name="instruction"
+            required
+            maxLength={4096}
+            rows={3}
+          />
         </label>
         <details>
           <summary>Advanced options</summary>
           <label>
             Priority
             <input
+              className="form-control"
               name="priority"
               type="number"
               defaultValue={0}
@@ -838,7 +867,7 @@ function SubmitJob({ data }: { data: Snapshot }) {
             busy || !data.workspace_id || !data.agents.some((a) => a.enabled)
           }
         >
-          {busy ? "Submittingâ€¦" : "Submit job"}
+          {busy ? "Submitting…" : "Submit job"}
         </Button>
         <p className="muted">
           Submission queues work. Execution requires a compatible authorized
@@ -869,11 +898,11 @@ function Inspection({
       <p role="status">
         {state.error
           ? "Record unavailable or permission denied."
-          : "Loading inspectionâ€¦"}
+          : "Loading inspection…"}
       </p>
     );
   return (
-    <section className="panel inspection">
+    <section className="card panel inspection">
       <a href={`/${kind}`}>Back to {kind}</a>
       {state.error && (
         <p role="alert">Refresh failed; displayed details are stale.</p>
@@ -912,7 +941,7 @@ function JobInspection({
       <h2>
         {detail.context?.agent_name ||
           (j.type === "result.action" ? "Apply changes" : "Agent task")}{" "}
-        Â· Job {short(j.id)}
+        · Job {short(j.id)}
       </h2>
       <div className="state-strip">
         <StatusBadge value={j.status} />
@@ -1020,7 +1049,7 @@ function JobInspection({
                 label: "Attempt",
                 cell: (a) => (
                   <>
-                    {a.number} Â· {short(a.id)}
+                    {a.number} · {short(a.id)}
                     <small>Fence {a.fencing_token}</small>
                   </>
                 ),
@@ -1110,7 +1139,7 @@ function JobInspection({
             </p>
           )}
           {!checkpoints.data && !checkpoints.error && (
-            <p role="status">Loading checkpointsâ€¦</p>
+            <p role="status">Loading checkpoints…</p>
           )}
           {checkpoints.data && (
             <>
@@ -1137,7 +1166,7 @@ function JobInspection({
                       <>
                         <code>{c.artifact.id}</code>
                         <small title={c.artifact.checksum}>
-                          SHA-256 {short(c.artifact.checksum)} Â·{" "}
+                          SHA-256 {short(c.artifact.checksum)} ·{" "}
                           {c.artifact.size_bytes} bytes
                         </small>
                       </>
@@ -1147,7 +1176,7 @@ function JobInspection({
                     label: "Inspect",
                     cell: (c) => (
                       <button
-                        className="action secondary"
+                        className="btn btn-outline-primary action secondary"
                         onClick={async () => {
                           try {
                             setError("");
@@ -1234,7 +1263,7 @@ function NodeInspection({
         </dd>
         <dt>Platform</dt>
         <dd>
-          {n.os_version} / {n.architecture} Â· Protocol {n.protocol_version}
+          {n.os_version} / {n.architecture} · Protocol {n.protocol_version}
         </dd>
         <dt>Connection / heartbeat</dt>
         <dd>
@@ -1242,7 +1271,7 @@ function NodeInspection({
         </dd>
         <dt>CPU</dt>
         <dd>
-          {n.resources.cpu_name} Â· {n.resources.cpu_count} CPUs Â·{" "}
+          {n.resources.cpu_name} · {n.resources.cpu_count} CPUs ·{" "}
           {n.resources.cpu_percent == null
             ? "Unavailable"
             : `${n.resources.cpu_percent}%`}{" "}
@@ -1250,7 +1279,7 @@ function NodeInspection({
         </dd>
         <dt>RAM</dt>
         <dd>
-          {bytes(n.resources.ram_bytes)} total Â·{" "}
+          {bytes(n.resources.ram_bytes)} total ·{" "}
           {bytes(n.resources.available_ram_bytes)} available
         </dd>
         <dt>GPU / VRAM</dt>
@@ -1258,9 +1287,9 @@ function NodeInspection({
           {n.resources.gpus.length
             ? n.resources.gpus.map((g) => (
                 <p key={g.name}>
-                  {g.name} Â· {g.backend} Â·{" "}
+                  {g.name} · {g.backend} ·{" "}
                   {g.unified_memory ? "Unified memory" : bytes(g.memory_bytes)}{" "}
-                  Â·{" "}
+                  ·{" "}
                   {g.utilization_percent == null
                     ? "Unavailable"
                     : `${g.utilization_percent}%`}{" "}
@@ -1271,12 +1300,12 @@ function NodeInspection({
         </dd>
         <dt>Specialties</dt>
         <dd>
-          Primary: {n.primary_capabilities.join(", ")} Â· Secondary:{" "}
+          Primary: {n.primary_capabilities.join(", ")} · Secondary:{" "}
           {n.secondary_capabilities.join(", ") || "None"}
         </dd>
         <dt>Scheduling</dt>
         <dd>
-          {n.scheduling_policy} Â· {n.concurrency_limit} concurrent slots
+          {n.scheduling_policy} · {n.concurrency_limit} concurrent slots
         </dd>
         <dt>Contribution</dt>
         <dd>
@@ -1342,7 +1371,7 @@ function Models({
     <>
       <div className="pager">
         <button
-          className="action secondary"
+          className="btn btn-outline-primary action secondary"
           type="button"
           disabled={!offset}
           onClick={() => setOffset(Math.max(0, offset - data.limit))}
@@ -1353,7 +1382,7 @@ function Models({
           From {offset + 1}; up to {data.limit} per page
         </span>
         <button
-          className="action secondary"
+          className="btn btn-outline-primary action secondary"
           type="button"
           disabled={data.models.length < data.limit}
           onClick={() => setOffset(offset + data.limit)}
@@ -1436,7 +1465,7 @@ function Models({
               <>
                 {m.deployment.context_window ?? "Unknown"} context tokens
                 <small>
-                  RAM {bytes(m.deployment.estimated_ram_bytes)} Â· VRAM{" "}
+                  RAM {bytes(m.deployment.estimated_ram_bytes)} · VRAM{" "}
                   {bytes(m.deployment.estimated_vram_bytes)}
                 </small>
               </>
@@ -1452,7 +1481,7 @@ function Models({
                 <>
                   {usage.duration_seconds?.toFixed(2)}s
                   <small>
-                    {usage.output_tokens ?? "Unknown"} output tokens Â·{" "}
+                    {usage.output_tokens ?? "Unknown"} output tokens ·{" "}
                     {usage.tokens_per_second?.toFixed(1) ?? "Unknown"} tokens/s
                   </small>
                 </>
@@ -1464,11 +1493,11 @@ function Models({
         ]}
       />
       {selected && (
-        <section className="panel">
+        <section className="card panel">
           <div className="actions">
             <h2>{selected.deployment.identifier}</h2>
             <button
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               onClick={() => setSelectedModel(null)}
             >
               Close inspection
@@ -1517,7 +1546,7 @@ function Activity({
   });
   const state = usePoll<EventPage>(`command-center/events?${query}`, revision);
   return (
-    <section className="panel" id="event-filters">
+    <section className="card panel" id="event-filters">
       <h2>Events and audit history</h2>
       <form
         className="filters"
@@ -1537,15 +1566,12 @@ function Activity({
           (key) => (
             <label key={key}>
               {key.replaceAll("_", " ")}
-              <select name={key}>
+              <select className="form-select" name={key}>
                 <option value="">All</option>
                 {(key === "node_id"
                   ? data.nodes.map((n) => [n.node_id, n.name])
                   : key === "job_id"
-                    ? data.jobs.map((j) => [
-                        j.id,
-                        `${j.type} Â· ${short(j.id)}`,
-                      ])
+                    ? data.jobs.map((j) => [j.id, `${j.type} · ${short(j.id)}`])
                     : key === "agent_id"
                       ? [
                           ...new Map(
@@ -1580,7 +1606,7 @@ function Activity({
         )}
         <label>
           Severity
-          <select name="severity">
+          <select className="form-select" name="severity">
             <option value="">All</option>
             <option>info</option>
             <option>warning</option>
@@ -1589,15 +1615,15 @@ function Activity({
         </label>
         <label>
           From (local time)
-          <input type="datetime-local" name="since" />
+          <input className="form-control" type="datetime-local" name="since" />
         </label>
         <label>
           Until (local time)
-          <input type="datetime-local" name="until" />
+          <input className="form-control" type="datetime-local" name="until" />
         </label>
         <Button>Apply filters</Button>
         <button
-          className="action secondary"
+          className="btn btn-outline-primary action secondary"
           type="reset"
           onClick={() => {
             setFilters({});
@@ -1612,7 +1638,7 @@ function Activity({
           Events unavailable. Check filter IDs, time range and permissions.
         </p>
       )}
-      {!state.data && !state.error && <p role="status">Loading eventsâ€¦</p>}
+      {!state.data && !state.error && <p role="status">Loading events…</p>}
       {state.data && (
         <Pager
           offset={offset}

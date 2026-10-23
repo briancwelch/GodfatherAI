@@ -81,7 +81,7 @@ export function UnavailableCommand({
       title={reason}
       aria-label={`${label}: ${reason}`}
     >
-      <button disabled className="action secondary">
+      <button disabled className="btn btn-outline-primary action secondary">
         <CommandIcon label={label} />
         {label}
       </button>
@@ -159,7 +159,7 @@ function DesktopShell({
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <header className="application-bar">
+      <header className="navbar application-bar">
         <a className="app-brand" href="/">
           THE GODFATHER <span>Command Center</span>
         </a>
@@ -179,6 +179,7 @@ function DesktopShell({
           <label>
             Theme
             <select
+              className="form-select"
               aria-label="Theme"
               value={theme}
               onChange={(e) => {
@@ -191,7 +192,7 @@ function DesktopShell({
           </label>
           {account && (
             <button
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               onClick={async () => {
                 const response = await fetch("/api/auth/logout", {
                   method: "POST",
@@ -210,7 +211,10 @@ function DesktopShell({
           )}
         </div>
       </header>
-      <nav className="application-tabs" aria-label="Main navigation">
+      <nav
+        className="nav nav-tabs application-tabs"
+        aria-label="Main navigation"
+      >
         {visibleNavigation.map(([key, label]) => (
           <a
             key={key}
@@ -227,7 +231,10 @@ function DesktopShell({
         aria-label={`${navigation[section]} ribbon`}
       >
         <RibbonGroup label="Data">
-          <button className="action secondary" onClick={refresh}>
+          <button
+            className="btn btn-outline-primary action secondary"
+            onClick={refresh}
+          >
             Refresh
           </button>
         </RibbonGroup>
@@ -235,14 +242,14 @@ function DesktopShell({
         <div id="section-ribbon" />
         <RibbonGroup label="Workspace layout">
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             aria-pressed={!collapsed}
             onClick={() => setNavigationOverride(!collapsed)}
           >
             Navigation
           </button>
           <button
-            className="action secondary"
+            className="btn btn-outline-primary action secondary"
             aria-pressed={inspector}
             onClick={() => setInspectorOverride(!inspector)}
           >

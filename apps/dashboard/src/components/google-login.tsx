@@ -38,7 +38,7 @@ export function GoogleLogin({
     }
   }
   return (
-    <section className="panel connect-panel">
+    <section className="card panel connect-panel">
       <h2>Sign in to The Godfather</h2>
       <p>
         Continue with the exact Google account email your administrator invited.
@@ -61,6 +61,7 @@ export function GoogleLogin({
           <label>
             Invitation token (optional)
             <input
+              className="form-control"
               name="invitation"
               type="password"
               autoComplete="off"
@@ -68,7 +69,11 @@ export function GoogleLogin({
             />
           </label>
         </details>
-        <button className="action" type="submit" disabled={busy}>
+        <button
+          className="btn btn-primary action"
+          type="submit"
+          disabled={busy}
+        >
           {busy ? "Connecting…" : "Continue with Google"}
         </button>
       </form>

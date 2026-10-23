@@ -68,7 +68,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
       <div className="actions model-directory-actions">
         <button
           id="model-install-launch"
-          className="action"
+          className="btn btn-primary action"
           disabled={!workspace}
           onClick={() => void open()}
         >
@@ -138,7 +138,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
           <div className="actions" role="group" aria-label="Model source">
             <button
               type="button"
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               disabled={busy}
               aria-pressed={tab === "available"}
               onClick={() => setTab("available")}
@@ -147,7 +147,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
             </button>
             <button
               type="button"
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               disabled={busy}
               aria-pressed={tab === "download"}
               onClick={() => setTab("download")}
@@ -169,6 +169,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
               <label>
                 Find a model
                 <input
+                  className="form-control"
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -222,6 +223,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 <label>
                   Owned worker
                   <select
+                    className="form-select"
                     required
                     aria-label="Owned worker"
                     value={nodeId}
@@ -250,6 +252,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 <label>
                   Ollama runtime
                   <select
+                    className="form-select"
                     key={nodeId}
                     name="provider"
                     aria-label="Ollama runtime"
@@ -273,6 +276,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
               {node?.runtime_setup && (
                 <label key={nodeId} className="check-label">
                   <input
+                    className="form-check-input"
                     type="checkbox"
                     name="install_runtime"
                     defaultChecked={true}
@@ -283,14 +287,14 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 </label>
               )}
               {node && !node.runtime_ready && !node.runtime_setup && (
-                <p className="notice">
+                <p className="alert alert-warning notice">
                   Ollama may need setup. On this computer open Consigliere →
                   Models &amp; API connections → Get started to approve local
                   runtime installation.
                 </p>
               )}
               {!options.nodes.some((n) => n.available) && (
-                <p className="notice">
+                <p className="alert alert-warning notice">
                   No eligible owned worker. In Consigliere, select Pause, then
                   Models &amp; API connections. Enable both Allow my existing
                   local AI models and Allow model downloads from Command Center,
@@ -305,6 +309,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 {options.catalog.map((m) => (
                   <label className="model-choice" key={m.identifier}>
                     <input
+                      className="form-check-input"
                       type="radio"
                       name="identifier"
                       value={m.identifier}
@@ -323,7 +328,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                     {installed(m.identifier) ? (
                       <button
                         type="button"
-                        className="action secondary"
+                        className="btn btn-outline-primary action secondary"
                         onClick={() => {
                           setSearch(m.identifier);
                           setTab("available");
@@ -345,20 +350,26 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
                 cached files; no installed model is deleted.
               </p>
               <label className="check-label">
-                <input type="checkbox" name="confirm" required />I authorize
-                downloading the selected model onto my selected worker.
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  name="confirm"
+                  required
+                />
+                I authorize downloading the selected model onto my selected
+                worker.
               </label>
             </>
           )}
           {error && (
-            <p role="alert" className="notice error">
+            <p role="alert" className="alert alert-danger notice error">
               {error}
             </p>
           )}
           <div className="actions">
             <button
               type="button"
-              className="action secondary"
+              className="btn btn-outline-primary action secondary"
               disabled={busy}
               onClick={() => dialog.current?.close()}
             >
@@ -366,7 +377,7 @@ export function ModelInstaller({ workspace }: { workspace: string | null }) {
             </button>
             {tab === "download" && (
               <button
-                className="action"
+                className="btn btn-primary action"
                 disabled={
                   busy ||
                   !node?.available ||
