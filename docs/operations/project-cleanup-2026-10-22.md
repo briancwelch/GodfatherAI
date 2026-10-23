@@ -1,6 +1,6 @@
 # Project cleanup - October 22, 2026
 
-Owner-authorized maintenance of the local project and GitHub branches. No new
+Owner-authorized maintenance of the local project, GitHub branches and existing VPS. No new
 feature phase, deployment, paid inference or worker reconfiguration is included.
 
 ## Retention
@@ -92,5 +92,54 @@ Executed checks after cleanup:
 
 Documentation/source cleanup does not require rebuilding installers or releasing
 a coordinator. No source regression
-tests were removed. The existing VPS and contributor computers are outside this
-local cleanup unless separately included by the owner.
+tests were removed. The owner subsequently included the existing VPS in this cleanup. Contributor
+computers remain outside its scope.
+
+## VPS cleanup
+
+The owner explicitly selected **Include the VPS too** after the local cleanup.
+The existing coordinator was inspected over the established batch-verified SSH
+connection. No deployment, service restart, migration or contributor-host change
+was performed. The existing deployment lock excluded concurrent upgrades while
+planning and applying cleanup.
+
+The VPS has its own deployment history. Its retained coordinator releases are
+**0.8.0-rc.1, 0.7.0-rc.2, 0.6.0-rc.2, 0.6.0-rc.1, 0.5.0-rc.2 and 0.4.2-rc.2**.
+The locally built 0.7.0-rc.1 coordinator was never deployed there and therefore
+is not counted as a VPS predecessor. Current/previous release symlinks remain
+0.8.0-rc.1 and 0.7.0-rc.2.
+
+The same six worker versions in the table above remain available for Windows,
+Apple silicon and Intel Mac. Five installer sets remain inside retained
+coordinator bundles. The oldest set, **0.4.1-rc.4**, was checksum-verified and
+preserved with its original manifest under
+`/opt/the-godfather/worker-archives/0.4.1-rc.4/` before removing its obsolete
+coordinator bundle. It is an operator archive, not a change to public downloads.
+
+Results:
+
+- Removed **41** obsolete release/upload/probe entries totaling
+  **13,248,859,347 bytes** (about 12.34 GiB), including 17 old extracted coordinator
+  releases and abandoned versioned upload files.
+- Removed **80** obsolete image references without force. Unique Docker images
+  decreased from **47 to 15**; reported image storage fell from **4.016 GB to
+  1.893 GB**. The builder cache was already empty and remains empty.
+- Filesystem available space increased by **15,271,280,640 bytes**, about
+  **15.3 GB / 14.22 GiB**, after preserving the archived worker set.
+- Verified all **131 retained release files** against their before-cleanup
+  SHA-256 hashes, plus all retained release image IDs and archived worker checksums.
+- All **five services remained healthy**, with identical container IDs, image
+  references, mount definitions and start times. All **five volumes**, private
+  environment file hashes/modes, backup file sizes/timestamps and release symlinks
+  were unchanged. No database restore, backup deletion or volume pruning occurred.
+
+The current public download manifests and all three installers on both hostnames
+were checked after cleanup using normal verified HTTPS; all six streamed installer
+SHA-256 checks matched. The home page and anonymous/private-file access boundaries
+also passed. These checks created no accounts/jobs and made no inference calls.
+
+Server receipts are under
+`/opt/the-godfather/state/deployments/cleanup-20261022/`; local inventory, scripts
+and public verification are under `.cache/cleanup-vps-2026-10-22/`. No secret values
+were copied into those receipts. All eight GitHub repository-check jobs passed
+for the preceding local cleanup commit `b75c062`.
