@@ -1,9 +1,11 @@
 # Documentation
 
 Start with the [user guide](../README.md) for sign-in, worker installation, models
-and your first job. The current published coordinator and desktop worker release
-is **0.8.0-rc.1**; the [release verification](operations/shared-inference-deployment-2026-10-22.md)
-records what was actually checked.
+and your first job. The current published coordinator is **0.8.1-rc.1**; the
+[Bootstrap deployment verification](operations/bootstrap-deployment-2026-10-22.md)
+records the actual checks. Desktop workers remain **0.8.0-rc.1**, with their
+[release verification](operations/shared-inference-deployment-2026-10-22.md)
+recorded separately.
 
 ## Using the platform
 

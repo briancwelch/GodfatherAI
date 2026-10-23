@@ -101,9 +101,9 @@ and checksum from your administrator.
 Extract the verified release and run its guided setup:
 
 ```bash
-sha256sum -c godfather-0.8.0-rc.1-linux-amd64.tar.gz.sha256
-tar -xzf godfather-0.8.0-rc.1-linux-amd64.tar.gz
-cd godfather-0.8.0-rc.1-linux-amd64
+sha256sum -c godfather-0.8.1-rc.1-linux-amd64.tar.gz.sha256
+tar -xzf godfather-0.8.1-rc.1-linux-amd64.tar.gz
+cd godfather-0.8.1-rc.1-linux-amd64
 bash scripts/setup.sh
 ```
 

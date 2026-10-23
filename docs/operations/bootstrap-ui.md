@@ -83,5 +83,6 @@ on loopback port 8009 and the built dashboard on 3010. The API fixture verifies 
 mode and godfather_test before resetting data. On Docker Desktop, its test
 container must join the local frontend network for the loopback publish to work.
 Run the browser probe with node tests/e2e/bootstrap-ui.cjs after starting that
-fixture. This is source validation; no production deployment or worker packaging
-was performed.
+fixture. Those source checks did not deploy or package workers. The subsequent
+[authorized coordinator deployment](bootstrap-deployment-2026-10-22.md) records
+production activation and the preserved worker installers.
