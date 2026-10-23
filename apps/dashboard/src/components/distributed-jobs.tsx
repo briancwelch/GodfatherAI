@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { StatusBadge } from "./operational";
 import { ReadableValue } from "./job-result";
@@ -361,9 +361,17 @@ export default function DistributedJobs({
   );
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [submissionErrors, setSubmissionErrors] = useState<string[]>([]);
+  const [submissionNotice, setSubmissionNotice] = useState("");
+  const submissionFeedback = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
   const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (submissionErrors.length || submissionNotice) {
+      submissionFeedback.current?.focus();
+    }
+  }, [submissionErrors, submissionNotice]);
   useEffect(() => {
     let active = true;
     void control<Snapshot>(
@@ -391,7 +399,8 @@ export default function DistributedJobs({
       active = false;
     };
   }, [workspace, revision]);
-  const workspaceId = workspace || data?.workspace_id || "";
+  const workspaceId =
+    workspace || data?.workspace_id || data?.workspaces[0]?.id || "";
   useEffect(() => {
     if (!workspaceId) return;
     let active = true;
@@ -454,6 +463,32 @@ export default function DistributedJobs({
   const nodes =
     options?.nodes.filter((node) => participants.includes(node.node_id)) || [];
   const contextNodes = nodes.filter((node) => node.context_supported);
+  const blockers = [
+    ...(!workspaceId ? ["Choose a workspace."] : []),
+    ...(!options
+      ? [
+          "Participant and agent information is not loaded. Use Refresh to retry.",
+        ]
+      : []),
+    ...(participants.length < 2
+      ? [
+          `Select at least two participating computers (${participants.length} selected).`,
+        ]
+      : []),
+    ...(options && !agents.length
+      ? [
+          "No enabled model-only agents are available. Create one in Manage agents or load more agents.",
+        ]
+      : []),
+    ...(participants.length > 0 && !contextNodes.length
+      ? [
+          "No selected computer supports final synthesis. Update a selected worker and enable its model contribution, then Refresh.",
+        ]
+      : []),
+    ...(stale
+      ? ["Status is stale. Refresh and wait for the API before submitting."]
+      : []),
+  ];
   const patch = (index: number, value: Partial<Draft>) =>
     setDrafts((items) =>
       items.map((draft, i) => (i === index ? { ...draft, ...value } : draft)),
@@ -484,9 +519,45 @@ export default function DistributedJobs({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const validation = [...blockers];
+    if (!String(form.get("name") || "").trim())
+      validation.push("Enter a job name.");
+    if (!String(form.get("instruction") || "").trim())
+      validation.push("Enter the shared goal.");
+    drafts.forEach((draft, index) => {
+      const prefix = `Parallel task ${index + 1}`;
+      if (!draft.name.trim()) validation.push(`${prefix}: enter a task name.`);
+      if (!agents.some((agent) => agent.version_id === draft.agent))
+        validation.push(`${prefix}: choose an agent / model.`);
+      if (!(draft.node || nodes[index % Math.max(1, nodes.length)]?.node_id))
+        validation.push(`${prefix}: choose a participating computer.`);
+      if (!draft.instruction.trim())
+        validation.push(`${prefix}: enter task instructions.`);
+    });
+    if (!agents.some((agent) => agent.version_id === finalAgent))
+      validation.push("Choose a synthesis agent.");
+    if (!(finalNode || contextNodes[0]?.node_id))
+      validation.push("Choose an updated synthesis computer.");
+    if (paid && form.get("paid_consent") !== "on")
+      validation.push(
+        "Authorize the selected paid models and provider data sharing, or choose local models.",
+      );
+    setSubmissionNotice("");
+    if (validation.length) {
+      setSubmissionErrors(validation);
+      return;
+    }
+    // Keep native length/constraint checks, but never let native validation silently
+    // prevent onSubmit from displaying feedback beside the Run button.
+    if (!event.currentTarget.checkValidity()) {
+      setSubmissionErrors([
+        "Check the highlighted form fields and their length limits.",
+      ]);
+      event.currentTarget.reportValidity();
+      return;
+    }
     setBusy(true);
-    setError("");
-    setNotice("");
+    setSubmissionErrors([]);
     try {
       const taskSpecs = drafts.map((draft, index) => {
         const agent = agents.find((item) => item.version_id === draft.agent);
@@ -538,22 +609,34 @@ export default function DistributedJobs({
         throw new Error(
           "Assign each selected computer to a task or enable its use as a compatible backup.",
         );
-      const result = await control<{ id: string }>("distributed/jobs", {
-        workspace_id: workspaceId,
-        name: form.get("name"),
-        instruction: form.get("instruction"),
-        node_ids: participants,
-        final_task: "final",
-        tasks,
-      });
+      const result = await control<{ id: string }>(
+        "distributed/jobs",
+        {
+          workspace_id: workspaceId,
+          name: form.get("name"),
+          instruction: form.get("instruction"),
+          node_ids: participants,
+          final_task: "final",
+          tasks,
+        },
+        30000,
+      );
       setSelected(result.id);
       setOffset(0);
       setRevision((value) => value + 1);
-      setNotice(
-        "Distributed job submitted. Selected compatible workers will receive its ready tasks.",
+      setSubmissionNotice(
+        "Distributed job created. Ready tasks are queued for the selected compatible computers; execution has not been confirmed yet.",
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Submission not confirmed");
+      setSubmissionErrors([
+        e instanceof Error && e.name === "TimeoutError"
+          ? "Submission confirmation timed out. Refresh job history before retrying to avoid creating a duplicate job."
+          : e instanceof TypeError
+            ? "The coordinator could not be reached. Refresh job history before retrying; submission was not confirmed."
+            : e instanceof Error
+              ? e.message
+              : "Submission not confirmed. Refresh job history before retrying.",
+      ]);
     } finally {
       setBusy(false);
     }
@@ -635,7 +718,7 @@ export default function DistributedJobs({
               <a href="/workspaces">Open Workspaces</a>
             </p>
           ) : (
-            <form className="workload-form" onSubmit={submit}>
+            <form className="workload-form" onSubmit={submit} noValidate>
               <label>
                 Workspace
                 <select
@@ -650,6 +733,8 @@ export default function DistributedJobs({
                     setDetail(null);
                     setHistory(null);
                     setOptions(null);
+                    setSubmissionErrors([]);
+                    setSubmissionNotice("");
                     setOffset(0);
                   }}
                 >
@@ -936,18 +1021,105 @@ export default function DistributedJobs({
                   billing applies.
                 </label>
               )}
+              <div
+                className="submission-readiness"
+                aria-label="Submission requirements"
+              >
+                {blockers.length > 0 && (
+                  <>
+                    <strong>Before this job can start:</strong>
+                    <ul>
+                      {blockers.map((message) => (
+                        <li key={message}>{message}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {nodes.some(
+                  (node) =>
+                    node.state !== "online" ||
+                    node.connection_status !== "online",
+                ) && (
+                  <p>
+                    Selected computers unavailable now:{" "}
+                    {nodes
+                      .filter(
+                        (node) =>
+                          node.state !== "online" ||
+                          node.connection_status !== "online",
+                      )
+                      .map((node) => node.name)
+                      .join(", ")}
+                    . Tasks assigned to them will wait in the queue.
+                  </p>
+                )}
+                {nodes.some(
+                  (node) =>
+                    !node.model_deployments.some((model) => model.available),
+                ) && (
+                  <p>
+                    Selected computers with no available models:{" "}
+                    {nodes
+                      .filter(
+                        (node) =>
+                          !node.model_deployments.some(
+                            (model) => model.available,
+                          ),
+                      )
+                      .map((node) => node.name)
+                      .join(", ")}
+                    . Enable their model contribution or choose another
+                    computer.
+                  </p>
+                )}
+              </div>
+              {(submissionErrors.length > 0 || submissionNotice) && (
+                <div
+                  ref={submissionFeedback}
+                  tabIndex={-1}
+                  className={
+                    submissionErrors.length
+                      ? "submission-feedback error"
+                      : "submission-feedback"
+                  }
+                  role={submissionErrors.length ? "alert" : "status"}
+                >
+                  <strong>
+                    {submissionErrors.length
+                      ? "Distributed job was not confirmed"
+                      : "Submission confirmed"}
+                  </strong>
+                  {submissionErrors.length > 0 ? (
+                    <ul>
+                      {submissionErrors.map((message, index) => (
+                        <li key={index}>{message}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>
+                      {submissionNotice}{" "}
+                      <a href="#distributed-job-detail">View submitted job</a>
+                    </p>
+                  )}
+                </div>
+              )}
+              {busy && (
+                <p role="status">
+                  Submitting job. Waiting for coordinator confirmation...
+                </p>
+              )}
               <button
                 className="action"
-                disabled={
-                  busy ||
-                  stale ||
-                  participants.length < 2 ||
-                  !contextNodes.length ||
-                  !agents.length
-                }
+                disabled={busy || stale}
+                aria-describedby="distributed-submit-help"
               >
                 {busy ? "Submitting..." : "Run distributed job"}
               </button>
+              <small id="distributed-submit-help">
+                Run checks the required fields and reports any blockers above. A
+                submitted job may remain queued until its selected computers are
+                compatible and available.
+              </small>
             </form>
           )}
         </details>
@@ -1006,9 +1178,16 @@ export default function DistributedJobs({
         {selected && !detail && <p role="status">Loading distributed job...</p>}
         {detail && (
           <>
-            <section className="panel">
+            <section className="panel" id="distributed-job-detail">
               <h2>{detail.name}</h2>
               <StatusBadge value={detail.status} />
+              {detail.status === "PENDING" && (
+                <p role="status">
+                  Queued. Ready tasks are waiting for compatible selected
+                  computers. Check their online status, model availability and
+                  sharing permissions.
+                </p>
+              )}
               <p>{detail.instruction}</p>
               {detail.error && <p role="alert">{detail.error}</p>}
               <small>Updated {localTime(detail.generated_at)}</small>

@@ -2053,6 +2053,33 @@ body {
 .distributed-page .workload-form {
   max-width: none;
 }
+.submission-readiness,
+.submission-feedback {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  background: var(--card);
+  overflow-wrap: anywhere;
+}
+.submission-readiness:empty {
+  display: none;
+}
+.submission-feedback.error {
+  border-color: #bd7373;
+}
+.submission-feedback:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.submission-feedback ul,
+.submission-readiness ul {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+.submission-feedback p:last-child,
+.submission-readiness p:last-child {
+  margin-bottom: 0;
+}
 .distributed-network {
   width: 100%;
   max-height: 1000px;

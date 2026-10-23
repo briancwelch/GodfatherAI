@@ -37,3 +37,14 @@ child; private workspaces remain invisible; measured time shares sum approximate
 to 100 percent while unavailable host telemetry stays unknown; mobile and keyboard
 access remain usable. Host CPU/GPU utilization is explicitly system-wide, not a
 per-job measurement. Time shares include failed/retried work and are not progress.
+
+Submission feedback revision (2026-10-22): show readiness blockers and unavailable
+computer/model warnings beside Run. Run remains actionable for incomplete setups
+and validates all required fields into a focused, persistent error summary; native
+validation must not silently intercept submission. API validation preserves field
+locations without copying rejected input values. Pending, confirmed/queued, denied,
+network failure and confirmation timeout are distinct states. Refreshing catalogs
+must not erase a submission failure. A confirmation timeout never retries a POST;
+the user checks history first. The first authorized workspace is usable even when
+the overview does not supply a default workspace ID. No sharing/model permissions
+change as part of these UI checks.

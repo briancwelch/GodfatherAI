@@ -29,6 +29,51 @@ const outcomes = require("../apps/dashboard/src/lib/job-outcome.ts");
 const modelUse = require("../apps/dashboard/src/components/model-use.tsx");
 const avatars = require("../apps/dashboard/src/components/avatar.tsx");
 const workspaces = require("../apps/dashboard/src/components/workspace-directory.tsx");
+const client = require("../apps/dashboard/src/lib/control-client.ts");
+
+test("control errors preserve field locations without echoing rejected input and support bounded submission waits", async (context) => {
+  let requestedSignal;
+  let response = new Response(
+    JSON.stringify({
+      detail: [
+        {
+          loc: ["body", "tasks", 0, "input", "instruction"],
+          msg: "String should have at most 4096 characters",
+          input: "private goal",
+          ctx: { secret: "private key" },
+        },
+      ],
+    }),
+    { status: 422 },
+  );
+  context.mock.method(globalThis, "fetch", async (_url, init) => {
+    requestedSignal = init.signal;
+    return response;
+  });
+  await assert.rejects(
+    client.control("distributed/jobs", {}, 30000),
+    (error) => {
+      assert.match(error.message, /tasks > 0 > input > instruction/);
+      assert.doesNotMatch(error.message, /private goal|private key/);
+      return true;
+    },
+  );
+  assert.ok(requestedSignal instanceof AbortSignal);
+  response = new Response(
+    JSON.stringify({ detail: "Node-owner consent required" }),
+    { status: 403 },
+  );
+  await assert.rejects(
+    client.control("distributed/jobs", {}),
+    /Node-owner consent required/,
+  );
+  assert.equal(requestedSignal, undefined);
+  response = new Response("Proxy unavailable", { status: 503 });
+  await assert.rejects(
+    client.control("distributed/jobs", {}),
+    /Operation not confirmed \(503\)/,
+  );
+});
 
 test("account settings is available to members while admin navigation is role-gated", () => {
   const html = renderToStaticMarkup(

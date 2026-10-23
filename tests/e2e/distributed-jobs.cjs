@@ -26,7 +26,9 @@ new Function(
 )(appearance, appearance.exports);
 let submitted = null,
   parentStatus = "RUNNING",
-  stale = false;
+  stale = false,
+  rejection = null,
+  posts = 0;
 const nodes = [1, 2].map((i) => ({
   node_id: uuid(10 + i),
   name: `Test computer ${i}`,
@@ -111,7 +113,7 @@ const server = http.createServer(async (req, res) => {
     data = {
       environment: "test",
       generated_at: new Date().toISOString(),
-      workspace_id: workspace,
+      workspace_id: null,
       workspaces: [{ id: workspace, name: "Test workspace", can_manage: true }],
       nodes: [],
       jobs: [],
@@ -129,6 +131,12 @@ const server = http.createServer(async (req, res) => {
       limit: 25,
     };
   else if (route === "distributed/jobs" && req.method === "POST") {
+    posts += 1;
+    if (rejection) {
+      res.statusCode = rejection.status;
+      res.end(JSON.stringify({ detail: rejection.detail }));
+      return;
+    }
     submitted = JSON.parse(raw);
     res.statusCode = 201;
     data = summary();
@@ -211,7 +219,55 @@ const server = http.createServer(async (req, res) => {
     await page.route("**/downloads/manifest.json", (route) =>
       route.fulfill({ json: { artifacts: [] } }),
     );
-    await page.goto(`${origin}/distributed?workspace=${workspace}`);
+    await page.goto(`${origin}/distributed`);
+    const run = page.getByRole("button", {
+      name: "Run distributed job",
+      exact: true,
+    });
+    await run.click();
+    const feedback = page.locator(".submission-feedback");
+    await feedback.getByText("Enter a job name.", { exact: true }).waitFor();
+    assert.match(
+      await feedback.innerText(),
+      /Select at least two participating computers/,
+    );
+    assert.match(
+      await feedback.innerText(),
+      /Parallel task 1: choose an agent/,
+    );
+    assert.match(await feedback.innerText(), /Choose a synthesis agent/);
+    assert.equal(posts, 0);
+    assert.equal(
+      await feedback.evaluate((element) => document.activeElement === element),
+      true,
+    );
+    await feedback.screenshot({
+      path: path.join(folder, "submission-blockers.png"),
+    });
+    // A selected old worker must explain the synthesis blocker beside Run.
+    nodes.forEach((node) => {
+      node.context_supported = false;
+    });
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page
+      .getByText(/Test computer 1.*Worker update required for synthesis/)
+      .waitFor();
+    await page.getByRole("checkbox", { name: /Test computer 1/ }).check();
+    await run.click();
+    assert.match(
+      await feedback.innerText(),
+      /No selected computer supports final synthesis/,
+    );
+    assert.equal(posts, 0);
+    nodes.forEach((node) => {
+      node.context_supported = true;
+    });
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await page
+      .getByLabel("Synthesis computer")
+      .locator("option")
+      .filter({ hasText: "Test computer 1" })
+      .waitFor({ state: "attached" });
     await page.getByRole("checkbox", { name: /Test computer 1/ }).check();
     await page.getByRole("checkbox", { name: /Test computer 2/ }).check();
     await page
@@ -238,12 +294,58 @@ const server = http.createServer(async (req, res) => {
         name: /Allow any selected compatible updated computer/,
       })
       .check();
+    rejection = {
+      status: 403,
+      detail:
+        "Task participants require workspace access and node-owner contribution consent",
+    };
+    await run.click();
+    await feedback.getByText(rejection.detail, { exact: true }).waitFor();
+    await feedback.screenshot({
+      path: path.join(folder, "submission-rejected.png"),
+    });
+    // Refreshing catalogs must not erase a failed submission's message.
+    await Promise.all([
+      page.waitForResponse((response) =>
+        response.url().includes("distributed/jobs/options"),
+      ),
+      page.getByRole("button", { name: "Refresh", exact: true }).click(),
+    ]);
+    assert.match(await feedback.innerText(), /node-owner contribution consent/);
+    rejection = {
+      status: 422,
+      detail: [
+        {
+          loc: ["body", "tasks", 0, "input", "instruction"],
+          msg: "String should have at most 4096 characters",
+          input: "PRIVATE INPUT MUST NOT APPEAR",
+        },
+      ],
+    };
+    await run.click();
+    await feedback.getByText(/tasks > 0 > input > instruction/).waitFor();
+    assert.doesNotMatch(await feedback.innerText(), /PRIVATE INPUT/);
+    rejection = null;
+    await page.route("**/api/control/distributed/jobs", (route) =>
+      route.request().method() === "POST"
+        ? route.abort("failed")
+        : route.continue(),
+    );
+    await run.click();
+    await feedback.getByText(/coordinator could not be reached/).waitFor();
+    assert.match(
+      await feedback.innerText(),
+      /Refresh job history before retrying/,
+    );
+    await page.unroute("**/api/control/distributed/jobs");
     await page
       .getByRole("button", { name: "Run distributed job", exact: true })
       .click();
     await page
       .getByRole("heading", { name: "Participating computers", exact: true })
       .waitFor();
+    await feedback.getByText("Submission confirmed", { exact: true }).waitFor();
+    assert.equal(submitted.workspace_id, workspace);
     assert.equal(submitted.tasks.length, 3);
     assert.deepEqual(
       submitted.tasks[2].node_ids,
@@ -334,6 +436,12 @@ const server = http.createServer(async (req, res) => {
           passed: true,
           checks: [
             "selected-node submission",
+            "empty form validation without native silent blocking",
+            "explicit synthesis readiness blockers",
+            "permission rejection beside Run persists after refresh",
+            "structured field validation without private input echo",
+            "network failure with duplicate submission guidance",
+            "default workspace fallback and confirmed submission",
             "parallel task assignments",
             "dependency graph",
             "time-share bars",
