@@ -1,8 +1,8 @@
 # Documentation
 
 Start with the [user guide](../README.md) for sign-in, worker installation, models
-and your first job. The current published coordinator and desktop workers are
-**0.9.0-rc.1**. The [cloud image deployment verification](operations/cloud-images-deployment-2026-10-23.md)
+and your first job. The current published coordinator is **0.9.0-rc.4**; desktop
+workers remain **0.9.0-rc.2**. The [member registration deployment verification](operations/member-node-registration-verification-2026-10-23.md)
 records packaging, preservation and public checks. See [cloud image setup](operations/cloud-images.md)
 for OpenAI/Gemini account connections and the required worker opt-ins.
 
@@ -33,7 +33,7 @@ For shared colors, Bootstrap components, toasts and progress bars, see
 - [Docker installation, updates and backups](operations/coordinator-installation.md)
 - [First administrator sign-in](operations/founder-bootstrap.md)
 - [Portable worker packages and Linux/source setup](operations/worker-distribution.md)
-- [Latest production/package verification](operations/cloud-images-deployment-2026-10-23.md)
+- [Latest production/package verification](operations/member-node-registration-verification-2026-10-23.md)
 - [Cleanup and six-release retention](operations/project-cleanup-2026-10-22.md)
 
 ## Development and history

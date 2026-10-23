@@ -1,6 +1,7 @@
 # Trusted members can register owned computers
 
-Status: accepted by the owner, 2026-10-23. Production activation is separate.
+Status: accepted by the owner, 2026-10-23. Deployed in coordinator 0.9.0-rc.4;
+see the [deployment verification](../operations/member-node-registration-verification-2026-10-23.md).
 
 The Godfather is an invitation-only platform for vetted members. Registering an
 owned computer is a normal member capability. Previously only contributors and
@@ -32,4 +33,5 @@ against disposable `godfather_test`, using the existing test image with current
 source mounted read-only. Google's upstream exchange was mocked; no real Google
 account was accessed. All 43 dashboard component tests, Ruff formatting/lint,
 strict mypy and updated-document Prettier checks passed. No frontend source or
-worker package changed, and no coordinator was deployed.
+worker package changed. Production activation was subsequently authorized and
+is recorded in the linked deployment verification.
