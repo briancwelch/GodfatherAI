@@ -1,4 +1,4 @@
-"""Tabbed, owner-controlled settings; presentation does not require pausing work."""
+"""Tabbed, owner-controlled settings with idle-safe contribution updates."""
 
 import asyncio
 import tkinter as tk
@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from godfather_worker import desktop_theme
 from godfather_worker.coding_setup import local_images
-from godfather_worker.desktop import Contribution, save_settings
+from godfather_worker.desktop import Contribution
 from godfather_worker.desktop_layout import window_size
 from godfather_worker.native_desktop import set_login_startup
 
@@ -25,7 +25,7 @@ class Settings:
         self.values: dict[str, tk.StringVar | tk.BooleanVar] = {}
         self.images: dict[str, str] = {}
         self.status = tk.StringVar(
-            value="Changes to contributions require Pause. Appearance can change while working."
+            value="Contribution changes apply automatically after current work finishes."
         )
         header = ttk.Frame(self.window, padding=(20, 16))
         header.pack(fill="x")
@@ -162,27 +162,28 @@ class Settings:
                 "lback is permitted."
             ),
         )
-        self.check("Sharing", "Accept explicitly shared work", "shared", app.settings.shared)
-        self.entry(
+        self.check(
             "Sharing",
-            "Allowed job owner IDs (comma separated)",
-            "owners",
-            ",".join(map(str, app.settings.allowed_owner_ids)),
-        )
-        self.entry(
-            "Sharing",
-            "Allowed workspace IDs (comma separated)",
-            "workspaces",
-            ",".join(map(str, app.settings.allowed_workspace_ids)),
+            "Contribute this computer to my workspaces",
+            "share_with_workspaces",
+            app.settings.share_with_workspaces,
         )
         self.note(
             "Sharing",
             (
-                "Private by default. Shared work needs both owner and workspace g"
-                "rants. Platform administrators cannot bypass these local restric"
-                "tions. Project access remains separately controlled in Projects."
+                "Members of workspaces you belong to can use this computer's installed "
+                "local models and enabled workloads for ordinary and distributed jobs. "
+                "This includes workspaces you join later. Membership changes take effect "
+                "automatically. No user or computer IDs are needed. Files, projects, "
+                "downloads and paid API connections keep their separate permissions."
             ),
         )
+        if app.settings.shared and not app.settings.share_with_workspaces:
+            self.note(
+                "Sharing",
+                "Your existing restricted sharing is preserved until you "
+                "choose workspace contribution. No existing permission is expanded by an update.",
+            )
         self.choice("Appearance", "Theme", "theme", preferences.theme, ["light", "dark"])
         self.choice(
             "Appearance",
@@ -337,19 +338,12 @@ class Settings:
                     "model_installation": values["model_installation"],
                     "runtime_installation": values["runtime_installation"],
                     "account_providers": values["account_providers"],
-                    "shared": values["shared"],
-                    "allowed_owner_ids": [
-                        s.strip() for s in str(values["owners"]).split(",") if s.strip()
-                    ],
-                    "allowed_workspace_ids": [
-                        s.strip() for s in str(values["workspaces"]).split(",") if s.strip()
-                    ],
                 }
             )
-            if settings.shared and not (
-                settings.allowed_owner_ids and settings.allowed_workspace_ids
-            ):
-                raise ValueError("Shared work needs explicit owner and workspace grants.")
+            if bool(values["share_with_workspaces"]) != self.app.settings.share_with_workspaces:
+                settings = settings.with_workspace_contribution(
+                    bool(values["share_with_workspaces"])
+                )
             if settings.primary == "inference" and not settings.inference:
                 raise ValueError("Enable local models before choosing inference as primary.")
             if settings.model_installation and not settings.inference:
@@ -357,16 +351,6 @@ class Settings:
                 return
             if settings.runtime_installation and not settings.model_installation:
                 self.status.set("Enable model downloads before approving Ollama runtime setup.")
-                return
-            if (
-                settings != self.app.settings
-                and self.app.controller
-                and self.app.controller.running
-            ):
-                self.status.set(
-                    "Pause the worker before changing contributions. Appearance-only "
-                    "changes can be saved now."
-                )
                 return
             preferences = desktop_theme.Preferences.model_validate(
                 {
@@ -388,7 +372,13 @@ class Settings:
             )
             if bool(values["startup"]) != self.app.autostart.get():
                 set_login_startup(bool(values["startup"]))
-            save_settings(self.app.folder / "settings.json", settings)
+            changed = settings != self.app.settings
+            if changed:
+                self.app.apply_settings(
+                    settings,
+                    start=settings.share_with_workspaces
+                    and not self.app.settings.share_with_workspaces,
+                )
             desktop_theme.save(self.app.folder, preferences)
             self.app.settings, self.app.preferences = settings, preferences
             self.app.inference.set(settings.inference)
@@ -403,6 +393,6 @@ class Settings:
             self.window.destroy()
         except (ValueError, OSError):
             self.status.set(
-                "Settings were not fully saved. Check capacity, UUID grants and "
+                "Settings were not fully saved. Check capacity and "
                 "installed environment/model values. Image APIs must use loopback HTTP."
             )

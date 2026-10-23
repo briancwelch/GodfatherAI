@@ -259,10 +259,49 @@ def submit(
                     dict.fromkeys([*child.requirements.runtimes, DISTRIBUTED_RUNTIME])
                 ),
             }
-        if not all(permitted(session, job, visible[n]) for n in task.node_ids):
+        for node_id in task.node_ids:
+            node = visible[node_id]
+            if permitted(session, job, node):
+                continue
+            workspace = session.get(Workspace, job.workspace_id)
+            selection = child.requirements.model_selection
+            if (
+                workspace
+                and workspace.allowed_models is not None
+                and (
+                    (
+                        selection
+                        and any(
+                            m not in workspace.allowed_models
+                            for m in [selection.identifier, *selection.fallback_models]
+                        )
+                    )
+                    or any(
+                        m.identifier not in workspace.allowed_models
+                        for m in child.requirements.models
+                    )
+                )
+            ):
+                raise HTTPException(
+                    403,
+                    f"{task.name}: the agent's model is not enabled in this "
+                    "workspace. Open Models in this workspace and choose an "
+                    "allowed model or ask a workspace administrator to enable it.",
+                )
+            from godfather_api.provider_connections import allowed
+
+            if not allowed(session, job, node):
+                raise HTTPException(
+                    403,
+                    f"{task.name}: the selected API connection is not "
+                    f"authorized on {node.name}. Choose a permitted local model "
+                    "or authorize the API connection for this computer.",
+                )
             raise HTTPException(
                 403,
-                "Task participants require workspace access and node-owner contribution consent",
+                f"{task.name}: {node.name} cannot accept this task under "
+                "its workspace or owner permissions. Check the agent's tool "
+                "permissions and the owner's contribution setting.",
             )
         session.add(
             DistributedTask(

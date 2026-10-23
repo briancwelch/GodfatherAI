@@ -25,6 +25,8 @@ from godfather_worker.desktop import (
     Pairing,
     connection_error,
     coordinator_origin,
+    first_run_contribution,
+    save_settings,
 )
 from godfather_worker.discovery import discover
 from godfather_worker.inference import discover_models
@@ -53,6 +55,7 @@ class Application:
         self.timer: str | None = None
         self.tray: Any = None
         self.settings = Contribution()
+        self.settings_restart_pending = False
         self.models: list[str] = []
         self.status = tk.StringVar(value="Loading your saved connection...")
         self.connection_state = tk.StringVar(value="DISCONNECTED")
@@ -78,7 +81,7 @@ class Application:
         self.image_models = tk.StringVar(value="")
         self.cpu, self.ram = tk.StringVar(value="1"), tk.StringVar(value="2")
         self.shared = tk.BooleanVar(value=False)
-        self.owners, self.workspaces = tk.StringVar(), tk.StringVar()
+        self.contribute = tk.BooleanVar(value=False)
         self.autostart = tk.BooleanVar(value=False)
         root.title("Consigliere — The Godfather AI · " + (self.build_version or "Source checkout"))
         root.configure(background="#F4F8FC")
@@ -253,6 +256,26 @@ class Application:
         self.address_entry.pack(fill="x")
         ttk.Label(main, textvariable=self.code, style="Title.TLabel", wraplength=380).pack(
             anchor="w", pady=8
+        )
+        ttk.Checkbutton(
+            main,
+            text="Contribute this computer to my workspaces",
+            variable=self.contribute,
+            command=self.apply_contribution,
+        ).pack(anchor="w", pady=(12, 4))
+        ttk.Label(
+            main,
+            text="Use installed local models for ordinary and distributed jobs in your "
+            "workspaces. Membership handles sharing, including workspaces you join later. "
+            "Turn this off anytime.",
+            wraplength=400,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(main, textvariable=self.inventory, wraplength=400, style="Muted.TLabel").pack(
+            anchor="w", pady=4
+        )
+        ttk.Button(main, text="Set up local AI", command=self.setup_local_ai).pack(
+            anchor="w", pady=6
         )
         network = ttk.LabelFrame(connection, text="NETWORK", padding=16)
         network.grid(row=0, column=1, sticky="new")
@@ -505,6 +528,9 @@ class Application:
         settings = (
             Contribution.model_validate_json(path.read_text()) if path.exists() else Contribution()
         )
+        advertisement = discover()
+        if not path.exists() and identity is None:
+            settings = first_run_contribution(advertisement.resources)
         deployments = asyncio.run(
             discover_models([ProviderConfig(id="local-ollama", provider="ollama")])
         )
@@ -512,7 +538,7 @@ class Application:
             "loaded",
             identity=identity,
             settings=settings,
-            advertisement=discover(),
+            advertisement=advertisement,
             models=[m.identifier for m in deployments],
             startup=login_startup_enabled(),
         )
@@ -583,15 +609,64 @@ class Application:
             messagebox.showerror("Worker settings", str(error))
 
     def apply_models(self) -> None:
-        if self.controller and self.controller.running:
+        settings = self.settings.model_copy(
+            update={
+                "inference": self.inference.get(),
+                "model_installation": self.model_installation.get(),
+                "account_providers": self.account_connections.get(),
+            }
+        )
+        try:
+            if settings.model_installation and not settings.inference:
+                raise ValueError("Enable local AI models before allowing model downloads.")
+            if settings.runtime_installation and not settings.model_installation:
+                raise ValueError("Enable model downloads before allowing Ollama runtime setup.")
+            if settings.primary == "inference" and not settings.inference:
+                raise ValueError(
+                    "Choose CPU as the primary specialty before disabling local models."
+                )
+            self.apply_settings(settings)
+        except (ValueError, OSError) as error:
             self.inference.set(self.settings.inference)
             self.model_installation.set(self.settings.model_installation)
             self.account_connections.set(self.settings.account_providers)
-            messagebox.showinfo(
-                "Pause first", "Pause the worker before changing contributions, then Resume."
-            )
+            messagebox.showerror("Model contribution", str(error), parent=self.root)
+
+    def apply_settings(self, settings: Contribution, *, start: bool = False) -> None:
+        """Re-register after the current attempt; changing sharing never needs a manual pause."""
+        save_settings(self.folder / "settings.json", settings)
+        self.settings = settings
+        self.contribute.set(settings.share_with_workspaces)
+        self.inference.set(settings.inference)
+        self.model_installation.set(settings.model_installation)
+        self.account_connections.set(settings.account_providers)
+        self.shared.set(settings.shared)
+        if self.controller and self.controller.running:
+            self.settings_restart_pending = True
+            self.controller.maintenance_event.set()
+            self.status.set("Applying contribution settings automatically after current work...")
+        elif start and self.identity:
+            self.start()
+
+    def apply_contribution(self) -> None:
+        enabled = self.contribute.get()
+        try:
+            self.apply_settings(self.settings.with_workspace_contribution(enabled), start=enabled)
+        except (ValueError, OSError) as error:
+            self.contribute.set(self.settings.share_with_workspaces)
+            messagebox.showerror("Computer contribution", str(error), parent=self.root)
+
+    def restart_after_settings(self) -> None:
+        if self.closing or not self.settings_restart_pending:
+            return
+        if self.controller and self.controller.running:
+            self.root.after(100, self.restart_after_settings)
+            return
+        self.settings_restart_pending = False
+        self.start()
 
     def pause(self) -> None:
+        self.settings_restart_pending = False
         if self.controller and self.controller.running:
             self.controller.stop()
             self.status.set("Pausing safely...")
@@ -797,8 +872,8 @@ class Application:
                     "Local models: "
                     + (
                         ", ".join(self.models)
-                        or "None found. To add one, enable local AI models and model downloads, "
-                        "then select a model in Command Center. Ollama must be running."
+                        or "None found. Choose Set up local AI to add a model, or connect "
+                        "an API provider under Models & API connections."
                     )
                 )
                 self.settings = values["settings"]
@@ -817,8 +892,7 @@ class Application:
                 self.cpu.set(str(self.settings.cpu_cores))
                 self.ram.set(str(self.settings.ram_gib))
                 self.shared.set(self.settings.shared)
-                self.owners.set(",".join(map(str, self.settings.allowed_owner_ids)))
-                self.workspaces.set(",".join(map(str, self.settings.allowed_workspace_ids)))
+                self.contribute.set(self.settings.share_with_workspaces)
                 ad = values["advertisement"]
                 self.hardware.set(
                     f"{ad.os} / {ad.architecture} / {ad.resources.cpu_count} CPU cores"
@@ -851,11 +925,21 @@ class Application:
                         self.set_connection_state("DISCONNECTED")
                         self.code.set("")
             elif name in ("worker.registered", "worker.heartbeat"):
+                if "available_models" in values:
+                    self.models = values["available_models"]
                 self.set_connection_state(
                     "CONNECTED" if values.get("state", "online") != "disabled" else "DISABLED"
                 )
                 self.status.set(
-                    "Connected"
+                    (
+                        (
+                            "Connected - contributing to workspace jobs"
+                            if self.models or self.settings.workloads
+                            else "Connected - waiting for an AI model"
+                        )
+                        if self.settings.share_with_workspaces
+                        else "Connected"
+                    )
                     if values.get("state", "online") != "disabled"
                     else "Node disabled by administrator"
                 )
@@ -884,6 +968,8 @@ class Application:
                     self.root.after(100, self.finish_update)
                 elif self.local_setup_pending:
                     self.root.after(100, self.begin_local_setup)
+                elif self.settings_restart_pending and not self.closing:
+                    self.root.after(100, self.restart_after_settings)
             elif name == "error":
                 self.status.set(values["message"])
             elif name == "project_update" and not self.closing:

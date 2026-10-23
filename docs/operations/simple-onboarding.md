@@ -19,8 +19,13 @@ Publisher signing and physical recipient pairing remain pending.
    the code in the browser, give the computer a name and approve. The worker
    connects automatically; there is no credential file or finish button.
 
-Enable **Allow my existing local AI models** to contribute installed Ollama models.
-The app does not install Ollama. Model downloads require separate local opt-in
+The updated contribution flow is [install, connect and contribute](simple-contribution.md).
+On a fresh installation, **Contribute this computer to my workspaces** is selected
+before you Connect and approve it. It enables existing local models and uses
+workspace membership for sharing automatically. Existing installations preserve
+their prior settings; enable this one switch to opt in. There are no sharing IDs
+to enter and changes apply after current work automatically.
+The app does not install Ollama just by connecting. Model downloads require separate local opt-in
 and confirmation of each catalog download in Command Center; see
 [Add a local model](consigliere-ui.md#add-a-local-model). With local AI off, the node
 connects for availability only. Paid AI, repository access and other tools retain
@@ -32,8 +37,8 @@ features require both the updated coordinator and worker before use.
 
 Later launches use the saved connection and reconnect. Close the window to leave
 the app in the tray/menu bar. Use **Pause**, **Resume**, **Open Command Center** or
-**Quit** there. Advanced settings contain scheduling capacity and explicit sharing
-scopes. Capacity is advertised scheduling capacity, not an OS resource limiter.
+**Quit** there. Advanced settings contain scheduling capacity and workload
+permissions. Capacity is advertised scheduling capacity, not an OS resource limiter.
 
 The OS credential store holds the machine credential, bound to the coordinator
 address. A saved connection cannot silently move its credential to another server.

@@ -603,6 +603,7 @@ function NodeTable({ data }: { data: Snapshot }) {
           cell: (n) => (
             <>
               {n.scheduling_policy}
+              {n.share_with_workspaces && " · Workspace contribution"}
               <small>
                 {n.visible_active_jobs} visible jobs · {n.concurrency_limit}{" "}
                 slots
@@ -1256,6 +1257,12 @@ function NodeInspection({
         <dt>Scheduling</dt>
         <dd>
           {n.scheduling_policy} · {n.concurrency_limit} concurrent slots
+        </dd>
+        <dt>Contribution</dt>
+        <dd>
+          {n.share_with_workspaces
+            ? "Contributing to ordinary and distributed jobs in the owner's workspaces. Access follows workspace membership automatically."
+            : "Owner-controlled contribution. Enable Contribute this computer to my workspaces in Consigliere for automatic workspace sharing."}
         </dd>
       </dl>
       <div className="actions">

@@ -769,8 +769,10 @@ export default function DistributedJobs({
                   <p>Loading participants...</p>
                 ) : !options.nodes.length ? (
                   <p>
-                    No permitted computers. Connect a worker and grant workspace
-                    contribution access.
+                    No contributing computers in this workspace. In Consigliere,
+                    the owner enables Contribute this computer to my workspaces.
+                    Invite the owner to this workspace using their name or
+                    email.
                   </p>
                 ) : (
                   options.nodes.map((node) => (

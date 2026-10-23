@@ -227,6 +227,7 @@ def node_view(session: Session, node: Node) -> NodeView:
             **node.runtimes,
             "allowed_job_owner_ids": node.contribution_policy.get("allowed_job_owner_ids", []),
             "allowed_workspace_ids": node.contribution_policy.get("allowed_workspace_ids", []),
+            "share_with_workspaces": node.contribution_policy.get("share_with_workspaces", False),
             "node_id": node.id,
             "owner_id": node.owner_id,
             "owner_name": (
@@ -387,12 +388,14 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
     policy = {
         k: v
         for k, v in node.contribution_policy.items()
-        if k not in ("allowed_job_owner_ids", "allowed_workspace_ids")
+        if k not in ("allowed_job_owner_ids", "allowed_workspace_ids", "share_with_workspaces")
     }
     if payload.allowed_job_owner_ids:
         policy["allowed_job_owner_ids"] = [str(v) for v in payload.allowed_job_owner_ids]
     if payload.allowed_workspace_ids:
         policy["allowed_workspace_ids"] = [str(v) for v in payload.allowed_workspace_ids]
+    if payload.share_with_workspaces:
+        policy["share_with_workspaces"] = True
     if node.contribution_policy != policy:
         record(
             session,
@@ -401,6 +404,7 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
             {
                 "allowed_job_owner_ids": policy.get("allowed_job_owner_ids", []),
                 "allowed_workspace_ids": policy.get("allowed_workspace_ids", []),
+                "share_with_workspaces": policy.get("share_with_workspaces", False),
             },
             credential.owner_id,
         )

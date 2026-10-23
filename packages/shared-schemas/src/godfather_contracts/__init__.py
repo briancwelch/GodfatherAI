@@ -164,6 +164,7 @@ class Advertisement(Contract):
     model_deployments: list[ModelDeployment] = Field(default_factory=list, max_length=128)
     allowed_job_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
+    share_with_workspaces: bool = False
     runtimes: list[Label] = Field(default_factory=list, max_length=32)
     installed_models: list[ModelInventory] = Field(default_factory=list, max_length=128)
     dependencies: list[Label] = Field(default_factory=list, max_length=32)
@@ -179,6 +180,8 @@ class Advertisement(Contract):
             data.pop("worker_version", None)
         if not self.coding_repositories:
             data.pop("coding_repositories", None)
+        if not self.share_with_workspaces:
+            data.pop("share_with_workspaces", None)
         return data
 
     @model_validator(mode="after")

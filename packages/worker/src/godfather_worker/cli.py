@@ -110,6 +110,7 @@ def main(
     )
     parser.add_argument("--allow-owner", type=str, action="append", default=[])
     parser.add_argument("--allow-workspace", type=str, action="append", default=[])
+    parser.add_argument("--share-with-workspaces", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.execute_synthetic and not args.simulate:
@@ -322,6 +323,7 @@ def main(
             ]
         values["allowed_job_owner_ids"] = args.allow_owner
         values["allowed_workspace_ids"] = args.allow_workspace
+        values["share_with_workspaces"] = args.share_with_workspaces
         registration = Registration.model_validate({**values, "session_id": uuid4()})
     except (OSError, KeyError, ValueError, TypeError, ToolError, WorkflowError):
         notify("worker.configuration_invalid")
@@ -375,6 +377,9 @@ def main(
                         node_id=str(node_id),
                         source=registration.resources.source,
                         profile=args.simulate,
+                        available_models=[
+                            m.identifier for m in registration.model_deployments if m.available
+                        ],
                     )
                 else:
                     resources = registration.resources if args.simulate else discover_resources()[0]

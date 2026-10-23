@@ -11,7 +11,14 @@ import pytest
 from godfather_contracts import Heartbeat, Registration, WorkerAck
 from godfather_contracts.model_management import INSTALL_RUNTIME, PROVIDER_RUNTIME_PREFIX
 from godfather_worker import cli, keychain
-from godfather_worker.desktop import Contribution, Controller, LimitedClient, Pairing, login_startup
+from godfather_worker.desktop import (
+    Contribution,
+    Controller,
+    LimitedClient,
+    Pairing,
+    first_run_contribution,
+    login_startup,
+)
 from godfather_worker.simulated import profile
 
 from scripts import build_macos_worker
@@ -153,10 +160,87 @@ def test_shared_work_requires_explicit_both_allowlists(tmp_path: Path) -> None:
     assert not controller.running
 
 
+def test_fresh_install_can_contribute_without_ids_but_existing_defaults_stay_private() -> None:
+    existing = Contribution.model_validate({"inference": False, "cpu_cores": 1, "ram_gib": 2})
+    assert not existing.share_with_workspaces and not existing.shared
+    fresh = first_run_contribution(profile("LA-01").resources)
+    assert fresh.shared and fresh.share_with_workspaces and fresh.inference
+    assert fresh.allowed_owner_ids == fresh.allowed_workspace_ids == []
+    assert fresh.cpu_cores == profile("LA-01").resources.cpu_count
+    assert not fresh.account_providers and not fresh.model_installation
+    assert not fresh.runtime_installation and not fresh.repositories and not fresh.workloads
+    private = fresh.with_workspace_contribution(False)
+    assert not private.shared and not private.share_with_workspaces
+    assert private.inference  # The owner's own local jobs still work.
+
+
+def test_workspace_contribution_keeps_credentials_and_downloads_separate(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    run = Mock(return_value=0)
+    monkeypatch.setattr(cli, "main", run)
+    controller = Controller({"kind": "worker", "token": "fixture"}, tmp_path, Mock())
+    controller.start(Contribution().with_workspace_contribution(True))
+    assert controller.thread is not None
+    controller.thread.join(2)
+    arguments = run.call_args.args[0]
+    assert "--share-with-workspaces" in arguments
+    assert "--execute-workflows" in arguments and "--inference-config" in arguments
+    assert "--allow-owner" not in arguments and "--allow-workspace" not in arguments
+    assert "--account-providers" not in arguments and "--allow-model-installation" not in arguments
+    assert (
+        "--allow-tool-permission" not in arguments
+        and "--allow-runtime-installation" not in arguments
+    )
+
+
+def test_legacy_registration_omits_new_sharing_field() -> None:
+    registration = Registration(
+        **profile("LA-01").model_dump(), session_id="00000000-0000-0000-0000-000000000001"
+    )
+    assert "share_with_workspaces" not in registration.model_dump(mode="json")
+    assert (
+        registration.model_copy(update={"share_with_workspaces": True}).model_dump(mode="json")[
+            "share_with_workspaces"
+        ]
+        is True
+    )
+
+
+def test_contribution_change_applies_when_idle_without_cancelling_the_current_job(
+    tmp_path: Path,
+) -> None:
+    from godfather_worker.desktop_app import Application
+
+    app = object.__new__(Application)
+    app.folder, app.settings, app.identity = tmp_path, Contribution(), {"token": "fixture"}
+    app.contribute, app.inference, app.model_installation = Mock(), Mock(), Mock()
+    app.account_connections, app.shared, app.status = Mock(), Mock(), Mock()
+    app.controller = Mock(running=True, maintenance_event=threading.Event())
+    app.settings_restart_pending, app.closing = False, False
+    app.start = Mock()  # type: ignore[method-assign]
+    app.apply_settings(app.settings.with_workspace_contribution(True), start=True)
+    assert app.settings_restart_pending and app.controller.maintenance_event.is_set()
+    app.controller.stop.assert_not_called()
+    app.start.assert_not_called()
+    saved = Contribution.model_validate_json((tmp_path / "settings.json").read_text())
+    assert saved.share_with_workspaces and saved.inference
+    app.controller.running = False
+    app.restart_after_settings()
+    app.start.assert_called_once()
+    assert not app.settings_restart_pending
+
+
 @pytest.mark.parametrize("host", ["LV-01", "LA-01", "LA-02"])
 @pytest.mark.parametrize("downloads", [False, True])
+@pytest.mark.parametrize("workspace_sharing", [False, True])
 def test_desktop_download_consent_reaches_registration_with_empty_inventory(
-    host: str, downloads: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    host: str,
+    downloads: bool,
+    workspace_sharing: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Desktop -> real CLI -> registration; no coordinator or model traffic."""
     monkeypatch.setattr(cli, "discover", lambda: profile(host))
@@ -187,6 +271,8 @@ def test_desktop_download_consent_reaches_registration_with_empty_inventory(
     monkeypatch.setattr(LimitedClient, "post_document", poll)
     controller = Controller({"kind": "worker", "token": "fixture-only"}, tmp_path, Mock())
     settings = Contribution(inference=True, model_installation=downloads)
+    if workspace_sharing:
+        settings = settings.with_workspace_contribution(True)
     controller.start(settings)
     assert controller.thread is not None
     controller.thread.join(3)
@@ -195,6 +281,8 @@ def test_desktop_download_consent_reaches_registration_with_empty_inventory(
     registration = registrations[0]
     assert not registration.model_deployments
     assert registration.workflow_protocol_version == 1
+    assert registration.share_with_workspaces is workspace_sharing
+    assert not registration.allowed_job_owner_ids and not registration.allowed_workspace_ids
     assert registration.worker_tools == [] and registration.tool_permissions == []
     assert (INSTALL_RUNTIME in registration.runtimes) is downloads
     assert (PROVIDER_RUNTIME_PREFIX + "local-ollama" in registration.runtimes) is downloads

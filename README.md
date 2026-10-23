@@ -4,7 +4,12 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Current coordinator and Consigliere: 0.6.0-rc.1** - [Distributed Jobs deployment](docs/operations/distributed-jobs-2026-10-22.md).
+**Coordinator 0.6.0-rc.2; Consigliere 0.6.0-rc.1.**
+[Distributed Jobs deployment](docs/operations/distributed-jobs-2026-10-22.md).
+The **0.7.0-rc.1 workspace contribution candidate** replaces sharing ID entry with
+**Contribute this computer to my workspaces**. Install, connect, approve and use
+workspace membership for ordinary/distributed work. Existing computers keep their
+permissions until their owners opt in. See [simple contribution](docs/operations/simple-contribution.md).
 Models → Add / use model lists installed local and connected API models. The
 worker update enables basic model-only agents while preserving existing settings.
 

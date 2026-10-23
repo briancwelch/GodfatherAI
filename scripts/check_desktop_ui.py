@@ -114,11 +114,13 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                 root.after(30, connected)
 
             def connected() -> None:
-                if app.status.get() != "Connected":
+                if not app.status.get().startswith("Connected"):
                     root.after(30, connected)
                     return
                 assert app.identity == identity and len(controllers) == 1
                 assert app.connection_state.get() == "CONNECTED"
+                assert app.settings.share_with_workspaces is (not saved)
+                assert app.contribute.get() is (not saved)
                 assert not app.code.get()
                 if saved:
                     browser.assert_not_called()
@@ -206,7 +208,10 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     app.advanced()
                     dialog = app.settings_dialog
                     assert len(dialog.notebook.tabs()) == 6
+                    assert "owners" not in dialog.values and "workspaces" not in dialog.values
+                    assert "share_with_workspaces" in dialog.values
                     assert not dialog.values["model_installation"].get()
+                    dialog.values["inference"].set(False)
                     dialog.values["model_installation"].set(True)
                     dialog.save()
                     assert "Enable local AI models" in dialog.status.get()
@@ -249,17 +254,17 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     assert not app.models  # First-model downloads must not block Resume.
                     assert controllers[-1].start.call_args.args[0].model_installation
                     app.model_installation.set(False)
-                    with patch("godfather_worker.desktop_app.messagebox.showinfo") as info:
-                        app.apply_models()
-                    info.assert_called_once()
-                    assert app.model_installation.get()  # Consent changes require Pause.
+                    app.apply_models()
+                    assert not app.model_installation.get()
+                    assert app.settings_restart_pending
                     app.advanced()
                     dialog = app.settings_dialog
                     dialog.values["model_installation"].set(False)
                     dialog.save()
-                    assert "Pause the worker" in dialog.status.get()
-                    assert app.settings.model_installation
-                    dialog.window.destroy()
+                    assert not dialog.window.winfo_exists()
+                    assert not app.settings.model_installation
+                    assert app.settings_restart_pending
+                    controllers[-1].maintenance_event.set.assert_called_once()
                     app.pause()
                     app.advanced()
                     dialog = app.settings_dialog
@@ -269,10 +274,16 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                     assert not app.model_installation.get()
                     app.start()
                     assert not controllers[-1].start.call_args.args[0].model_installation
+                    app.contribute.set(True)
+                    app.apply_contribution()
+                    assert app.settings.share_with_workspaces and app.settings.inference
+                    assert app.settings_restart_pending
+                    assert not app.settings.allowed_owner_ids
+                    assert not app.settings.allowed_workspace_ids
                     result.append(
                         "pairing, tray restore, expanded resizing, embedded Projects, "
                         "tabbed Settings, theme persistence, project permissions, "
-                        "model-download consent and empty-inventory Resume"
+                        "model-download consent, ID-free contribution and idle-safe updates"
                     )
                     deadline.set()
                     app.quit()

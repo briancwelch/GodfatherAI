@@ -126,9 +126,12 @@ export default function WorkerEnrollment() {
             />
           </label>
           <p>
-            Registration grants no shell, private files, repositories, paid
-            inference, or shared workloads. Choose resource contributions
-            locally afterward.
+            Your worker starts automatically after approval. If Contribute this
+            computer to my workspaces is enabled in Consigliere, workspace
+            members can use its installed local models and enabled workloads.
+            Membership handles sharing automatically. Files, repositories,
+            downloads and paid API connections keep their separate owner
+            permissions.
           </p>
           <label>
             <input type="checkbox" name="reconnect" />

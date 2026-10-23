@@ -25,12 +25,17 @@ Project Save controls retain space when the window shrinks.
   explicit model-download permission and authorized account API connections.
 - Workloads: explicit analytics/report permission, an already installed pinned
   Python environment, and optional local image-backend/model permission.
-- Sharing: explicit allowed owners and workspaces; private remains the default.
+- Sharing: **Contribute this computer to my workspaces** uses current workspace
+  membership automatically, without entering IDs. Fresh installations offer this
+  before Connect; upgrades retain their previous permissions until the owner opts
+  in. Changes apply automatically after current work. See
+  [simple contribution](simple-contribution.md).
 - Appearance: light/dark theme, text size, remembered dimensions and reset layout.
 - Connection: account/coordinator/network status, refresh, Command Center and the
   existing confirmed local-disconnect action.
 
-Appearance changes can be saved while working; contribution changes require Pause.
+Appearance changes can be saved while working; contribution changes apply
+automatically after current work finishes, without manual Pause/Resume.
 Appearance preferences live in owner-local `appearance.json`, separately from
 contribution settings and OS credentials. Startup changes occur only when the
 owner explicitly saves them. This UI revision grants no new access by default.

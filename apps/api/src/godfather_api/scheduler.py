@@ -111,7 +111,7 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
             workspace.allowed_models
         ):
             return False
-        if not set(requirements.models) <= set(workspace.allowed_models):
+        if any(model.identifier not in workspace.allowed_models for model in requirements.models):
             return False
     if workspace.allowed_tools is not None and any(
         f"{t.name}@{t.version}" not in workspace.allowed_tools for t in requirements.tools
@@ -129,6 +129,10 @@ def permitted(session: Session, job: Job, node: Node) -> bool:
     if node.owner_id == job.owner_id:
         return True
     policy = node.contribution_policy
+    if node.scheduling_policy != "dedicated" and policy.get("share_with_workspaces") is True:
+        # The worker owner opted in locally. Both parties' current workspace access
+        # was checked above; membership removal takes effect on every claim/report.
+        return True
     allowed_owners = policy.get("allowed_job_owner_ids", [])
     allowed_workspaces = policy.get("allowed_workspace_ids", [])
     return (

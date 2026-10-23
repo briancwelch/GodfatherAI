@@ -33,6 +33,7 @@ export interface NodeInfo {
   protocol_version: number;
   resources: Resource;
   scheduling_policy: string;
+  share_with_workspaces?: boolean;
   concurrency_limit: number;
   visible_active_jobs: number;
   primary_capabilities: string[];

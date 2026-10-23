@@ -101,10 +101,21 @@ class Contribution(Contract):
     account_providers: bool = False
     primary: Literal["cpu", "inference"] = "cpu"
     shared: bool = False
+    share_with_workspaces: bool = False
     allowed_owner_ids: list[UUID] = Field(default_factory=list, max_length=128)
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
     repositories: list[CodingRepository] = Field(default_factory=list, max_length=8, repr=False)
     workloads: WorkloadConfig | None = None
+
+    def with_workspace_contribution(self, enabled: bool) -> "Contribution":
+        """One explicit local choice; legacy scopes and unrelated permissions survive."""
+        return self.model_copy(
+            update={
+                "share_with_workspaces": enabled,
+                "shared": enabled,
+                "inference": True if enabled else self.inference,
+            }
+        )
 
     def resources(self, actual: Resources) -> Resources:
         values = actual.model_dump()
@@ -116,6 +127,17 @@ class Contribution(Contract):
         # as a scheduling resource in this conservative desktop distribution.
         values["gpus"] = []
         return Resources.model_validate(values)
+
+
+def first_run_contribution(actual: Resources) -> Contribution:
+    """Only a fresh, unpaired install. Connect visibly approves these contributions."""
+    return Contribution(
+        cpu_cores=actual.cpu_count,
+        ram_gib=max(1, (actual.ram_bytes or 2 * 1024**3) // 1024**3),
+        inference=True,
+        shared=True,
+        share_with_workspaces=True,
+    )
 
 
 class LimitedClient(WorkerClient):
@@ -184,7 +206,11 @@ class Controller:
     def start(self, settings: Contribution) -> None:
         if self.running:
             raise ValueError("Worker is already running")
-        if settings.shared and not (settings.allowed_owner_ids and settings.allowed_workspace_ids):
+        if (
+            settings.shared
+            and not settings.share_with_workspaces
+            and not (settings.allowed_owner_ids and settings.allowed_workspace_ids)
+        ):
             raise ValueError("Shared work requires explicit owner and workspace IDs")
         if settings.primary == "inference" and not settings.inference:
             raise ValueError("Enable local inference before making it the primary capability")
@@ -255,6 +281,8 @@ class Controller:
                 arguments += ["--allow-tool-permission", "images.generate"]
         for owner in settings.allowed_owner_ids:
             arguments += ["--allow-owner", str(owner)]
+        if settings.shared and settings.share_with_workspaces:
+            arguments += ["--share-with-workspaces"]
         for workspace in dict.fromkeys(
             [*settings.allowed_workspace_ids]
             + [w for r in settings.repositories for w in r.allowed_workspace_ids]

@@ -402,7 +402,10 @@ def test_concurrent_scheduler_ticks_do_not_duplicate_children(h: Harness) -> Non
     assert sorted(t["status"] for t in rows["tasks"]) == ["ASSIGNED", "ASSIGNED", "PENDING"]
 
 
-def test_explicit_shared_nodes_are_selectable_by_nonadmin_members(h: Harness) -> None:
+@pytest.mark.parametrize("membership_sharing", [False, True])
+def test_explicit_shared_nodes_are_selectable_by_nonadmin_members(
+    h: Harness, membership_sharing: bool
+) -> None:
     from godfather_api.models import HumanSession, User
     from godfather_api.nodes import token_digest
 
@@ -410,6 +413,18 @@ def test_explicit_shared_nodes_are_selectable_by_nonadmin_members(h: Harness) ->
     member = provision(h.database, "admin", email="shared-consumer@example.invalid")
     member_id = UUID(member["owner_id"])
     token = "s" * 43
+    if membership_sharing:
+        for index, registration in enumerate(h.registrations):
+            registration = registration.model_copy(
+                update={"share_with_workspaces": True, "scheduling_policy": "shared"}
+            )
+            response = h.client.post(
+                "/api/v1/workers/register",
+                headers=headers(h.workers[index]),
+                json=registration.model_dump(mode="json"),
+            )
+            assert response.status_code == 200
+            h.registrations[index] = registration
     with h.database.sessions.begin() as session:
         user = session.get(User, member_id)
         assert user
@@ -426,10 +441,14 @@ def test_explicit_shared_nodes_are_selectable_by_nonadmin_members(h: Harness) ->
             node = session.get(Node, UUID(worker["credential_id"]))
             assert node
             node.scheduling_policy = "shared"
-            node.contribution_policy = {
-                "allowed_job_owner_ids": [str(member_id)],
-                "allowed_workspace_ids": [str(h.workspace_id)],
-            }
+            node.contribution_policy = (
+                {"share_with_workspaces": True}
+                if membership_sharing
+                else {
+                    "allowed_job_owner_ids": [str(member_id)],
+                    "allowed_workspace_ids": [str(h.workspace_id)],
+                }
+            )
     auth = {"X-Godfather-Session": token, "Origin": "http://127.0.0.1:3000"}
     response = h.client.get(
         f"/api/v1/distributed/jobs/options?workspace_id={h.workspace_id}", headers=auth
@@ -438,12 +457,36 @@ def test_explicit_shared_nodes_are_selectable_by_nonadmin_members(h: Harness) ->
     response = h.client.post("/api/v1/distributed/jobs", headers=auth, json=payload(h, agent))
     assert response.status_code == 201, response.text
     assert h.tick() == 2
+    if membership_sharing:
+        assignment = h.poll(1)
+        assert assignment
+        run_worker(h, assignment, RecordingModel("Shared workspace contribution"), 1)
+        assert h.get(assignment["job"]["id"])["status"] == "COMPLETED"
     # Node-owner withdrawal is rechecked even after assignments were committed.
     with h.database.sessions.begin() as session:
         node = session.get(Node, UUID(h.workers[0]["credential_id"]))
         assert node
         node.contribution_policy = {}
     assert h.poll() is None
+
+
+def test_disabled_workspace_model_is_not_misreported_as_node_consent(h: Harness) -> None:
+    from godfather_api.models import Workspace
+
+    agent = setup(h)
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = []
+    response = h.client.post(
+        "/api/v1/distributed/jobs", headers=headers(h.admin), json=payload(h, agent)
+    )
+    assert response.status_code == 403
+    assert "model is not enabled" in response.json()["detail"]
+    assert "node-owner contribution consent" not in response.json()["detail"]
+    with h.database.sessions() as session:
+        assert session.scalar(select(func.count()).select_from(DistributedJob)) == 0
+        assert session.scalar(select(func.count()).select_from(Job)) == 0
 
 
 def test_parallel_tasks_use_different_installed_models(h: Harness) -> None:
