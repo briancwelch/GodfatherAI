@@ -133,7 +133,7 @@ Register exact OAuth callback
 The operator reports Google client setup complete. Confirm the configured callback,
 audience and credentials privately; the founder allowlist, invitations and real
 account acceptance remain deployment prerequisites. Existing UUIDs must be linked explicitly through
-`python -m godfather_api.identity`; consult `docs/operations/phase-09.md` in the
+`python -m godfather_api.identity`; consult `docs/history/phases.md#phase-09` in the
 development checkout before migration. The [one-time founder flow](founder-bootstrap.md)
 requires a signed, server-verified Google identity with `email_verified=true`; it
 does not require manually extracting a subject or ID token. Migration

@@ -24,4 +24,4 @@ Semantic landmarks and heading levels, a skip link, visible keyboard focus, text
 - Light and dark system preferences are supported.
 - Browser reports no hydration errors; production build and strict type checks pass.
 
-Check results belong in `docs/operations/phase-01.md`; this checklist is not evidence of execution.
+Check results belong in `docs/history/phases.md#phase-01`; this checklist is not evidence of execution.

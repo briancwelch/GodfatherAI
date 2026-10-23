@@ -1,6 +1,6 @@
 # Inference extension v1
 
-Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Current authentication is documented in [Phase 09](../history/phases.md#phase-09).
 Google OIDC/application sessions replace human bearer login in normal operation;
 worker machine credentials remain independent. Earlier bearer/simulator procedures
 below are historical and restricted to isolated automated tests. Phase 09 does not

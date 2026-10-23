@@ -27,7 +27,7 @@ migrate` for development. For production, follow the separately authorized
    head `0007_founder_bootstrap`. Do not reset volumes. The migration preserves
    users/resources and closes bootstrap if any administrator or Google identity
    already exists. Historical accounts require the explicit linking process in
-   [Phase 09](phase-09.md), rather than a replacement founder.
+   [Phase 09](../history/phases.md#phase-09), rather than a replacement founder.
 4. Open the configured Command Center and choose **Continue with Google** without
    an invitation. Select the allowlisted account. Complete Google's ordinary
    browser authentication and consent. Do not copy tokens, secrets or browser

@@ -1,6 +1,6 @@
 # Early security boundaries
 
-Current authentication is documented in [Phase 09](../operations/phase-09.md).
+Current authentication is documented in [Phase 09](../history/phases.md#phase-09).
 Google OIDC/application sessions replace human bearer login in normal operation;
 worker machine credentials remain independent. Earlier bearer/simulator procedures
 below are historical and restricted to isolated automated tests. Phase 09 does not
@@ -22,7 +22,7 @@ cannot expand tool/host/owner consent or silently enable paid inference. Invalid
 checkpoint/version restoration requires review; unsafe tools remain unsupported.
 Manual retries are restricted to classified safe failures and bounded. No
 force-recovery or owner-grant override is exposed. See [ADR 0007](../decisions/0007-cross-node-recovery-and-local-command-center.md)
-and [the runbook](../operations/phase-07-08.md). Earlier sections are historical.
+and [the runbook](../history/phases.md#phase-07-08). Earlier sections are historical.
 
 ## Phase 06 workflow boundary
 
@@ -70,7 +70,7 @@ Administrator credentials are separate from worker credentials. Workers can regi
 
 Local wrappers capture one-time provisioning stdout into ignored files without printing tokens. Newly created POSIX files/directories use 0600/0700. Windows inherits directory ACLs, so owner-private directories are required. Request logs and validation errors omit payload values and credentials. Lifecycle events persist safe audit details in PostgreSQL. Workers initiate outbound requests only, disable proxy/redirect forwarding and require certificate-validated HTTPS beyond loopback. No home-network inbound ports, remote integrations or public services are configured.
 
-This local minimum does not implement browser login, full workspace RBAC, remote invitations, rate limits, production secret storage or identity-preserving credential rotation. These remain prerequisites before real-data/remote/public exposure as applicable. See [ADR 0003](../decisions/0003-worker-identity-and-health.md) and [Phase 03 operations](../operations/phase-03.md).
+This local minimum does not implement browser login, full workspace RBAC, remote invitations, rate limits, production secret storage or identity-preserving credential rotation. These remain prerequisites before real-data/remote/public exposure as applicable. See [ADR 0003](../decisions/0003-worker-identity-and-health.md) and [Phase 03 operations](../history/phases.md#phase-03).
 
 ## Phase 04 job boundary
 

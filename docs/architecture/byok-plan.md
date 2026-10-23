@@ -1,6 +1,6 @@
 # Proposed gateway extension: hybrid inference and owner-controlled BYOK
 
-Status: **historical design, now being implemented under the explicitly authorized Phase 11 assignment**. See the [Phase 11 runbook](../operations/phase-11.md) and [boundary decision](../decisions/0012-phase-11-execution-and-provider-boundaries.md). The original proposal below retains its historical Phase 06/07 scope statements. Live paid calls still require separately supplied credentials and spending authorization.
+Status: **historical design, now being implemented under the explicitly authorized Phase 11 assignment**. See the [Phase 11 runbook](../history/phases.md#phase-11) and [boundary decision](../decisions/0012-phase-11-execution-and-provider-boundaries.md). The original proposal below retains its historical Phase 06/07 scope statements. Live paid calls still require separately supplied credentials and spending authorization.
 
 ## Boundary and defaults
 

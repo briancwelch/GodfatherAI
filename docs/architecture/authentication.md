@@ -90,7 +90,7 @@ database authority and an explicit verified subject/UUID mapping. It revokes leg
 human bearer credentials and application sessions while preserving machine tokens.
 Legacy human bearer login and admin provisioning work only in explicitly enabled,
 isolated `environment=test` regressions; they are refused in normal operation.
-See the [operations guide](../operations/phase-09.md) for migration and recovery.
+See the [operations guide](../history/phases.md#phase-09) for migration and recovery.
 
 ## Role and ownership model
 
@@ -162,7 +162,7 @@ concurrency regression pauses a worker while it holds the node and proves that
 cancellation and its durable event can commit before that worker continues.
 
 Google login does not authorize provider billing. The separately authorized
-[Phase 11 extension](../operations/phase-11.md) implements independent worker-local
+[Phase 11 extension](../history/phases.md#phase-11) implements independent worker-local
 provider credentials and metadata-only connection grants. Its authorization
 contract is owner UUID + opaque provider
 connection ID + private/approval-required/budget-limited policy + permitted user,

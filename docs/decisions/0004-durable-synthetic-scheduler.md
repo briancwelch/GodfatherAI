@@ -29,4 +29,4 @@ Migration `0003_durable_scheduler` is additive. Existing schema-only job/attempt
 
 ## Verification
 
-See [Phase 04 operations and evidence](../operations/phase-04.md), the [job protocol](../protocols/jobs-v1.md), deterministic unit/integration tests, and `scripts/check_job_scheduler.py`. CI is configured for cross-platform core tests and serial Linux PostgreSQL/native-worker acceptance; configured CI does not prove a remote run.
+See [Phase 04 operations and evidence](../history/phases.md#phase-04), the [job protocol](../protocols/jobs-v1.md), deterministic unit/integration tests, and `scripts/check_job_scheduler.py`. CI is configured for cross-platform core tests and serial Linux PostgreSQL/native-worker acceptance; configured CI does not prove a remote run.

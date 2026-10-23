@@ -2,7 +2,7 @@
 
 Phase 11 extends this gateway with native OpenAI Responses and Anthropic Messages
 adapters, independent provider connections, worker-local OS secret storage and
-durable billing reservations. See the [current runbook](../operations/phase-11.md).
+durable billing reservations. See the [current runbook](../history/phases.md#phase-11).
 The original Phase 05 implementation and acceptance boundaries below are historical.
 
 Phase 05 adds text inference only. The coordinator remains the existing FastAPI/SQLAlchemy modular monolith with PostgreSQL authority. Workers make all provider calls, and initiate all coordinator connections outbound. No inference endpoint is exposed by The Godfather on a worker.

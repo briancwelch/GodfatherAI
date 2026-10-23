@@ -2,7 +2,7 @@
 
 Phase 11 adds one bounded coding step using an owner-approved repository snapshot
 and worker-local container isolation. It reuses this runtime, checkpoints and
-artifact store. See the [Phase 11 runbook](../operations/phase-11.md) for current
+artifact store. See the [Phase 11 runbook](../history/phases.md#phase-11) for current
 permissions and interruption behavior.
 
 ## Current Phase 07–08 extension
@@ -14,7 +14,7 @@ and checkpoint history. Interrupted workflow attempts use `INTERRUPTED`;
 `REVIEW_REQUIRED` pauses an invalid artifact or pinned-version restoration. Every
 committed output is integrity checked before reassignment. Bounded retry/backoff,
 owner restrictions, workflow/worker v1 contracts and read-only tool limits remain.
-The local Command Center consumes the same APIs. See [operations](../operations/phase-07-08.md).
+The local Command Center consumes the same APIs. See [operations](../history/phases.md#phase-07-08).
 
 Phase 06 executes a predefined sequential workflow through the existing scheduler and model gateway. It does not implement autonomous agents, arbitrary tools, multi-agent handoffs, cross-node failover, cloud/BYOK execution or full dashboard management. The [BYOK proposal](byok-plan.md) is design only.
 
@@ -89,4 +89,4 @@ No supported tool has uncertain external side effects. Unsupported/non-idempoten
 
 Events include workflow submitted/started/interrupted/resumed/completed/failed/cancelled, step start/complete/interrupted/failed/cancelled, model requested/completed, tool started/completed, and checkpoint committed. They carry job/workspace/user, workflow/agent versions, attempt/node, UTC timestamp, fence and correlation ID. Agent create/version/enable/disable changes are also audited. Successful model steps retain gateway usage metadata. Failed requests with unavailable usage do not invent token counts. Workspace APIs expose step history and references; no full Command Center is added.
 
-No new third-party runtime dependency, production deployment, model download, frontier adapter, host service, automatic key transfer, cross-node failover, checkpoint retention cleanup or complete backup/restore system is introduced. Physical macOS/Linux/GPU results must be distinguished from Windows native, Linux containers, mocks and configured CI. See [protocol](../protocols/agents-v1.md) and [validation/runbook](../operations/phase-06.md).
+No new third-party runtime dependency, production deployment, model download, frontier adapter, host service, automatic key transfer, cross-node failover, checkpoint retention cleanup or complete backup/restore system is introduced. Physical macOS/Linux/GPU results must be distinguished from Windows native, Linux containers, mocks and configured CI. See [protocol](../protocols/agents-v1.md) and [validation/runbook](../history/phases.md#phase-06).

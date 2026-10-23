@@ -1,16 +1,17 @@
 # Development setup
 
-Current milestone: [Phase 09 Google OIDC and administration](phase-09.md). The
-local Command Center is **http://127.0.0.1:3000**. Explicitly apply
-`0007_founder_bootstrap`, preserve database/artifact volumes, and configure Google
-Sign-In. For a fresh installation, follow the [one-time founder setup](founder-bootstrap.md).
-Existing identities require explicit ownership-preserving linking;
-legacy human bearer login is no longer supported in normal operation. Earlier
-phase notes below are historical. No remote deployment is authorized.
+Use this guide for a local source checkout on Windows, macOS or Linux. The local
+Command Center is **http://127.0.0.1:3000**. For ordinary platform use, start with
+the [user guide](../../README.md); for a packaged Linux coordinator, use
+[coordinator installation](coordinator-installation.md). The
+[consolidated phase history](../history/phases.md) contains earlier acceptance
+commands and results, rather than current milestone instructions.
 
-Phase 06 adds a private persistent API artifact volume and the explicit `0004_agent_runtime` migration. Follow [Phase 06 setup, demonstrations and storage limits](phase-06.md) before running workflows. Preserve both database and artifact volumes; workers gain no filesystem/shell permission from this storage backend. BYOK remains a separately authorized future implementation.
-
-For Phase 05 worker-owned provider configuration, installed-model discovery and inference clients, follow [Phase 05](phase-05.md). No Ollama installation, model download, remote provider or system change is performed automatically. The local shell remains disconnected.
+Apply all current migrations through the migrate service before starting a changed
+API schema. Preserve database/artifact volumes and an existing `.env`. Configure
+Google Sign-In and the [one-time founder setup](founder-bootstrap.md) for normal
+browser use. Existing identities require explicit ownership-preserving linking.
+Local setup does not authorize public exposure or changes to contributor hosts.
 
 ## Supported baseline
 
@@ -107,7 +108,12 @@ Restore with `uv sync --locked --all-packages` and `npm ci` after pulling depend
 
 To switch to native mode, run `docker compose stop dashboard` before `npm run dev`. To stop the local stack, use `docker compose down`; the PostgreSQL named volume remains. Do not use volume deletion flags or reset a database without explicit authorization.
 
-The dashboard remains a disconnected shell. The API uses PostgreSQL on the internal backend network; the dashboard receives no database credentials. Redis remains transient and unused by the API. See [Phase 02](phase-02.md) for guarded PostgreSQL tests and restart verification, and [Phase 03](phase-03.md) for authenticated worker provisioning, four local simulator processes and health inspection. See [Phase 04](phase-04.md) for workspace/job commands and the two-process scheduler acceptance. Always apply reviewed migrations explicitly before starting a changed API schema.
+The dashboard uses the local authenticated API. PostgreSQL remains on the internal
+backend network; the dashboard receives no database credentials. Redis is
+transient. Current regression tests cover worker health, scheduling, workflow
+recovery and authorization. Historical phase demonstrations remain in the
+[phase record](../history/phases.md). Always apply reviewed migrations explicitly
+before starting a changed API schema.
 
 Before review, run:
 

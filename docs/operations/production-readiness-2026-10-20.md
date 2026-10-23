@@ -153,7 +153,7 @@ unrelated replacement admin. After a backup and independent subject verification
 use the existing offline identity-link CLI through the approved production Compose
 context: `exec -T api python -m godfather_api.identity link --user-id EXISTING_UUID
 --subject VERIFIED_SUB`. Do not migrate development fixtures to production or
-match/merge users by email. See [Phase 09 operations](phase-09.md).
+match/merge users by email. See [Phase 09 operations](../history/phases.md#phase-09).
 
 ## HTTPS, public routes and Docker boundaries
 

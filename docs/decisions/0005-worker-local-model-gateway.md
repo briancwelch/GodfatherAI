@@ -21,4 +21,4 @@ Cancellation and transport/ownership failures cancel the local inference task an
 
 ## Verification and limits
 
-See [Phase 05 operations](../operations/phase-05.md), [architecture](../architecture/model-gateway.md), and [inference protocol](../protocols/inference-v1.md). Mock providers give deterministic tests; a native worker and loopback fixture establish the HTTP/job path separately from physical inference. Real local Ollama remains an explicit acceptance gate when an installed model is available. Never infer physical GPU, macOS, remote-provider or cloud proof from mocks or CI configuration.
+See [Phase 05 operations](../history/phases.md#phase-05), [architecture](../architecture/model-gateway.md), and [inference protocol](../protocols/inference-v1.md). Mock providers give deterministic tests; a native worker and loopback fixture establish the HTTP/job path separately from physical inference. Real local Ollama remains an explicit acceptance gate when an installed model is available. Never infer physical GPU, macOS, remote-provider or cloud proof from mocks or CI configuration.

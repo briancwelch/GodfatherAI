@@ -1,170 +1,130 @@
 # The Godfather
 
-Private, cross-platform AI orchestration platform for two founding administrators in Las Vegas and Chino Hills.
+The Godfather lets you run AI jobs from a browser using your own computers and
+models. The **Command Center** is where you manage workspaces, agents and jobs.
+**Consigliere** is the worker app you install on each computer that will do the work.
 
-One developer builds the platform for both administrators. The second administrator does not need a development environment.
+The current published coordinator and desktop worker release is **0.8.0-rc.1**.
+See the [release verification](docs/operations/shared-inference-deployment-2026-10-22.md)
+for the package hashes and checks performed.
 
-**Coordinator and Consigliere 0.8.0-rc.1 are published.**
-[Shared inference deployment verification](docs/operations/shared-inference-deployment-2026-10-22.md).
-Workspace contribution replaces sharing ID entry with
-**Contribute this computer to my workspaces**. Install, connect, approve and use
-workspace membership for ordinary/distributed work. Existing computers keep their
-permissions until their owners opt in. See [simple contribution](docs/operations/simple-contribution.md).
-Models â†’ Add / use model lists installed local and connected API models. The
-worker update enables basic model-only agents while preserving existing settings.
+## Sign in
 
-**Workload release: 0.4.0-rc.3 â€” Phase 12 images, analytics and reporting.** See the
-[Phase 12 runbook](docs/operations/phase-12.md) for owner-controlled worker setup,
-bounded dataset uploads, deterministic calculations and downloadable reports.
-No real dataset or paid image call is authorized; live customer acceptance remains
-pending. Google Sign-In remains separate from data-source and provider consent.
-Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is preserved.
+Open [Command Center](https://app.the-godfather.ai) and choose **Continue with Google**.
+Use the exact Google email your administrator invited. No invitation code is needed
+for normal sign-in. If you cannot sign in, ask your administrator to check your
+invitation and its expiry. See [account invitations](docs/operations/user-onboarding.md).
 
-**Published update:** [Shared inference and Distributed Tasks](docs/operations/shared-inference-and-tasks-2026-10-22.md) separates one-model Distributed Jobs from the existing task graphs, adds named result variables, persistent corner job feedback and a factual Nodes heartbeat trace. Coordinator and all three installers are published as **0.8.0-rc.1**. Physical shared inference requires an owner-configured private engine and hardware acceptance.
+If your group already has a Command Center, you only need its address and a worker
+installer. Docker belongs on the coordinator or on a worker that needs an isolated
+coding/data environment; it is not required just to open the website or pair Consigliere.
 
-## Start here
+## Install a worker
 
-The [model setup guide](docs/operations/consigliere-ui.md#add-a-local-model)
-explains local/API model selection, workspace authorization and optional downloads.
-Installed models are labeled and cannot be selected for another download.
-All three updated installers are under **Nodes â†’ Downloads**. Existing-model use,
-downloads and account API access retain their separate owner permissions; API
-runs require explicit provider consent.
+1. In Command Center, open **Nodes > Downloads** (or **Connect a computer**).
+2. Download the installer for **Windows x64**, **Mac Apple silicon**, or **Mac Intel**.
+3. Install Consigliere. On Windows, run the setup EXE. On Mac, open the DMG and
+   copy the app into Applications. These candidate installers are currently unsigned
+   on Windows and ad-hoc signed on Mac; obtain them from your trusted Command Center.
+4. Open Consigliere, enter your Command Center address if needed, and choose **Connect**.
+5. Sign in in the browser and approve the matching pairing code. Return to
+   Consigliere and check its connection status.
+6. Choose whether to enable **Contribute this computer to my workspaces**. This
+   allows workspace members' permitted jobs to use your enabled capabilities.
+   Existing computers keep their previous settings until their owners change them.
 
-The authorized [Command Center management update](docs/operations/command-center-management.md)
-adds AJAX bulk deletion, optional workspace ZIP archives with animated progress,
-top/bottom pagination and saved-user permission editing. It requires only the
-coordinator/dashboard update; that update did not change Consigliere installers.
-The [deployment verification](docs/operations/command-center-management-verification-2026-10-21.md) records activation and preservation checks.
+Workers connect outward over HTTPS. Tailscale is optional. Connecting a computer
+preserves its owner's control over files, projects, models and paid API access.
+Use **Pause** to stop accepting work. Closing the worker window normally leaves
+it running in the tray; use **Quit** to stop the app.
 
-**Consigliere** is the new name of The Godfather AI desktop worker. The current
-UI update adds normal window resizing, an embedded Projects tab, a compact
-navy/cyan command ribbon and expanded owner-local Settings. See the
-[Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
-Worker downloads are under **Nodes â†’ Downloads**. Tailscale is detected when
-installed and remains optional; existing private routing is preferred where
-configured. Consigliere **0.8.0-rc.1** is the current worker. The earlier coordinator
-release introduced Phase 12;
-see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
+For updates, use **File > Check for updates**. If your old worker has no updater,
+quit it from the tray and run the new installer. Keep your existing computer
+identity when reconnecting. See [worker installation and settings](docs/operations/consigliere-ui.md)
+and [workspace contribution](docs/operations/simple-contribution.md).
+Linux workers currently use the [portable/source instructions](docs/operations/worker-distribution.md);
+the current desktop installer catalog covers Windows and both Mac architectures.
 
-Earlier release **0.3.2-rc.1** added accomplishment-first coding results and
-**Run agent â†’ Preview changes â†’ Apply to my project**. See the
-[result/application guide](docs/operations/results-and-apply.md). Application
-requires the updated worker and explicit local project permission. The versioned
-[result action design](docs/decisions/0018-result-preview-and-actions.md) keeps
-future presentation changes independent of worker builds.
-The [deployment report](docs/operations/results-apply-verification-2026-10-21.md)
-records native installer checks, source CI, data preservation and public checks.
+## Set up a model
 
-Usability release **0.3.1-rc.3** adds account API key entry with
-provider-managed billing, local coding-project setup and tray/window improvements.
-See its [verification](docs/operations/coding-account-verification-2026-10-21.md)
-and [setup guide](docs/operations/coding-and-account-setup.md). It requires a new
-coordinator migration and worker build; it is deployed. Coordinator
-**0.3.1-rc.4** adds explicit reconnection under the same computer name
-and node history, using those unchanged worker installers. See the
-[reconnection report](docs/operations/worker-reconnection-2026-10-21.md).
+A connected computer needs a permitted model before it can answer AI jobs.
 
-**Current usability milestone:** [install and connect](docs/operations/simple-onboarding.md).
-The normal worker is a tray app with automatic browser pairing, saved OS credentials
-and outbound HTTPS. Tailscale is optional. Open
-[Command Center](https://app.the-godfather.ai) â†’ **Nodes â†’ Connect a computer**
-for Windows, Apple silicon and Intel Mac downloads. The updated installers passed
-the [recorded local and native checks](docs/operations/phase-12-verification-2026-10-21.md).
-That report also records coordinator activation and public checks.
-Publisher signing and physical recipient
-acceptance remain pending; the Windows/Mac installers are unsigned/ad-hoc signed
-candidates.
+- **Local AI:** in Consigliere, open **Models & API connections** or **Settings >
+  Resources**. Allow existing local models. If you need a model, separately allow
+  downloads and, if needed, Ollama runtime setup. Then in Command Center choose
+  **Models > Add / use model > Download local model**, select your computer and
+  confirm the download. Use **Use installed model in this workspace** when ready.
+- **API models:** open your personal **AI connections**, add your provider key, and
+  select the owned computers allowed to use it. Enable account API access locally
+  on those computers. Google sign-in does not supply an AI provider key. Provider
+  billing applies when you explicitly select a paid model and confirm data sharing.
 
-For inviting another user, follow the [onboarding guide](docs/operations/user-onboarding.md).
-Invited users select Continue with Google using the exact invited email; no code
-is required. Email delivery is manual, and Tailscale access is separate.
+Use **Allow in workspace / create agent** or **Use model / create agent** to make
+an available model usable by an agent. Installing a model and granting workspace
+access are separate steps. See [model and worker setup](docs/operations/worker-readiness-and-workspaces-2026-10-22.md)
+and [API connections and coding setup](docs/operations/coding-and-account-setup.md).
 
-1. Read [AGENTS.md](AGENTS.md) and the [UI/UX specification](docs/design/UI-UX.md).
-2. Follow the [Windows, macOS, and Linux setup guide](docs/operations/setup.md).
-3. Review [Phase 01 validation](docs/operations/phase-01.md) and [Phase 02 setup and results](docs/operations/phase-02.md).
-4. Follow [Phase 03 startup, credential provisioning and simulated workers](docs/operations/phase-03.md).
-5. Use [Phase 04 jobs, scheduler simulation and validation](docs/operations/phase-04.md) and the [job protocol](docs/protocols/jobs-v1.md).
-6. Follow [Phase 05 provider setup and inference validation](docs/operations/phase-05.md), [architecture](docs/architecture/model-gateway.md), and the [inference API contract](docs/protocols/inference-v1.md).
-7. Use [Phase 06 agent definitions, local commands and recovery evidence](docs/operations/phase-06.md), [runtime architecture](docs/architecture/agent-runtime.md), and the [workflow API contract](docs/protocols/agents-v1.md).
-8. Review [Phase 07-08 recovery evidence](docs/operations/phase-07-08.md).
-9. Follow [Phase 09 Google setup and migration](docs/operations/phase-09.md), [authentication architecture](docs/architecture/authentication.md), and [real integration verification](docs/operations/phase-09-integration.md).
+## Run your first job
 
-Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub account access is required to clone it. Never embed credentials in a clone URL.
+1. Open **Workspaces**, create or select a workspace, and add the people who should
+   have access. Each person controls which of their computers contributes.
+2. Under **Models**, choose a permitted model and create an agent. Under **Agents**,
+   review its instructions and enabled tools.
+3. Open **Jobs**, choose that workspace and agent, enter your request, and submit.
+4. Open the job to follow its status and read its result. Job details contain
+   output, available downloads and any reported test results. Logs, attempts and
+   checkpoints are available in the technical details.
 
-Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. The previous **0.4.2-rc.2** [onboarding repair](docs/operations/worker-onboarding-2026-10-22.md) introduced pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
+A queued job usually needs a compatible, online computer with the selected model
+and permissions. Check **Nodes** and the worker's model status before retrying.
+A job marked for review needs inspection before it is run again.
 
-**Earlier task release (0.6.0-rc.1), now Distributed Tasks:** [Original Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. The coordinator and updated Windows, Apple silicon and Intel Mac installers are deployed. Update participating workers through File > Check for updates before using synthesis.
+For coding, approve the local Git project and its file/test scope in Consigliere's
+**Projects** tab first. Review the generated changes and actual test results, then
+choose **Apply to my project** only when you want them applied. Applying also
+requires the project's separate local permission. See [coding setup](docs/operations/coding-and-account-setup.md)
+and [preview and apply](docs/operations/results-and-apply.md).
 
-## Local development
+Use **Images** or **Analytics and Reports** for those workloads after enabling the
+matching local backend or isolated data environment. Use **Distributed Tasks**
+for dependent tasks across computers. **Distributed Jobs** runs one model request
+through an owner-configured shared inference engine; that advanced setup is not
+created automatically. See [shared inference and task variables](docs/operations/shared-inference-and-tasks-2026-10-22.md).
 
-The previous **0.5.0** release introduced in-app worker updates and local Ollama
-setup, a system Overview and Workspaces directory, personal profiles, and separate
-Images / Analytics and Reports workflows. See the
-[milestone guide](docs/operations/worker-readiness-and-workspaces-2026-10-22.md).
-Existing workers need one normal installer upgrade to acquire the updater.
+## Host your own Command Center with Docker
 
-Prerequisites: Git, Node.js 24.22.0 with npm 11, uv 0.13.1, and Docker with Compose and a Linux engine. On Windows, use Docker Desktop with WSL2. Python 3.14 is selected by `.python-version`; uv can manage it independently of system Python. Python source targets 3.12+ syntax.
+The packaged coordinator runs on a **Linux AMD64** Docker host. Install Docker
+Engine and the Compose plugin on that host first. Arrange a hostname, HTTPS access
+and Google web sign-in configuration, then obtain the trusted coordinator archive
+and checksum from your administrator.
 
-After preparing `.env` as described in the setup guide:
+Extract the verified release and run its guided setup:
 
-```text
-uv sync --locked --all-packages
-npm ci
-docker compose --profile tools build dashboard api migrate
-docker compose up --wait postgres redis
-docker compose --profile tools run --rm migrate
-docker compose up --wait
+```bash
+sha256sum -c godfather-0.8.0-rc.1-linux-amd64.tar.gz.sha256
+tar -xzf godfather-0.8.0-rc.1-linux-amd64.tar.gz
+cd godfather-0.8.0-rc.1-linux-amd64
+bash scripts/setup.sh
 ```
 
-Open **http://127.0.0.1:3000** for the Command Center and **http://127.0.0.1:8000/api/v1** for the API. Configure Google OIDC and the [one-time founder email allowlist](docs/operations/founder-bootstrap.md), then use normal Google sign-in; no manual ID token is required. Existing accounts still require explicit ownership-preserving linking. Subsequent users require invitations; backend permissions remain enforced. Both ports bind to `127.0.0.1`. PostgreSQL and Redis have no host ports. Health probes are at **http://localhost:8000/health/live** and **http://localhost:8000/health/ready**. Readiness requires the current migration head; API startup never applies migrations automatically.
+Setup asks for your hostname, founder Google email, Google OAuth client details
+and installation data folder. It loads the packaged images and starts the
+Command Center. See [coordinator installation, updates and backups](docs/operations/coordinator-installation.md)
+for prerequisites and exact maintenance commands. Windows users can run a local
+checkout using Docker Desktop with WSL2; follow [local setup](docs/operations/setup.md).
 
-For frontend hot reload, start only the dependencies and run Next.js natively:
+## Help
 
-```text
-docker compose up --wait postgres redis
-npm run dev
-```
+- **Not authorized to sign in:** verify the invited Google email and invitation.
+- **Computer is offline:** open Consigliere, check the saved address and connection
+  message, and reconnect the existing computer rather than registering a duplicate.
+- **Connected, waiting for an AI model:** enable an existing local model or set up a
+  model/API connection, then grant its workspace access.
+- **No compatible worker:** check the selected agent/model, worker permissions,
+  workload environment and whether the computer is paused.
+- **Upgrade:** quit the old tray app before replacing it; normal upgrades retain
+  identity, settings and project permissions.
 
-Do not run the container dashboard and native Next.js server on port 3000 simultaneously. Stop the container dashboard first if it is already running.
-
-## Checks
-
-```text
-uv run --locked --all-packages python scripts/dev.py doctor
-uv run --locked --all-packages python scripts/dev.py check
-docker compose config --quiet
-```
-
-The doctor inspects tools and Docker availability without installing anything. The check command runs Python formatting, lint, typing and tests, then frontend formatting, lint, typing and a production build. It fails at the first failed check. See the setup guide for individual commands.
-
-## Layout
-
-| Path                      | Purpose                                                                   |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `apps/dashboard`          | Next.js, strict TypeScript, Tailwind and local operational Command Center |
-| `apps/api`                | FastAPI foundation, configuration, logging and SQLAlchemy models          |
-| `packages/worker`         | Outbound registration, heartbeats, synthetic jobs and opt-in inference    |
-| `packages/model-gateway`  | Portable Ollama/OpenAI-compatible discovery and text inference adapters   |
-| `packages/agent-runtime`  | Portable sequential workflows and validated read-only tool contracts      |
-| `packages/shared-schemas` | Versioned worker registration/health contracts                            |
-| `infrastructure/docker`   | Dashboard build/runtime container                                         |
-| `scripts`                 | Portable development checks                                               |
-| `tests`                   | Tooling/API unit tests and guarded real-PostgreSQL integration tests      |
-| `docs/design`             | Authoritative frontend design guidance                                    |
-| `docs/architecture`       | Architecture and cross-platform compatibility                             |
-| `docs/decisions`          | Architecture decision records                                             |
-| `docs/operations`         | Setup, phase gates, troubleshooting                                       |
-| `.github/workflows`       | Cross-platform checks and Linux container smoke checks                    |
-
-Future packages and infrastructure are created only when their milestones require them.
-
-## Safety and milestone boundaries
-
-The dashboard uses Google OIDC and HttpOnly/SameSite application sessions through a same-origin server bridge. Google tokens never enter browser storage. Workspace membership and node-owner consent remain separate from platform roles. No Google client or public deployment is configured automatically; see the [authentication architecture](docs/architecture/authentication.md).
-
-PostgreSQL is authoritative for node identities, heartbeats, jobs, attempts, leases, retries and events. Redis is transient. Workers connect outbound, and owners control their host permissions. A platform administrator cannot bypass those restrictions.
-
-`app.the-godfather.ai` and `api.the-godfather.ai` are proposed names only. Nothing here registers domains, configures DNS, provisions a VPS, or authorizes deployment. Production targets an independent Ubuntu DigitalOcean coordinator using the same containerized application architecture with separately reviewed environment configuration.
-
-Historical phase reports retain their original acceptance boundaries. The current Phase 11 assignment supersedes earlier BYOK planning-only limits; live spending, new infrastructure, DNS/Google Cloud changes and unrelated account access remain outside its authorization.
+The [documentation index](docs/README.md) groups user guides, administrator guides,
+release verification and development history. Developers should start with the
+[development guide](docs/development.md).
