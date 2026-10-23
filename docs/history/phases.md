@@ -2271,3 +2271,13 @@ observed heartbeat history instead of resetting on each receipt. See
 [project recovery](../operations/worker-project-recovery.md) and
 [ADR 0028](../decisions/0028-optional-project-readiness.md). Existing project
 consent, identity, scheduler compatibility and fencing remain in force.
+
+# Image workspace permission usability follow-up (2026-10-23)
+
+The owner authorized correction and deployment after the Images page hid every
+cloud image model in a workspace with an empty model allowlist and incorrectly
+reported a missing local model. The page now retains restricted model inventory,
+states the workspace restriction and offers the existing explicit allow action
+to workspace owners/administrators. Member and private-key boundaries remain
+enforced, and generation still requires the selected model and both consents.
+See [verification](../operations/image-workspace-verification-2026-10-23.md).

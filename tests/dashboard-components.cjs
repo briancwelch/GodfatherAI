@@ -31,6 +31,65 @@ const modelUse = require("../apps/dashboard/src/components/model-use.tsx");
 const avatars = require("../apps/dashboard/src/components/avatar.tsx");
 const workspaces = require("../apps/dashboard/src/components/workspace-directory.tsx");
 const client = require("../apps/dashboard/src/lib/control-client.ts");
+const imageReadiness = require("../apps/dashboard/src/components/image-readiness.tsx");
+
+test("image readiness names the workspace blocker and exposes an explicit administrator action", () => {
+  const model = {
+    node_name: "Test computer",
+    model: "gpt-image-1.5",
+    provider: "openai",
+    available: true,
+    workspace_allowed: false,
+    can_enable: true,
+  };
+  const props = {
+    provider: "openai",
+    workspace: "Restricted workspace",
+    models: [model],
+    selected: model,
+    localReady: false,
+    busy: false,
+    allow: () => {},
+    setup: () => {},
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(imageReadiness.ImageReadiness, props),
+  );
+  assert.match(html, /OpenAI is connected/);
+  assert.match(html, /gpt-image-1.5 needs permission in Restricted workspace/);
+  assert.match(html, /Allow selected model in workspace/);
+  assert.match(
+    html,
+    /does not generate an image or authorize provider charges/,
+  );
+  assert.doesNotMatch(html, /local image model/);
+  const member = renderToStaticMarkup(
+    React.createElement(imageReadiness.ImageReadiness, {
+      ...props,
+      selected: { ...model, can_enable: false },
+    }),
+  );
+  assert.match(member, /Ask a workspace owner or administrator/);
+  assert.doesNotMatch(member, /<button/);
+  const offline = renderToStaticMarkup(
+    React.createElement(imageReadiness.ImageReadiness, {
+      ...props,
+      selected: { ...model, available: false },
+    }),
+  );
+  assert.match(offline, /Test computer is offline/);
+  assert.doesNotMatch(offline, /Allow selected model/);
+  assert.equal(
+    renderToStaticMarkup(
+      React.createElement(imageReadiness.ImageReadiness, {
+        ...props,
+        models: [{ ...model, workspace_allowed: true }],
+        selected: { ...model, workspace_allowed: true },
+      }),
+    ),
+    "",
+  );
+});
 
 test("cloud image models use Images and Gemini account writes retain scoped routes", () => {
   assert.equal(

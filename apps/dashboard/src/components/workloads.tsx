@@ -7,16 +7,12 @@ import { control } from "../lib/control-client";
 import type { Snapshot } from "../lib/contracts";
 import { CommandIcon } from "./command-icon";
 import { StatusBadge } from "./operational";
+import { ImageReadiness, type CloudImageModel } from "./image-readiness";
 
 interface Options {
-  cloud_image_models?: {
-    node_id: string;
-    node_name: string;
-    available: boolean;
-    provider: "openai" | "gemini";
-    model: string;
-    connection_id: string;
-  }[];
+  cloud_image_models?: CloudImageModel[];
+  restricted_cloud_image_models?: CloudImageModel[];
+  workspace_name?: string;
   nodes: {
     id: string;
     name: string;
@@ -24,6 +20,7 @@ interface Options {
     analytics: boolean;
     image_models: string[];
     cloud_image_models?: string[];
+    restricted_image_model_count?: number;
   }[];
   sql_note: string;
 }
@@ -54,7 +51,11 @@ export function WorkerAvailabilityList({
                   ),
                 )
               ) : (
-                <span className="status status-warning">No image models</span>
+                <span className="status status-warning">
+                  {node.restricted_image_model_count
+                    ? `${node.restricted_image_model_count} cloud image models need workspace permission`
+                    : "No image models"}
+                </span>
               )
             ) : (
               <span
@@ -83,7 +84,9 @@ export default function Workloads({
   const [workspace, setWorkspace] = useState("");
   const [options, setOptions] = useState<Options | null>(null);
   const [kind, setKind] = useState(workflow === "images" ? "image" : "report");
-  const [backend, setBackend] = useState("automatic1111");
+  const [backendChoice, setBackend] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [allowing, setAllowing] = useState(false);
   const [setupOpen, setSetupOpen] = useState(true);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,14 +123,87 @@ export default function Workloads({
         .flatMap((n) => n.image_models) || [],
     ),
   ];
+  const cloudModels = [
+    ...(options?.cloud_image_models ?? []),
+    ...(options?.restricted_cloud_image_models ?? []),
+  ];
+  const backend =
+    backendChoice ||
+    (models.length
+      ? "automatic1111"
+      : cloudModels.some((m) => m.provider === "openai")
+        ? "openai"
+        : cloudModels.some((m) => m.provider === "gemini")
+          ? "gemini"
+          : "automatic1111");
+  const providerModels = cloudModels.filter((m) => m.provider === backend);
+  const selectedCloud = providerModels.find(
+    (m) => `${m.connection_id}|${m.model}` === selectedModel,
+  );
+  const workspaceId =
+    workspace || data?.workspace_id || data?.workspaces[0]?.id;
+  const workspaceName =
+    options?.workspace_name ||
+    data?.workspaces.find((w) => w.id === workspaceId)?.name ||
+    "This workspace";
   const available =
     kind === "image"
       ? backend === "automatic1111"
-        ? models.length > 0
-        : !!options?.cloud_image_models?.some(
-            (m) => m.available && m.provider === backend,
-          )
+        ? models.includes(selectedModel)
+        : !!selectedCloud?.available &&
+          selectedCloud.workspace_allowed !== false
       : !!options?.nodes.some((n) => n.available && n.analytics);
+  const workerReady =
+    kind !== "image"
+      ? available
+      : backend === "automatic1111"
+        ? models.length > 0
+        : providerModels.some(
+            (m) => m.available && m.workspace_allowed !== false,
+          );
+  const workspaceBlocked =
+    kind === "image" &&
+    backend !== "automatic1111" &&
+    (selectedCloud?.workspace_allowed === false ||
+      (!workerReady &&
+        providerModels.some(
+          (m) => m.available && m.workspace_allowed === false,
+        )));
+  async function allowImageModel() {
+    if (
+      !workspaceId ||
+      !selectedCloud?.can_enable ||
+      !selectedCloud.provider_id ||
+      allowing
+    )
+      return;
+    setAllowing(true);
+    setStatus("");
+    try {
+      await control("models/workspace-access", {
+        workspace_id: workspaceId,
+        node_id: selectedCloud.node_id,
+        provider_id: selectedCloud.provider_id,
+        identifier: selectedCloud.model,
+      });
+      const updated = await control<Options>(
+        `workloads/options?workspace_id=${workspaceId}`,
+      );
+      setOptions(updated);
+      setStatus(
+        "Model allowed in this workspace. Enter your prompt and confirm provider charges to generate an image.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Workspace model permission could not be saved. Refresh and try again.";
+      setStatus(message);
+      notifyError(message);
+    } finally {
+      setAllowing(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -260,9 +336,12 @@ export default function Workloads({
                   value={
                     workspace || data.workspace_id || data.workspaces[0]?.id
                   }
+                  disabled={allowing}
                   onChange={(e) => {
                     setWorkspace(e.target.value);
                     setOptions(null);
+                    setSelectedModel("");
+                    setStatus("");
                   }}
                 >
                   {data.workspaces.map((w) => (
@@ -285,11 +364,11 @@ export default function Workloads({
                   </select>
                 </label>
               )}
-              {!available && (
+              {kind !== "image" && !available && (
                 <p className="alert alert-warning notice">
-                  {kind === "image"
-                    ? "Image generation unavailable: no permitted online worker advertises a configured local image model. No paid fallback is used."
-                    : "No opted-in analytics worker is online. Connect a worker with a preinstalled Python sandbox image and explicit data-analysis permission."}{" "}
+                  No opted-in analytics worker is online. Connect a worker with
+                  a preinstalled Python sandbox image and explicit data-analysis
+                  permission.{" "}
                   <button
                     type="button"
                     className="btn btn-outline-primary action secondary"
@@ -318,8 +397,14 @@ export default function Workloads({
                     <select
                       className="form-select"
                       name="backend"
+                      aria-label="Provider"
                       value={backend}
-                      onChange={(e) => setBackend(e.target.value)}
+                      disabled={allowing}
+                      onChange={(e) => {
+                        setBackend(e.target.value);
+                        setSelectedModel("");
+                        setStatus("");
+                      }}
                     >
                       <option value="automatic1111">
                         AUTOMATIC1111 (local)
@@ -337,26 +422,48 @@ export default function Workloads({
                     <select
                       className="form-select"
                       name="model"
+                      aria-label={
+                        backend === "automatic1111"
+                          ? "Installed model"
+                          : "My cloud model and computer"
+                      }
                       required
+                      value={selectedModel}
+                      disabled={allowing}
+                      onChange={(e) => setSelectedModel(e.target.value)}
                       key={backend + workspace}
                     >
                       <option value="">Select a model</option>
                       {backend === "automatic1111"
                         ? models.map((m) => <option key={m}>{m}</option>)
-                        : options?.cloud_image_models
-                            ?.filter(
-                              (m) => m.available && m.provider === backend,
-                            )
-                            .map((m) => (
-                              <option
-                                key={`${m.connection_id}|${m.model}`}
-                                value={`${m.connection_id}|${m.model}`}
-                              >
-                                {m.model} · {m.node_name}
-                              </option>
-                            ))}
+                        : providerModels.map((m) => (
+                            <option
+                              key={`${m.connection_id}|${m.model}`}
+                              value={`${m.connection_id}|${m.model}`}
+                              disabled={!m.available}
+                            >
+                              {m.model} · {m.node_name}
+                              {!m.available
+                                ? " · computer unavailable"
+                                : m.workspace_allowed === false
+                                  ? " · workspace permission required"
+                                  : ""}
+                            </option>
+                          ))}
                     </select>
                   </label>
+                  {options && (
+                    <ImageReadiness
+                      provider={backend}
+                      workspace={workspaceName}
+                      models={providerModels}
+                      selected={selectedCloud}
+                      localReady={models.length > 0}
+                      busy={allowing}
+                      allow={() => void allowImageModel()}
+                      setup={() => setSetupOpen(true)}
+                    />
+                  )}
                   {backend !== "automatic1111" && (
                     <>
                       <p>
@@ -527,9 +634,13 @@ export default function Workloads({
               <button
                 className="btn btn-primary action"
                 type="submit"
-                disabled={busy || !available}
+                disabled={busy || allowing || !available}
               >
-                {busy ? "Submitting…" : "Run workload"}
+                {busy
+                  ? "Submitting…"
+                  : kind === "image"
+                    ? "Generate image"
+                    : "Run workload"}
               </button>
             </form>
           )}
@@ -557,20 +668,24 @@ export default function Workloads({
             <h2>
               {!data
                 ? "Checking worker readiness"
-                : available
-                  ? "Ready to process"
-                  : "Get your worker ready"}
+                : workspaceBlocked
+                  ? "Allow an image model in this workspace"
+                  : workerReady
+                    ? "Worker ready"
+                    : "Get your worker ready"}
             </h2>
             <span
-              className={`badge ${data && !available ? "worker-outdated" : ""}`}
+              className={`badge ${data && !workerReady ? "worker-outdated" : ""}`}
             >
               {!data
                 ? "Waiting for backend state"
                 : !data.workspaces.length
                   ? "Create or select a workspace"
-                  : available
-                    ? "Compatible worker online"
-                    : "Setup required"}
+                  : workspaceBlocked
+                    ? "Workspace permission required"
+                    : workerReady
+                      ? "Compatible worker online"
+                      : "Setup required"}
             </span>
             {workflow === "analytics" && (
               <>
@@ -582,7 +697,13 @@ export default function Workloads({
                 </p>
               </>
             )}
-            {workflow === "images" && (
+            {workflow === "images" && workspaceBlocked && (
+              <p>
+                Your computer and API connection are ready. Select an image
+                model above and allow it in this workspace to continue.
+              </p>
+            )}
+            {workflow === "images" && !workspaceBlocked && (
               <>
                 <p>
                   Local images require a configured AUTOMATIC1111 API and
@@ -594,16 +715,19 @@ export default function Workloads({
                 </p>
               </>
             )}
-            <p>
-              Update Consigliere, Pause the worker, then open Settings to enable
-              {workflow === "images"
-                ? " a local image connection or cloud image generation."
-                : " data processing."}{" "}
-              Resume after saving.
-              {workflow === "analytics" &&
-                " Google account file connections are unavailable in this version; export your authorized spreadsheet and upload it above."}
-            </p>
-            {workflow === "images" && (
+            {!workspaceBlocked && (
+              <p>
+                Update Consigliere, Pause the worker, then open Settings to
+                enable
+                {workflow === "images"
+                  ? " a local image connection or cloud image generation."
+                  : " data processing."}{" "}
+                Resume after saving.
+                {workflow === "analytics" &&
+                  " Google account file connections are unavailable in this version; export your authorized spreadsheet and upload it above."}
+              </p>
+            )}
+            {workflow === "images" && !workspaceBlocked && (
               <a href="/providers">Open AI connections</a>
             )}
             {options && (

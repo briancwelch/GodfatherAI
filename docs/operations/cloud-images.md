@@ -14,12 +14,16 @@ checks. Local AUTOMATIC1111 instructions remain in the [Phase 12 history](../his
    **Use API connections authorized for this computer**, then under **Workloads**
    enable **Allow cloud image generation with my account API connections**.
    Save and resume. These permissions default to off for existing installations.
-3. Open **Images** in Command Center. Choose your workspace, provider, and an
-   advertised model/computer from **My cloud model and computer**. Models appear
-   after the worker refreshes its provider inventory, normally within 30 seconds.
-   Workspace administrators must allow the model if that workspace restricts models.
+3. Open **Images** in Command Center. Choose your workspace, provider, and a
+   model/computer from **My cloud model and computer**. Models appear after the
+   worker refreshes its provider inventory, normally within 30 seconds. If a model
+   says **workspace permission required**, select it and choose **Allow selected
+   model in workspace**. Only a workspace owner or administrator can allow it.
+   This saves workspace permission without generating an image or authorizing a
+   provider charge. Your prompt stays in the form.
 4. Enter the image prompt. Confirm sending it to the named provider using your
-   API connection and accepting provider charges. Choose **Run workload**.
+   API connection and accepting provider charges, and confirm worker processing.
+   Choose **Generate image**.
 5. Open the job to inspect the resulting image and download its PNG. Job state,
    checkpoints and files are stored durably using the existing artifact path.
 
@@ -51,6 +55,12 @@ or enable model downloads.
 
 ## Failures and recovery
 
+- **Connected, but workspace permission required:** the key and computer can be
+  ready while the workspace restricts the selected image model. Use the allow
+  action next to the model choice, or ask a workspace administrator. Reconnecting
+  your key, reinstalling Consigliere or setting up a local image model does not
+  resolve a workspace restriction. Coordinator 0.9.0-rc.3 exposes this restriction
+  directly; Consigliere 0.9.0-rc.2 remains compatible.
 - **No compatible worker/model:** check worker version, connection, both local
   opt-ins, selected computer grants and workspace model permissions. Old workers
   receive text catalogs only. No local/cloud fallback is performed.

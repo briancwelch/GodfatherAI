@@ -10,6 +10,7 @@ from godfather_api.models import (
     AccountProviderKey,
     ProviderConnection,
     ProviderInvocation,
+    Workspace,
     WorkspaceMember,
 )
 from godfather_api.provision import provision
@@ -28,6 +29,122 @@ from tests.integration.test_workflows import get, step
 from tests.test_cloud_images import config, png
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini"])
+def test_restricted_workspace_shows_image_inventory_and_explicit_allow_unlocks_submission(
+    h: Harness,
+    provider: str,
+) -> None:
+    connection, _ = enable(h, provider)
+    model = config(provider).model_catalog[0].identifier
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None
+        workspace.allowed_models = []
+    path = f"/api/v1/workloads/options?workspace_id={h.workspace_id}"
+    options = h.client.get(path, headers=headers(h.admin)).json()
+    assert options["cloud_image_models"] == []
+    blocked = options["restricted_cloud_image_models"]
+    assert len(blocked) == 1 and blocked[0]["model"] == model
+    assert blocked[0]["workspace_allowed"] is False and blocked[0]["can_enable"] is True
+    assert blocked[0]["available"] is True
+    assert (
+        next(n for n in options["nodes"] if n["id"] == blocked[0]["node_id"])[
+            "restricted_image_model_count"
+        ]
+        == 1
+    )
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None and workspace.allowed_models == []
+    response = h.client.post(
+        "/api/v1/workloads/jobs", headers=headers(h.admin), json=payload(h, connection, provider)
+    )
+    assert response.status_code == 201
+    # Submission may queue, but a restricted model must never be assigned.
+    assert h.tick() == 0 and h.poll() is None
+    assert h.get(response.json()["id"])["status"] == "PENDING"
+    cancelled = h.client.post(
+        f"/api/v1/jobs/{response.json()['id']}/cancel", headers=headers(h.admin)
+    )
+    assert cancelled.status_code == 200 and cancelled.json()["status"] == "CANCELLED"
+    response = h.client.post(
+        "/api/v1/models/workspace-access",
+        headers=headers(h.admin),
+        json={
+            "workspace_id": str(h.workspace_id),
+            "node_id": blocked[0]["node_id"],
+            "provider_id": blocked[0]["provider_id"],
+            "identifier": model,
+        },
+    )
+    assert response.status_code == 200, response.text
+    refreshed = h.client.get(path, headers=headers(h.admin)).json()
+    assert refreshed["restricted_cloud_image_models"] == []
+    assert refreshed["cloud_image_models"][0]["workspace_allowed"] is True
+    response = h.client.post(
+        "/api/v1/workloads/jobs",
+        headers=headers(h.admin),
+        json={**payload(h, connection, provider), "paid_consent": False},
+    )
+    assert response.status_code == 422
+    response = h.client.post(
+        "/api/v1/workloads/jobs", headers=headers(h.admin), json=payload(h, connection, provider)
+    )
+    assert response.status_code == 201, response.text
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None and workspace.allowed_models == [model]
+        assert session.scalar(select(ProviderInvocation)) is None
+    assert "fixture-only" not in str(options)
+
+
+def test_restricted_image_inventory_does_not_expose_other_owners_keys_or_allow_member_writes(
+    h: Harness,
+) -> None:
+    _, key_id = enable(h)
+    other = provision(h.database, "admin", email="restricted-images-member@example.invalid")
+    other_id = UUID(other["owner_id"])
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None
+        workspace.allowed_models = []
+        session.add(WorkspaceMember(workspace_id=h.workspace_id, user_id=other_id))
+    path = f"/api/v1/workloads/options?workspace_id={h.workspace_id}"
+    options = h.client.get(path, headers=headers(other)).json()
+    assert options["cloud_image_models"] == [] and options["restricted_cloud_image_models"] == []
+    # Turn the connection owner into a member of the fixture workspace.
+    owner = UUID(h.admin["owner_id"])
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace is not None
+        workspace.owner_id = other_id
+        membership = session.get(WorkspaceMember, (h.workspace_id, owner))
+        if membership:
+            membership.role = "member"
+        else:
+            session.add(WorkspaceMember(workspace_id=h.workspace_id, user_id=owner, role="member"))
+    options = h.client.get(path, headers=headers(h.admin)).json()
+    blocked = options["restricted_cloud_image_models"][0]
+    assert blocked["can_enable"] is False
+    response = h.client.post(
+        "/api/v1/models/workspace-access",
+        headers=headers(h.admin),
+        json={
+            "workspace_id": str(h.workspace_id),
+            "node_id": blocked["node_id"],
+            "provider_id": blocked["provider_id"],
+            "identifier": blocked["model"],
+        },
+    )
+    assert response.status_code == 403
+    with h.database.sessions.begin() as session:
+        key = session.get(AccountProviderKey, key_id)
+        assert key is not None
+        key.enabled = False
+    options = h.client.get(path, headers=headers(h.admin)).json()
+    assert options["cloud_image_models"] == [] and options["restricted_cloud_image_models"] == []
 
 
 def enable(h: Harness, provider: str = "openai") -> tuple[UUID, UUID]:

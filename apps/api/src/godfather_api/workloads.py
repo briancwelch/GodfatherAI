@@ -19,7 +19,7 @@ from sqlalchemy import select
 
 from godfather_api.agents import create_agent, submit_workflow
 from godfather_api.jobs import authorized_job
-from godfather_api.models import Agent, Artifact, Job, Node, Workspace
+from godfather_api.models import Agent, Artifact, Job, Node, Workspace, WorkspaceMember
 from godfather_api.nodes import SessionDep, authenticate, node_view
 from godfather_api.scheduler import permitted, workspace_access
 from godfather_api.workflow_service import agent_view, load_artifact, reference
@@ -100,8 +100,15 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
     actor = authenticate(request, session, "human")
     if not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found")
+    workspace = session.get(Workspace, workspace_id)
+    assert workspace is not None
+    membership = session.get(WorkspaceMember, (workspace_id, actor.owner_id))
+    can_enable = workspace.owner_id == actor.owner_id or bool(
+        membership and membership.role == "admin"
+    )
     nodes = []
     cloud_models = []
+    restricted_cloud_models = []
     for node in session.scalars(select(Node)):
         candidate = Job(
             owner_id=actor.owner_id,
@@ -147,17 +154,29 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
                 candidate.requirements = Requirements(model_selection=selection).model_dump(
                     mode="json"
                 )
-                if allowed(session, candidate, node) and permitted(session, candidate, node):
-                    cloud_models.append(
-                        {
-                            "node_id": str(node.id),
-                            "node_name": node.name,
-                            "available": online,
-                            "provider": model.provider,
-                            "model": model.identifier,
-                            "connection_id": str(model.connection_id),
-                        }
-                    )
+                if not allowed(session, candidate, node):
+                    continue
+                workspace_allowed = (
+                    workspace.allowed_models is None or model.identifier in workspace.allowed_models
+                )
+                entry = {
+                    "node_id": str(node.id),
+                    "node_name": node.name,
+                    "available": online,
+                    "provider": model.provider,
+                    "provider_id": model.provider_id,
+                    "model": model.identifier,
+                    "connection_id": str(model.connection_id),
+                    "workspace_allowed": workspace_allowed,
+                    "can_enable": can_enable,
+                }
+                if workspace_allowed and permitted(session, candidate, node):
+                    cloud_models.append(entry)
+                elif not workspace_allowed:
+                    # The initial permission probe and the provider check above still
+                    # enforce node-owner contribution and private account-key access.
+                    # Show this inventory without authorizing execution or changing policy.
+                    restricted_cloud_models.append(entry)
         nodes.append(
             {
                 "id": str(node.id),
@@ -177,6 +196,9 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
                     for m in cloud_models
                     if m["node_id"] == str(node.id)
                 ],
+                "restricted_image_model_count": sum(
+                    m["node_id"] == str(node.id) for m in restricted_cloud_models
+                ),
             }
         )
     return {
@@ -186,6 +208,8 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
         "image_backends": ["automatic1111", "openai", "gemini"],
         "cloud_images": True,
         "cloud_image_models": cloud_models,
+        "restricted_cloud_image_models": restricted_cloud_models,
+        "workspace_name": workspace.name,
         "sql_sources": [],
         "sql_note": (
             "Upload authorized structured SQL results as JSON; live SQL conne"

@@ -30,6 +30,16 @@ resource capacity, ownership, protocol and exact model/connection compatibility.
 The chosen connection identifies an individually permitted computer. There is no
 automatic cross-computer, cross-account or local-to-paid fallback.
 
+Owner-authorized usability correction, 2026-10-23: the image picker also shows
+discovered models blocked by the selected workspace's model allowlist, following
+[the model directory's inventory/permission distinction](0021-discovered-models-and-workspace-use.md).
+The response labels this inventory as restricted; it still checks private account
+access and node-owner consent. A workspace owner or administrator may explicitly
+allow the selected model through the existing model-access endpoint. A member
+receives administrator guidance. Listing or allowing a model never submits a job
+or grants paid-call consent. Existing workspace grants are preserved during
+deployment. Missing local models are not reported as a cloud-generation blocker.
+
 The Images form selects a provider and exact owned connection/model, with explicit
 provider billing and prompt-egress consent. The backend verifies the same route.
 Immediately before egress the worker obtains a durable invocation marker under
