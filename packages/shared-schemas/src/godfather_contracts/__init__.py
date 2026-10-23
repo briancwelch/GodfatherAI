@@ -92,22 +92,34 @@ class ModelDeployment(Contract):
     """Worker-local provider alias, never an endpoint URL or credential."""
 
     provider_id: Label
-    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic", "gemini"]
     connection_id: UUID | None = None
     shared_inference_group_id: UUID | None = None
     identifier: Label
     available: bool = True
     verified_capabilities: list[Label] = Field(default_factory=list, max_length=32)
     declared_capabilities: list[Label] = Field(default_factory=list, max_length=32)
-    operations: list[Literal["chat", "stream", "tools", "structured_output"]] = Field(
-        default_factory=list, max_length=4
-    )
+    operations: list[
+        Literal["chat", "stream", "tools", "structured_output", "image_generation"]
+    ] = Field(default_factory=list, max_length=5)
     context_window: int | None = Field(default=None, ge=1, le=2**40)
     digest: str | None = Field(default=None, max_length=200)
     disk_bytes: int | None = Field(default=None, ge=0, le=2**60)
     estimated_ram_bytes: int | None = Field(default=None, ge=0, le=2**60)
     estimated_vram_bytes: int | None = Field(default=None, ge=0, le=2**60)
     metadata_source: Literal["provider_reported", "configured"] = "provider_reported"
+
+    @model_validator(mode="after")
+    def image_operation(self) -> "ModelDeployment":
+        from godfather_contracts.workloads import CLOUD_IMAGE_MODELS
+
+        if (self.provider == "gemini" or "image_generation" in self.operations) and (
+            self.operations != ["image_generation"]
+            or not self.connection_id
+            or self.identifier not in CLOUD_IMAGE_MODELS.get(self.provider, ())
+        ):
+            raise ValueError("Cloud images require a supported native image-only deployment")
+        return self
 
     @model_serializer(mode="wrap")
     def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -122,13 +134,13 @@ class ModelDeployment(Contract):
 class ModelSelection(Contract):
     # A missing identifier explicitly selects by capability; no implicit fallback.
     identifier: Label | None = None
-    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"] | None = None
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic", "gemini"] | None = None
     connection_id: UUID | None = None
     paid_consent: bool = False
     grant_id: UUID | None = None
     fallback_models: list[Label] = Field(default_factory=list, max_length=8)
-    required_operations: list[Literal["tools", "structured_output"]] = Field(
-        default_factory=list, max_length=2
+    required_operations: list[Literal["tools", "structured_output", "image_generation"]] = Field(
+        default_factory=list, max_length=3
     )
     capabilities: list[Label] = Field(default_factory=list, max_length=32)
     allow_declared_capabilities: bool = False
@@ -137,16 +149,30 @@ class ModelSelection(Contract):
 
     @model_validator(mode="after")
     def explicit_selection(self) -> "ModelSelection":
+        from godfather_contracts.workloads import CLOUD_IMAGE_MODELS
+
         if self.identifier is None and not self.capabilities:
             raise ValueError("Select an exact model or required capabilities")
-        if self.provider in ("openai", "anthropic") and (
+        if self.provider in ("openai", "anthropic", "gemini") and (
             not self.connection_id or not self.identifier or not self.paid_consent
         ):
             raise ValueError(
                 "Native API inference requires an exact connection, model and paid consent"
             )
-        if self.connection_id and self.provider not in ("openai", "anthropic"):
+        if self.connection_id and self.provider not in ("openai", "anthropic", "gemini"):
             raise ValueError("Provider connections belong to explicit native API routes")
+        image_model = self.identifier in CLOUD_IMAGE_MODELS.get(self.provider or "", ())
+        if (self.provider == "gemini" or image_model) and (
+            self.required_operations != ["image_generation"]
+        ):
+            raise ValueError("Select image models through an explicit image generation route")
+        if "image_generation" in self.required_operations and (
+            self.provider not in ("openai", "gemini")
+            or self.stream
+            or self.required_operations != ["image_generation"]
+            or not image_model
+        ):
+            raise ValueError("Cloud image routes require only nonstreaming image generation")
         if self.fallback_models and (
             self.provider != "ollama" or self.connection_id is not None or self.identifier is None
         ):

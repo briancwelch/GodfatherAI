@@ -17,6 +17,7 @@ from godfather_contracts.coding import CODING_RUNTIME, CodingOutput
 from godfather_contracts.execution import AttemptIdentity, Requirements, RetryPolicy
 from godfather_contracts.inference import InferenceParameters, InferenceUsage
 from godfather_contracts.workloads import (
+    CLOUD_IMAGE_RUNTIME,
     IMAGE_RUNTIME,
     MAX_ARTIFACT_BYTES,
     WORKLOAD_RUNTIME,
@@ -123,12 +124,24 @@ class AgentDefinition(Contract):
             raise ValueError("Submit shared inference through Distributed Jobs")
         data_steps = [s for s in self.workflow.steps if s.kind in ("analytics", "report", "image")]
         if data_steps:
-            if len(data_steps) != len(self.workflow.steps) or self.requirements.model_selection:
+            selection = self.requirements.model_selection
+            cloud_image = (
+                [s.kind for s in data_steps] == ["image"]
+                and selection is not None
+                and selection.required_operations == ["image_generation"]
+            )
+            if len(data_steps) != len(self.workflow.steps) or (selection and not cloud_image):
                 raise ValueError("Data workloads cannot mix with text inference steps")
             kinds = [s.kind for s in data_steps]
             if kinds not in (["analytics"], ["analytics", "report"], ["image"]):
                 raise ValueError("Supported data workflows: analytics, analytics-report or image")
-            required_runtime = IMAGE_RUNTIME if kinds == ["image"] else WORKLOAD_RUNTIME
+            required_runtime = (
+                CLOUD_IMAGE_RUNTIME
+                if cloud_image
+                else IMAGE_RUNTIME
+                if kinds == ["image"]
+                else WORKLOAD_RUNTIME
+            )
             required_permission = "images.generate" if kinds == ["image"] else "data.analyze"
             if (
                 required_runtime not in self.requirements.runtimes
@@ -246,7 +259,7 @@ class WorkflowSubmission(Contract):
 
 class ModelReference(Contract):
     provider_id: Label
-    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic", "gemini"]
     identifier: Label
     digest: str | None = Field(default=None, max_length=200)
 

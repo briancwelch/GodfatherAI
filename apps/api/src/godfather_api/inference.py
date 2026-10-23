@@ -219,6 +219,10 @@ def models(
                         provider=deployment.provider,
                         connection_id=deployment.connection_id,
                         paid_consent=True,
+                        stream="image_generation" not in deployment.operations,
+                        required_operations=["image_generation"]
+                        if "image_generation" in deployment.operations
+                        else [],
                     ),
                     actor.owner_id,
                     workspace_id,

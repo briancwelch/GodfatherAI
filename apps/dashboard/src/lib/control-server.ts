@@ -109,7 +109,7 @@ export function allowedPath(path: string, method: string): boolean {
     "shared-inference/jobs",
     "appearance",
     "workloads/jobs",
-    "account/providers/(openai|anthropic)(/(disconnect|computers))?",
+    "account/providers/(openai|anthropic|gemini)(/(disconnect|computers))?",
     "models/install",
     "models/workspace-access",
     "provider-connections",

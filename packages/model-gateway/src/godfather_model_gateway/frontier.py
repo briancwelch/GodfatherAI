@@ -5,6 +5,7 @@ from typing import Any
 
 from godfather_contracts import ModelDeployment
 from godfather_contracts.inference import InferenceInput, ToolCall
+from godfather_contracts.workloads import CLOUD_IMAGE_MODELS
 from pydantic import ValidationError
 
 from godfather_model_gateway import Chunk, GatewayError, NativeModel, StructuredRequest
@@ -14,7 +15,7 @@ from godfather_model_gateway.providers import HTTPProvider
 class FrontierProvider(HTTPProvider):
     def model(self, identifier: str, request: InferenceInput) -> NativeModel:
         model = next((m for m in self.config.model_catalog if m.identifier == identifier), None)
-        if model is None:
+        if model is None or model.modality != "text":
             raise GatewayError("model_unavailable")
         if (
             request.parameters.max_tokens > model.max_output_tokens
@@ -43,14 +44,20 @@ class FrontierProvider(HTTPProvider):
                     connection_id=self.config.connection_id,
                     identifier=m.identifier,
                     declared_capabilities=self.config.declared_capabilities,
-                    context_window=m.context_window,
+                    context_window=m.context_window if m.modality == "text" else None,
                     metadata_source="configured",
-                    operations=["chat", "stream"]
+                    operations=["image_generation"]
+                    if m.modality == "image"
+                    else ["chat", "stream"]
                     + (["tools"] if m.tools else [])
                     + (["structured_output"] if m.structured_output else []),
                 )
                 for m in self.config.model_catalog
                 if m.identifier in identifiers
+                and (
+                    m.modality != "image"
+                    or m.identifier in CLOUD_IMAGE_MODELS.get(self.config.provider, ())
+                )
             ]
         except (KeyError, TypeError, ValidationError):
             raise GatewayError("invalid_response") from None

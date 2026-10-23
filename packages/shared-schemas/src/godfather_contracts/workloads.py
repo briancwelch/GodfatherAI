@@ -12,6 +12,28 @@ from godfather_contracts import Contract
 
 WORKLOAD_RUNTIME = "data-workloads-v1"
 IMAGE_RUNTIME = "local-images-v1"
+CLOUD_IMAGE_RUNTIME = "cloud-images-v1"
+# Reviewed native image APIs only. Listing a model does not authorize a paid call.
+CLOUD_IMAGE_MODELS = {
+    "openai": (
+        "gpt-image-1",
+        "gpt-image-1-mini",
+        "gpt-image-1.5",
+        "gpt-image-2",
+        "gpt-image-2-2026-04-21",
+        "gpt-image-2.5-sunburst",
+        "gpt-image-2.5-sunburst-2026-09-08",
+        "gpt-image-2.5-flare",
+        "gpt-image-2.5-flare-2026-09-08",
+    ),
+    "gemini": (
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image",
+        "gemini-3.1-flash-image",
+        "gemini-3.1-flash-lite-image",
+        "gemini-nano-banana-2.1",
+    ),
+}
 MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 
 
@@ -38,13 +60,26 @@ class AnalysisSettings(Contract):
 
 
 class ImageSettings(Contract):
-    backend: Literal["automatic1111"] = "automatic1111"
+    backend: Literal["automatic1111", "openai", "gemini"] = "automatic1111"
     model: str = Field(min_length=1, max_length=200)
     width: int = Field(default=512, ge=256, le=1024, multiple_of=64)
     height: int = Field(default=512, ge=256, le=1024, multiple_of=64)
     count: int = Field(default=1, ge=1, le=4)
     steps: int = Field(default=20, ge=1, le=50)
     seed: int = Field(default=-1, ge=-1, le=2**32 - 1)
+
+    @model_validator(mode="after")
+    def supported_cloud_settings(self) -> "ImageSettings":
+        if self.backend != "automatic1111" and (
+            self.model not in CLOUD_IMAGE_MODELS[self.backend]
+            or (self.width, self.height, self.count, self.steps, self.seed)
+            != (1024, 1024, 1, 20, -1)
+        ):
+            raise ValueError(
+                "Cloud images require a supported model, one 1024 x 1024 image, "
+                "and default local-only steps/seed settings"
+            )
+        return self
 
 
 class Download(Contract):

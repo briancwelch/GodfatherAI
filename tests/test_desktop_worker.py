@@ -320,6 +320,24 @@ def test_desktop_account_models_enable_read_only_workflows_without_local_models(
     assert "--allow-tool" not in arguments and "--allow-tool-permission" not in arguments
 
 
+def test_cloud_images_require_separate_owner_opt_in_and_no_local_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = Mock(return_value=0)
+    monkeypatch.setattr(cli, "main", run)
+    controller = Controller({"kind": "worker", "token": "fixture"}, tmp_path, Mock())
+    with pytest.raises(ValueError, match="Enable account API connections"):
+        controller.start(Contribution(cloud_images=True))
+    assert not (tmp_path / "settings.json").exists()
+    controller.start(Contribution(account_providers=True, cloud_images=True))
+    assert controller.thread is not None
+    controller.thread.join(2)
+    arguments = run.call_args.args[0]
+    assert "--execute-workflows" in arguments and "--cloud-images" in arguments
+    assert "--account-providers" in arguments and "images.generate" in arguments
+    assert "--inference-config" not in arguments and "--workload-config" not in arguments
+
+
 def test_login_agent_only_product_file_and_no_root(tmp_path: Path) -> None:
     executable = tmp_path / "App.app/Contents/MacOS/worker"
     executable.parent.mkdir(parents=True)

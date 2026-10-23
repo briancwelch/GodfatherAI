@@ -1,5 +1,6 @@
 """Account key vault and explicit owner-only worker delivery, separate from scheduling."""
 
+import asyncio
 import base64
 import os
 import re
@@ -12,7 +13,9 @@ from fastapi import APIRouter, HTTPException, Request
 from godfather_contracts import Contract
 from godfather_contracts.execution import JobPoll
 from godfather_contracts.providers import ConnectionPolicy
+from godfather_contracts.workloads import CLOUD_IMAGE_MODELS, CLOUD_IMAGE_RUNTIME
 from godfather_model_gateway import GatewayError, NativeModel, ProviderConfig
+from godfather_model_gateway.images import gemini_models
 from godfather_model_gateway.providers import HTTPProvider
 from pydantic import Field, SecretStr
 from sqlalchemy import select
@@ -66,7 +69,7 @@ class ComputerGrant(Contract):
 
 @router.post("/account/providers/{provider}/computers")
 def computers(
-    provider: Literal["openai", "anthropic"],
+    provider: Literal["openai", "anthropic", "gemini"],
     payload: ComputerGrant,
     request: Request,
     session: SessionDep,
@@ -98,18 +101,24 @@ def computers(
     return {"saved": True}
 
 
-async def discover_catalog(provider: Literal["openai", "anthropic"], key: str) -> list[NativeModel]:
+async def discover_catalog(
+    provider: Literal["openai", "anthropic", "gemini"], key: str
+) -> list[NativeModel]:
     config = ProviderConfig(
         id="account-check", provider=provider, connection_id=uuid4(), timeout_seconds=10
     )
     config.set_api_key(key)
     client = HTTPProvider(config)
     try:
-        data = await client.request("GET", "models")
-        identifiers = [str(m["id"]) for m in data["data"]]
+        async with asyncio.timeout(10):
+            identifiers = (
+                await gemini_models(client)
+                if provider == "gemini"
+                else {str(m["id"]) for m in (await client.request("GET", "models"))["data"]}
+            )
         # Restrict to native text APIs. These are conservative application limits,
         # not claims about the provider's full context/output capacity.
-        return [
+        text_models = [
             NativeModel(
                 identifier=identifier,
                 context_window=65536,
@@ -117,7 +126,7 @@ async def discover_catalog(provider: Literal["openai", "anthropic"], key: str) -
                 tools=True,
                 structured_output=True,
             )
-            for identifier in identifiers
+            for identifier in sorted(identifiers)
             if (provider == "anthropic" and identifier.startswith("claude-"))
             or (
                 provider == "openai"
@@ -127,7 +136,14 @@ async def discover_catalog(provider: Literal["openai", "anthropic"], key: str) -
                 )
             )
         ][:64]
-    except (GatewayError, KeyError, TypeError, ValueError):
+        return text_models + [
+            NativeModel(
+                identifier=identifier, modality="image", context_window=1, max_output_tokens=1
+            )
+            for identifier in CLOUD_IMAGE_MODELS.get(provider, ())
+            if identifier in identifiers
+        ]
+    except (GatewayError, KeyError, TypeError, ValueError, AttributeError, TimeoutError):
         raise HTTPException(
             400,
             "Could not connect. Check that this provider API key can list models, and try again.",
@@ -164,7 +180,7 @@ def account_keys(request: Request, session: SessionDep) -> dict[str, object]:
 
 @router.post("/account/providers/{provider}")
 async def save_key(
-    provider: Literal["openai", "anthropic"],
+    provider: Literal["openai", "anthropic", "gemini"],
     payload: SaveKey,
     request: Request,
     session: SessionDep,
@@ -181,7 +197,9 @@ async def save_key(
     encrypted = encrypt_key(key, actor.owner_id, provider, request.app.state.settings)
     catalog = await discover_catalog(provider, key)
     if not catalog:
-        raise HTTPException(400, "Connected, but no supported text models were found for this key")
+        raise HTTPException(
+            400, "Connected, but no supported text or image models were found for this key"
+        )
     session.get(User, actor.owner_id, with_for_update=True)
     row = session.scalar(
         select(AccountProviderKey)
@@ -195,7 +213,10 @@ async def save_key(
         session.add(row)
     row.encrypted_key, row.model_catalog, row.enabled = (
         encrypted,
-        [m.model_dump(mode="json") for m in catalog],
+        [
+            m.model_dump(mode="json", exclude={"modality"} if m.modality == "text" else set())
+            for m in catalog
+        ],
         True,
     )
     row.allowed_node_ids = list(dict.fromkeys(map(str, payload.allowed_node_ids)))
@@ -212,7 +233,7 @@ async def save_key(
 
 @router.post("/account/providers/{provider}/disconnect")
 def disconnect(
-    provider: Literal["openai", "anthropic"], request: Request, session: SessionDep
+    provider: Literal["openai", "anthropic", "gemini"], request: Request, session: SessionDep
 ) -> dict[str, bool]:
     actor = authenticate(request, session, "human")
     session.get(User, actor.owner_id, with_for_update=True)
@@ -250,8 +271,12 @@ def worker_keys(
         .with_for_update()
     )
     result = []
+    cloud_images = CLOUD_IMAGE_RUNTIME in node_view(session, node).runtimes
     for row in rows:
         if str(node.id) not in row.allowed_node_ids:
+            continue
+        catalog = [m for m in row.model_catalog if cloud_images or m.get("modality") != "image"]
+        if not catalog or (row.provider == "gemini" and not cloud_images):
             continue
         connection = session.scalar(
             select(ProviderConnection).where(
@@ -276,7 +301,7 @@ def worker_keys(
                 "id": "account-" + str(row.id),
                 "provider": row.provider,
                 "connection_id": str(connection.id),
-                "model_catalog": row.model_catalog,
+                "model_catalog": catalog,
                 "api_key": decrypt_key(row, request.app.state.settings),
             }
         )

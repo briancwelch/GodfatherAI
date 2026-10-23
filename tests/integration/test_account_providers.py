@@ -65,7 +65,10 @@ def test_account_key_requires_both_computer_grant_and_worker_opt_in(
                 context_window=8192,
                 max_output_tokens=2048,
                 structured_output=True,
-            )
+            ),
+            NativeModel(
+                identifier="gpt-image-1.5", modality="image", context_window=1, max_output_tokens=1
+            ),
         ]
 
     monkeypatch.setattr("godfather_api.account_providers.discover_catalog", catalog)
@@ -91,6 +94,13 @@ def test_account_key_requires_both_computer_grant_and_worker_opt_in(
     assert response.status_code == 200, response.text
     assert response.headers["cache-control"] == "no-store"
     assert response.json()["providers"][0]["api_key"] == payload["api_key"]
+    # Older/text-only workers must not receive the additive image model contract.
+    assert len(response.json()["providers"][0]["model_catalog"]) == 1
+    assert "modality" not in response.json()["providers"][0]["model_catalog"][0]
+    body["runtimes"] = ["account-provider-keys-v1", "cloud-images-v1"]
+    assert worker.post("/api/v1/workers/register", json=body).status_code == 200
+    expanded = worker.post(path, json={"session_id": body["session_id"]}).json()
+    assert len(expanded["providers"][0]["model_catalog"]) == 2
     other_worker, other_body = clients[unselected["node_id"]]
     other_body["runtimes"] = ["account-provider-keys-v1"]
     other_body["inference_protocol_version"] = 1

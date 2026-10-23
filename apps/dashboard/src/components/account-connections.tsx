@@ -102,11 +102,16 @@ export default function AccountConnections({
           </p>
         )}
         <div className="worker-downloads">
-          {(["openai", "anthropic"] as const).map((provider) => {
+          {(["openai", "anthropic", "gemini"] as const).map((provider) => {
             const connection = account?.connections.find(
               (c) => c.provider === provider,
             );
-            const name = provider === "openai" ? "OpenAI" : "Anthropic";
+            const name =
+              provider === "openai"
+                ? "OpenAI"
+                : provider === "gemini"
+                  ? "Google Gemini"
+                  : "Anthropic";
             const nodes =
               data?.nodes.filter((n) => n.owner_id === user.id) ?? [];
             return (
@@ -121,7 +126,9 @@ export default function AccountConnections({
                   href={
                     provider === "openai"
                       ? "https://platform.openai.com/api-keys"
-                      : "https://platform.claude.com/settings/keys"
+                      : provider === "gemini"
+                        ? "https://aistudio.google.com/api-keys"
+                        : "https://platform.claude.com/settings/keys"
                   }
                   target="_blank"
                   rel="noreferrer"

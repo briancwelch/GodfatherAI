@@ -263,7 +263,11 @@ def agent_options(workspace_id: UUID, request: Request, session: SessionDep) -> 
         capabilities.update(view.secondary_capabilities)
     return {
         "capabilities": sorted(capabilities),
-        "models": inference.models(workspace_id, request, session, 200, 0),
+        "models": [
+            m
+            for m in inference.models(workspace_id, request, session, 200, 0)
+            if isinstance(m["deployment"], dict) and "chat" in m["deployment"].get("operations", [])
+        ],
         "model_limit": 200,
         "repositories": coding_repositories(workspace_id, request, session),
         "tools": [
@@ -334,12 +338,21 @@ def submit_workflow(payload: WorkflowSubmission, request: Request, session: Sess
         raise HTTPException(422, "Analytics requires an uploaded dataset")
     if "image" in kinds:
         if payload.input.image is None or payload.input.dataset is not None:
-            raise HTTPException(422, "Image generation requires explicit local model settings")
-        requirements = requirements.model_copy(
-            update={
-                "runtimes": [*requirements.runtimes, "image-model:" + payload.input.image.model]
-            }
-        )
+            raise HTTPException(422, "Image generation requires explicit model settings")
+        image, selection = payload.input.image, requirements.model_selection
+        if image.backend == "automatic1111":
+            if selection is not None:
+                raise HTTPException(422, "Local images cannot use a paid model route")
+            requirements = requirements.model_copy(
+                update={"runtimes": [*requirements.runtimes, "image-model:" + image.model]}
+            )
+        elif (
+            selection is None
+            or selection.provider != image.backend
+            or selection.identifier != image.model
+            or selection.required_operations != ["image_generation"]
+        ):
+            raise HTTPException(422, "Cloud image settings must match the exact paid model route")
     if not any(k in ("analytics", "report", "image") for k in kinds) and any(
         (
             payload.input.dataset,

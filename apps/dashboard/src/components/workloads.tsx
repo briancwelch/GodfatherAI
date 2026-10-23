@@ -9,12 +9,21 @@ import { CommandIcon } from "./command-icon";
 import { StatusBadge } from "./operational";
 
 interface Options {
+  cloud_image_models?: {
+    node_id: string;
+    node_name: string;
+    available: boolean;
+    provider: "openai" | "gemini";
+    model: string;
+    connection_id: string;
+  }[];
   nodes: {
     id: string;
     name: string;
     available: boolean;
     analytics: boolean;
     image_models: string[];
+    cloud_image_models?: string[];
   }[];
   sql_note: string;
 }
@@ -36,12 +45,14 @@ export function WorkerAvailabilityList({
           </div>
           <div className="worker-capabilities">
             {workflow === "images" ? (
-              node.image_models.length ? (
-                node.image_models.map((model) => (
-                  <span className="status worker-capability" key={model}>
-                    Image model: {model}
-                  </span>
-                ))
+              node.image_models.length || node.cloud_image_models?.length ? (
+                [...node.image_models, ...(node.cloud_image_models ?? [])].map(
+                  (model) => (
+                    <span className="status worker-capability" key={model}>
+                      Image model: {model}
+                    </span>
+                  ),
+                )
               ) : (
                 <span className="status status-warning">No image models</span>
               )
@@ -72,6 +83,7 @@ export default function Workloads({
   const [workspace, setWorkspace] = useState("");
   const [options, setOptions] = useState<Options | null>(null);
   const [kind, setKind] = useState(workflow === "images" ? "image" : "report");
+  const [backend, setBackend] = useState("automatic1111");
   const [setupOpen, setSetupOpen] = useState(true);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,7 +122,11 @@ export default function Workloads({
   ];
   const available =
     kind === "image"
-      ? models.length > 0
+      ? backend === "automatic1111"
+        ? models.length > 0
+        : !!options?.cloud_image_models?.some(
+            (m) => m.available && m.provider === backend,
+          )
       : !!options?.nodes.some((n) => n.available && n.analytics);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -139,6 +155,12 @@ export default function Workloads({
       const result = await control<{ id: string }>("workloads/jobs", {
         workspace_id: workspaceId,
         kind,
+        ...(kind === "image" && backend !== "automatic1111"
+          ? {
+              connection_id: String(form.get("model")).split("|")[0],
+              paid_consent: form.get("paid_consent") === "on",
+            }
+          : {}),
         ram_bytes: Number(form.get("memory_mb") || 512) * 1024 ** 2,
         gpu_memory_bytes: Number(form.get("vram_mb") || 0) * 1024 ** 2,
         input: {
@@ -157,13 +179,27 @@ export default function Workloads({
           ...(kind === "image"
             ? {
                 image: {
-                  backend: "automatic1111",
-                  model: form.get("model"),
-                  width: Number(form.get("width")),
-                  height: Number(form.get("height")),
-                  count: Number(form.get("count")),
-                  steps: Number(form.get("steps")),
-                  seed: Number(form.get("seed")),
+                  backend,
+                  model:
+                    backend === "automatic1111"
+                      ? form.get("model")
+                      : String(form.get("model")).split("|")[1],
+                  width:
+                    backend === "automatic1111"
+                      ? Number(form.get("width"))
+                      : 1024,
+                  height:
+                    backend === "automatic1111"
+                      ? Number(form.get("height"))
+                      : 1024,
+                  count:
+                    backend === "automatic1111" ? Number(form.get("count")) : 1,
+                  steps:
+                    backend === "automatic1111"
+                      ? Number(form.get("steps"))
+                      : 20,
+                  seed:
+                    backend === "automatic1111" ? Number(form.get("seed")) : -1,
                 },
               }
             : {}),
@@ -205,7 +241,7 @@ export default function Workloads({
           <h1>{workflow === "images" ? "Images" : "Analytics and Reports"}</h1>
           <p>
             {workflow === "images"
-              ? "Generate images with a permitted local image model."
+              ? "Generate images with a permitted local model or your cloud API connection."
               : "Analyze authorized data and create reproducible reports on a compatible worker."}
           </p>
           <p role="status" aria-live="polite">
@@ -279,67 +315,119 @@ export default function Workloads({
                 <>
                   <label>
                     Provider
-                    <select className="form-select" name="backend">
-                      <option>AUTOMATIC1111 (local)</option>
+                    <select
+                      className="form-select"
+                      name="backend"
+                      value={backend}
+                      onChange={(e) => setBackend(e.target.value)}
+                    >
+                      <option value="automatic1111">
+                        AUTOMATIC1111 (local)
+                      </option>
+                      <option value="openai">OpenAI (provider billing)</option>
+                      <option value="gemini">
+                        Google Gemini (provider billing)
+                      </option>
                     </select>
                   </label>
                   <label>
-                    Installed model
-                    <select className="form-select" name="model" required>
-                      {models.map((m) => (
-                        <option key={m}>{m}</option>
-                      ))}
+                    {backend === "automatic1111"
+                      ? "Installed model"
+                      : "My cloud model and computer"}
+                    <select
+                      className="form-select"
+                      name="model"
+                      required
+                      key={backend + workspace}
+                    >
+                      <option value="">Select a model</option>
+                      {backend === "automatic1111"
+                        ? models.map((m) => <option key={m}>{m}</option>)
+                        : options?.cloud_image_models
+                            ?.filter(
+                              (m) => m.available && m.provider === backend,
+                            )
+                            .map((m) => (
+                              <option
+                                key={`${m.connection_id}|${m.model}`}
+                                value={`${m.connection_id}|${m.model}`}
+                              >
+                                {m.model} · {m.node_name}
+                              </option>
+                            ))}
                     </select>
                   </label>
-                  <div className="workload-fields">
-                    {["width", "height"].map((name) => (
-                      <label key={name}>
-                        {name === "width" ? "Width" : "Height"}
-                        <select
-                          className="form-select"
-                          name={name}
-                          defaultValue="512"
-                        >
-                          {[256, 512, 768, 1024].map((n) => (
-                            <option key={n}>{n}</option>
-                          ))}
-                        </select>
+                  {backend !== "automatic1111" && (
+                    <>
+                      <p>
+                        One 1024 × 1024 PNG per job. Your provider controls
+                        billing and model access.
+                      </p>
+                      <label className="check-label" key={backend}>
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          name="paid_consent"
+                          required
+                        />{" "}
+                        I authorize sending this prompt to{" "}
+                        {backend === "openai" ? "OpenAI" : "Google Gemini"}{" "}
+                        using my selected API connection and accept provider
+                        charges.
                       </label>
-                    ))}
-                    <label>
-                      Images
-                      <input
-                        className="form-control"
-                        name="count"
-                        type="number"
-                        min="1"
-                        max="4"
-                        defaultValue="1"
-                      />
-                    </label>
-                    <label>
-                      Quality (sampling steps)
-                      <input
-                        className="form-control"
-                        name="steps"
-                        type="number"
-                        min="1"
-                        max="50"
-                        defaultValue="20"
-                      />
-                    </label>
-                    <label>
-                      Seed (-1: random)
-                      <input
-                        className="form-control"
-                        name="seed"
-                        type="number"
-                        min="-1"
-                        max="4294967295"
-                        defaultValue="-1"
-                      />
-                    </label>
-                  </div>
+                    </>
+                  )}
+                  {backend === "automatic1111" && (
+                    <div className="workload-fields">
+                      {["width", "height"].map((name) => (
+                        <label key={name}>
+                          {name === "width" ? "Width" : "Height"}
+                          <select
+                            className="form-select"
+                            name={name}
+                            defaultValue="512"
+                          >
+                            {[256, 512, 768, 1024].map((n) => (
+                              <option key={n}>{n}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                      <label>
+                        Images
+                        <input
+                          className="form-control"
+                          name="count"
+                          type="number"
+                          min="1"
+                          max="4"
+                          defaultValue="1"
+                        />
+                      </label>
+                      <label>
+                        Quality (sampling steps)
+                        <input
+                          className="form-control"
+                          name="steps"
+                          type="number"
+                          min="1"
+                          max="50"
+                          defaultValue="20"
+                        />
+                      </label>
+                      <label>
+                        Seed (-1: random)
+                        <input
+                          className="form-control"
+                          name="seed"
+                          type="number"
+                          min="-1"
+                          max="4294967295"
+                          defaultValue="-1"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -497,22 +585,27 @@ export default function Workloads({
             {workflow === "images" && (
               <>
                 <p>
-                  Image execution requires a locally configured AUTOMATIC1111
-                  API and an installed permitted model. Cloud image providers,
-                  live SQL connections and PDF output are not configured in this
-                  version.
+                  Local images require a configured AUTOMATIC1111 API and
+                  permitted model. For cloud images, add your OpenAI or Gemini
+                  key in AI connections, select your own computer, and enable
+                  account API connections plus cloud image generation in
+                  Consigliere Settings. Reconnect an existing provider key to
+                  refresh its supported image catalog.
                 </p>
               </>
             )}
             <p>
               Update Consigliere, Pause the worker, then open Settings to enable
               {workflow === "images"
-                ? " a local image connection."
+                ? " a local image connection or cloud image generation."
                 : " data processing."}{" "}
               Resume after saving.
               {workflow === "analytics" &&
                 " Google account file connections are unavailable in this version; export your authorized spreadsheet and upload it above."}
             </p>
+            {workflow === "images" && (
+              <a href="/providers">Open AI connections</a>
+            )}
             {options && (
               <WorkerAvailabilityList
                 nodes={options.nodes}

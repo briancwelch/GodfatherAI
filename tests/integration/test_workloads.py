@@ -121,7 +121,8 @@ def test_availability_input_validation_and_withdrawn_owner_permission(h: Harness
         f"/api/v1/workloads/options?workspace_id={h.workspace_id}", headers=headers(h.admin)
     ).json()
     assert all(not n["analytics"] and not n["image_models"] for n in options["nodes"])
-    assert options["cloud_images"] is False and options["sql_sources"] == []
+    assert options["cloud_images"] is True and options["cloud_image_models"] == []
+    assert options["sql_sources"] == []
     enable_data(h, 0)
     job = submit_data(h)
     assert h.tick() == 1

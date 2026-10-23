@@ -19,7 +19,7 @@ class AccountProvider(Contract):
 
 
 class AccountProviders(Contract):
-    providers: list[AccountProvider] = Field(max_length=2)
+    providers: list[AccountProvider] = Field(max_length=3)
 
 
 def fetch(client: WorkerClient, node_id: UUID, session_id: UUID) -> list[ProviderConfig]:

@@ -19,6 +19,7 @@ recorded separately.
 | Review and apply coding results                 | [Results and application](operations/results-and-apply.md)                                  |
 | Shared inference, dependent tasks and variables | [Distributed Jobs and Tasks](operations/shared-inference-and-tasks-2026-10-22.md)           |
 | Images, analytics and reports                   | [Workload instructions](history/phases.md#phase-12)                                         |
+| Cloud image provider setup                      | [OpenAI and Gemini images](operations/cloud-images.md)                                      |
 | Manage users, workspaces and jobs               | [Command Center management](operations/command-center-management.md)                        |
 
 The worker readiness guide supersedes the older manual Ollama-only setup in the

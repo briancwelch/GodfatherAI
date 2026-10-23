@@ -8,6 +8,7 @@ import type { ModelInfo } from "../lib/contracts";
 
 export function modelAgentUrl(workspace: string, model: ModelInfo) {
   const d = model.deployment;
+  if (d.operations?.includes("image_generation")) return "/images";
   const choice = `${d.provider}:${d.identifier}${d.connection_id ? `:${d.connection_id}` : ""}`;
   return `/agents?workspace=${workspace}&model=${encodeURIComponent(choice)}`;
 }
@@ -29,7 +30,9 @@ export function UseModel({
         className="btn btn-primary action"
         href={modelAgentUrl(workspace, model)}
       >
-        Use model / create agent
+        {model.deployment.operations?.includes("image_generation")
+          ? "Generate images"
+          : "Use model / create agent"}
       </a>
     );
   return (
@@ -59,7 +62,11 @@ export function UseModel({
           }
         }}
       >
-        {busy ? "Enabling model…" : "Allow in workspace / create agent"}
+        {busy
+          ? "Enabling model…"
+          : model.deployment.operations?.includes("image_generation")
+            ? "Allow in workspace / generate images"
+            : "Allow in workspace / create agent"}
       </button>
       {!model.can_enable && (
         <p>Ask a workspace administrator to allow this model.</p>

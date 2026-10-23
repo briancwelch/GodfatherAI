@@ -61,7 +61,7 @@ def owned(session: Session, identifier: UUID, owner: UUID) -> ProviderConnection
 def allowed(session: Session, job: Job, node: Node) -> bool:
     selection = Requirements.model_validate(job.requirements or {}).model_selection
     if selection is None or selection.connection_id is None:
-        return selection is None or selection.provider not in ("openai", "anthropic")
+        return selection is None or selection.provider not in ("openai", "anthropic", "gemini")
     row = session.get(ProviderConnection, selection.connection_id)
     if row is None or row.revoked or row.node_id != node.id or row.owner_id != node.owner_id:
         return False
@@ -80,6 +80,16 @@ def allowed(session: Session, job: Job, node: Node) -> bool:
             return False
         if selection.identifier not in {m.get("identifier") for m in key.model_catalog}:
             return False
+        if "image_generation" in selection.required_operations and (
+            policy.billing != "provider"
+            or not any(
+                m.get("identifier") == selection.identifier and m.get("modality") == "image"
+                for m in key.model_catalog
+            )
+        ):
+            return False
+    elif "image_generation" in selection.required_operations:
+        return False
     if policy.billing != "provider" and selection.identifier not in {
         r.identifier for r in policy.rates
     }:
@@ -444,6 +454,30 @@ def reserve(
     if not allowed(session, job, node):
         raise HTTPException(403, "Paid permission was withdrawn before reservation")
     settings = ConnectionPolicy.model_validate(row.policy)
+    if "image_generation" in selected.required_operations:
+        from godfather_contracts.workloads import CLOUD_IMAGE_RUNTIME, ImageSettings
+
+        from godfather_api.workflow_service import workflow_assignment
+
+        image = ImageSettings.model_validate(job.input_refs.get("image"))
+        view = node_view(session, node)
+        workflow = workflow_assignment(session, request.app.state.artifacts, job, attempt)
+        if (
+            settings.billing != "provider"
+            or row.account_key_id is None
+            or CLOUD_IMAGE_RUNTIME not in view.runtimes
+            or "images.generate" not in view.tool_permissions
+            or image.backend != selected.provider
+            or image.model != selected.identifier
+            or payload.call_key != "image"
+            or len(workflow.agent.definition.workflow.steps) != 1
+            or workflow.agent.definition.workflow.steps[0].kind != "image"
+        ):
+            raise HTTPException(403, "Cloud image execution requires an opted-in account route")
+        if session.scalar(select(ProviderInvocation.id).where(ProviderInvocation.job_id == job.id)):
+            raise HTTPException(
+                409, "Review the previous image invocation before submitting a new job"
+            )
     rate = next((r for r in settings.rates if r.identifier == selected.identifier), None)
     if settings.billing != "provider" and (
         rate is None

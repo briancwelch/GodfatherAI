@@ -93,7 +93,8 @@ async def execute_agent(
     ):
         await report("fail", error_code="workflow_validation")
         return
-    provider = provider_override or (create_provider(config) if config else None)
+    image_job = payload.image is not None and payload.image.backend != "automatic1111"
+    provider = provider_override or (create_provider(config) if config and not image_job else None)
     if config is not None and provider is not None and config.provider in ("openai", "anthropic"):
         provider = MeteredProvider(provider, client, node_id, registration, assignment)
 
@@ -156,6 +157,14 @@ async def execute_agent(
             return await execute_coding(config, payload, step, provider, deployment)
 
         async def workload(step: WorkflowStep, context: object) -> StepOutput:
+            if step.kind == "image" and image_job:
+                from godfather_worker.cloud_images import execute as execute_cloud_image
+
+                if config is None:
+                    raise WorkflowError("model_unavailable")
+                return await execute_cloud_image(
+                    config, payload, client, node_id, registration, assignment
+                )
             if workloads is None:
                 raise WorkflowError("tool_permission")
             return await execute_workload(workloads, payload, step, context)

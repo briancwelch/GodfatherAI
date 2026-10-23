@@ -74,6 +74,11 @@ def main(
     parser.add_argument("--execute-synthetic", action="store_true")
     parser.add_argument("--execute-workflows", action="store_true")
     parser.add_argument(
+        "--cloud-images",
+        action="store_true",
+        help="Owner opt-in to cloud images using account API connections",
+    )
+    parser.add_argument(
         "--workload-config",
         type=Path,
         help="Owner opt-in to a pinned data sandbox and/or configured local image backend",
@@ -293,6 +298,19 @@ def main(
                 "account-provider-keys-v1",
                 "provider-connections-v1",
             ]
+        if args.cloud_images:
+            if (
+                args.simulate
+                or not args.account_providers
+                or not args.execute_workflows
+                or "images.generate" not in args.allow_tool_permission
+            ):
+                raise ValueError(
+                    "Cloud images require account APIs, workflows and images.generate opt-in"
+                )
+            values["runtimes"] = [*values["runtimes"], "cloud-images-v1"]
+            if "images" not in [*values["primary_capabilities"], *values["secondary_capabilities"]]:
+                values["secondary_capabilities"] = [*values["secondary_capabilities"], "images"]
         if args.execute_workflows:
             tools = []
             for grant in args.allow_tool:

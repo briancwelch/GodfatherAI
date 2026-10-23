@@ -24,6 +24,7 @@ from pydantic import Field, PrivateAttr, SecretStr, model_validator
 
 class NativeModel(Contract):
     identifier: Label
+    modality: Literal["text", "image"] = "text"
     context_window: int = Field(ge=1, le=2**40)
     max_output_tokens: int = Field(ge=1, le=2**30)
     tools: bool = False
@@ -32,7 +33,7 @@ class NativeModel(Contract):
 
 class ProviderConfig(Contract):
     id: Label
-    provider: Literal["ollama", "openai_compatible", "openai", "anthropic"]
+    provider: Literal["ollama", "openai_compatible", "openai", "anthropic", "gemini"]
     connection_id: UUID | None = None
     shared_inference_group_id: UUID | None = None
     model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
@@ -48,16 +49,16 @@ class ProviderConfig(Contract):
 
     @model_validator(mode="after")
     def secure_endpoint(self) -> "ProviderConfig":
-        if self.provider in ("openai", "anthropic"):
+        if self.provider in ("openai", "anthropic", "gemini"):
             if self.connection_id is None or self.api_key_env:
                 raise ValueError(
                     "Native providers require a separate node-local credential connection"
                 )
-            endpoint = (
-                "https://api.openai.com/v1"
-                if self.provider == "openai"
-                else "https://api.anthropic.com/v1"
-            )
+            endpoint = {
+                "openai": "https://api.openai.com/v1",
+                "anthropic": "https://api.anthropic.com/v1",
+                "gemini": "https://generativelanguage.googleapis.com/v1beta",
+            }[self.provider]
             if self.url not in ("http://127.0.0.1:11434", endpoint):
                 raise ValueError("Native providers require the official HTTPS API endpoint")
             self.url = endpoint
@@ -82,6 +83,7 @@ class ProviderConfig(Contract):
         if self.provider == "openai_compatible" and parsed.hostname in (
             "api.openai.com",
             "api.anthropic.com",
+            "generativelanguage.googleapis.com",
         ):
             raise ValueError("Use the native provider with its independent credential connection")
         if self.shared_inference_group_id and not loopback:
@@ -95,7 +97,7 @@ class ProviderConfig(Contract):
         return self
 
     def headers(self) -> dict[str, str]:
-        if self.provider in ("openai", "anthropic"):
+        if self.provider in ("openai", "anthropic", "gemini"):
             if self._api_key is None:
                 raise GatewayError("provider_auth")
             value = self._api_key.get_secret_value()
@@ -103,6 +105,8 @@ class ProviderConfig(Contract):
                 raise GatewayError("provider_auth")
             if self.provider == "anthropic":
                 return {"x-api-key": value, "anthropic-version": "2023-06-01"}
+            if self.provider == "gemini":
+                return {"x-goog-api-key": value}
             return {"Authorization": "Bearer " + value}
         if self.api_key_env is None:
             return {}

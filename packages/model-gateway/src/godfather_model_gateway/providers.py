@@ -275,6 +275,10 @@ class OpenAICompatibleProvider(HTTPProvider):
 
 
 def create_provider(config: ProviderConfig) -> Provider:
+    if config.provider == "gemini":
+        from godfather_model_gateway.images import GeminiImageInventory
+
+        return GeminiImageInventory(config)
     if config.provider in ("openai", "anthropic"):
         from godfather_model_gateway.frontier import AnthropicProvider, OpenAIProvider
 

@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from godfather_contracts import Contract
+from godfather_contracts import Contract, ModelSelection
 from godfather_contracts.agents import (
     AgentCreate,
     AgentDefinition,
@@ -13,7 +13,7 @@ from godfather_contracts.agents import (
     WorkflowSubmission,
 )
 from godfather_contracts.jobs import JobView
-from godfather_contracts.workloads import WorkloadOutput
+from godfather_contracts.workloads import CLOUD_IMAGE_RUNTIME, WorkloadOutput
 from pydantic import Field
 from sqlalchemy import select
 
@@ -31,18 +31,28 @@ class Submission(Contract):
     workspace_id: UUID
     kind: Literal["analytics", "report", "image"]
     input: WorkflowInput
+    connection_id: UUID | None = None
+    paid_consent: bool = False
     ram_bytes: int = Field(default=512 * 1024**2, ge=512 * 1024**2, le=2**40)
     gpu_memory_bytes: int = Field(default=0, ge=0, le=2**40)
 
 
 def template(
-    kind: str, ram_bytes: int = 512 * 1024**2, gpu_memory_bytes: int = 0
+    kind: str,
+    ram_bytes: int = 512 * 1024**2,
+    gpu_memory_bytes: int = 0,
+    selection: ModelSelection | None = None,
 ) -> AgentDefinition:
     image = kind == "image"
     stages = ["image"] if image else ["analytics", "report"] if kind == "report" else ["analytics"]
     return AgentDefinition.model_validate(
         {
-            "name": "Local images"
+            "name": (
+                f"Cloud images {selection.provider} {selection.identifier} "
+                f"{selection.connection_id}"
+                if selection
+                else "Local images"
+            )
             if image
             else "Analytics and reporting"
             if kind == "report"
@@ -54,7 +64,14 @@ def template(
                 else ["analytics", "reporting"]
                 if kind == "report"
                 else ["analytics"],
-                "runtimes": ["local-images-v1" if image else "data-workloads-v1"],
+                "runtimes": [
+                    CLOUD_IMAGE_RUNTIME
+                    if selection
+                    else "local-images-v1"
+                    if image
+                    else "data-workloads-v1"
+                ],
+                "model_selection": selection.model_dump(mode="json") if selection else None,
                 "ram_bytes": ram_bytes,
                 "gpu_memory_bytes": gpu_memory_bytes,
             },
@@ -84,6 +101,7 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
     if not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found")
     nodes = []
+    cloud_models = []
     for node in session.scalars(select(Node)):
         candidate = Job(
             owner_id=actor.owner_id,
@@ -95,7 +113,51 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
         if not permitted(session, candidate, node):
             continue
         view = node_view(session, node)
-        online = view.state == "online" and view.workflow_protocol_version == 1
+        from datetime import UTC, datetime
+
+        from godfather_api.nodes import connection_at
+
+        online = (
+            view.state == "online"
+            and view.workflow_protocol_version == 1
+            and connection_at(node.last_heartbeat_at, datetime.now(UTC), request.app.state.settings)
+            == "online"
+        )
+        if CLOUD_IMAGE_RUNTIME in view.runtimes and "images.generate" in view.tool_permissions:
+            from godfather_contracts.execution import Requirements
+
+            from godfather_api.provider_connections import allowed
+
+            for model in view.model_deployments:
+                if (
+                    model.provider not in ("openai", "gemini")
+                    or not model.available
+                    or not model.connection_id
+                    or "image_generation" not in model.operations
+                ):
+                    continue
+                selection = ModelSelection(
+                    provider=model.provider,
+                    identifier=model.identifier,
+                    connection_id=model.connection_id,
+                    paid_consent=True,
+                    stream=False,
+                    required_operations=["image_generation"],
+                )
+                candidate.requirements = Requirements(model_selection=selection).model_dump(
+                    mode="json"
+                )
+                if allowed(session, candidate, node) and permitted(session, candidate, node):
+                    cloud_models.append(
+                        {
+                            "node_id": str(node.id),
+                            "node_name": node.name,
+                            "available": online,
+                            "provider": model.provider,
+                            "model": model.identifier,
+                            "connection_id": str(model.connection_id),
+                        }
+                    )
         nodes.append(
             {
                 "id": str(node.id),
@@ -110,14 +172,20 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
                 ]
                 if "images.generate" in view.tool_permissions and "local-images-v1" in view.runtimes
                 else [],
+                "cloud_image_models": [
+                    f"{m['provider']}: {m['model']}"
+                    for m in cloud_models
+                    if m["node_id"] == str(node.id)
+                ],
             }
         )
     return {
         "nodes": nodes,
         "dataset_limit_bytes": 1024 * 1024,
         "formats": ["html", "markdown", "csv", "xlsx"],
-        "image_backends": ["automatic1111"],
-        "cloud_images": False,
+        "image_backends": ["automatic1111", "openai", "gemini"],
+        "cloud_images": True,
+        "cloud_image_models": cloud_models,
         "sql_sources": [],
         "sql_note": (
             "Upload authorized structured SQL results as JSON; live SQL conne"
@@ -136,7 +204,38 @@ def submit(payload: Submission, request: Request, session: SessionDep) -> JobVie
         raise HTTPException(404, "Workspace not found")
     # Serialize built-in definition creation without mutating existing user agents.
     session.scalar(select(Workspace).where(Workspace.id == payload.workspace_id).with_for_update())
-    spec = template(payload.kind, payload.ram_bytes, payload.gpu_memory_bytes)
+    selection = None
+    image = payload.input.image
+    if payload.kind == "image" and image and image.backend != "automatic1111":
+        if payload.connection_id is None or not payload.paid_consent:
+            raise HTTPException(
+                422, "Select your cloud connection and confirm provider billing and data sharing"
+            )
+        from godfather_contracts.providers import ConnectionPolicy
+
+        from godfather_api.models import ProviderConnection
+
+        connection = session.get(ProviderConnection, payload.connection_id)
+        if (
+            connection is None
+            or connection.owner_id != actor.owner_id
+            or connection.revoked
+            or connection.provider != image.backend
+            or connection.account_key_id is None
+            or ConnectionPolicy.model_validate(connection.policy).billing != "provider"
+        ):
+            raise HTTPException(404, "Owned account image connection not found")
+        selection = ModelSelection(
+            provider=image.backend,
+            identifier=image.model,
+            connection_id=connection.id,
+            paid_consent=True,
+            stream=False,
+            required_operations=["image_generation"],
+        )
+    elif payload.connection_id is not None or payload.paid_consent:
+        raise HTTPException(422, "Cloud consent and connections require a cloud image workload")
+    spec = template(payload.kind, payload.ram_bytes, payload.gpu_memory_bytes, selection)
     spec.name += f" v1 ({payload.ram_bytes}/{payload.gpu_memory_bytes})"
     row = session.scalar(
         select(Agent)
@@ -164,6 +263,7 @@ def submit(payload: Submission, request: Request, session: SessionDep) -> JobVie
             agent_version=agent.version,
             workspace_id=payload.workspace_id,
             input=payload.input,
+            paid_consent=payload.paid_consent,
         ),
         request,
         session,

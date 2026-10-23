@@ -392,7 +392,13 @@ def transition(
         validate_tool_policy(spec, node, step.tool)
     if step.kind in ("analytics", "report", "image"):
         permission = "images.generate" if step.kind == "image" else "data.analyze"
-        runtime = "local-images-v1" if step.kind == "image" else "data-workloads-v1"
+        runtime = (
+            "cloud-images-v1"
+            if job.requirements.get("model_selection")
+            else "local-images-v1"
+            if step.kind == "image"
+            else "data-workloads-v1"
+        )
         if permission not in node.tool_permissions or runtime not in node.runtimes:
             raise HTTPException(403, "Worker workload permission was withdrawn")
     if step.kind == "coding":

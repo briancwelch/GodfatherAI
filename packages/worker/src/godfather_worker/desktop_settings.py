@@ -114,6 +114,12 @@ class Settings:
             "account_providers",
             app.settings.account_providers,
         )
+        self.check(
+            "Workloads",
+            "Allow cloud image generation with my account API connections",
+            "cloud_images",
+            app.settings.cloud_images,
+        )
         self.note(
             "Resources",
             (
@@ -338,6 +344,7 @@ class Settings:
                     "model_installation": values["model_installation"],
                     "runtime_installation": values["runtime_installation"],
                     "account_providers": values["account_providers"],
+                    "cloud_images": values["cloud_images"],
                 }
             )
             if bool(values["share_with_workspaces"]) != self.app.settings.share_with_workspaces:
@@ -346,6 +353,8 @@ class Settings:
                 )
             if settings.primary == "inference" and not settings.inference:
                 raise ValueError("Enable local models before choosing inference as primary.")
+            if settings.cloud_images and not settings.account_providers:
+                raise ValueError("Enable account API connections before cloud image generation.")
             if settings.model_installation and not settings.inference:
                 self.status.set("Enable local AI models before allowing model downloads.")
                 return

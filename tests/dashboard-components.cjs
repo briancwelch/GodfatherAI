@@ -32,6 +32,48 @@ const avatars = require("../apps/dashboard/src/components/avatar.tsx");
 const workspaces = require("../apps/dashboard/src/components/workspace-directory.tsx");
 const client = require("../apps/dashboard/src/lib/control-client.ts");
 
+test("cloud image models use Images and Gemini account writes retain scoped routes", () => {
+  assert.equal(
+    modelUse.modelAgentUrl("workspace", {
+      deployment: {
+        provider: "gemini",
+        identifier: "gemini-3.1-flash-image",
+        operations: ["image_generation"],
+      },
+    }),
+    "/images",
+  );
+  const markup = renderToStaticMarkup(
+    React.createElement(modelUse.UseModel, {
+      workspace: "workspace",
+      model: {
+        deployment: {
+          provider: "openai",
+          identifier: "gpt-image-1.5",
+          operations: ["image_generation"],
+        },
+      },
+    }),
+  );
+  assert.match(markup, /href="\/images"/);
+  assert.match(markup, /Generate images/);
+  for (const suffix of ["", "/computers", "/disconnect"]) {
+    assert.equal(
+      server.allowedPath("account/providers/gemini" + suffix, "POST"),
+      true,
+    );
+  }
+  assert.equal(server.allowedPath("account/providers/gemini", "GET"), false);
+  assert.equal(
+    server.allowedPath("account/providers/gemini/keys", "POST"),
+    false,
+  );
+  assert.equal(
+    server.allowedPath("account/providers/unreviewed", "POST"),
+    false,
+  );
+});
+
 test("control errors preserve field locations without echoing rejected input and support bounded submission waits", async (context) => {
   let requestedSignal;
   let response = new Response(

@@ -99,6 +99,7 @@ class Contribution(Contract):
     model_installation: bool = False
     runtime_installation: bool = False
     account_providers: bool = False
+    cloud_images: bool = False
     primary: Literal["cpu", "inference"] = "cpu"
     shared: bool = False
     share_with_workspaces: bool = False
@@ -218,6 +219,8 @@ class Controller:
             raise ValueError("Enable local AI models before allowing model downloads")
         if settings.runtime_installation and not settings.model_installation:
             raise ValueError("Enable model downloads before allowing Ollama runtime setup")
+        if settings.cloud_images and not settings.account_providers:
+            raise ValueError("Enable account API connections before cloud image generation")
         if settings.repositories:
             owner = UUID(self.identity["owner_id"])
             if not settings.inference and not settings.account_providers:
@@ -270,6 +273,8 @@ class Controller:
             ]
         if settings.account_providers:
             arguments += ["--account-providers"]
+        if settings.cloud_images:
+            arguments += ["--cloud-images", "--allow-tool-permission", "images.generate"]
         if settings.workloads:
             config_path = self.folder / "workloads.json"
             config_path.write_text(settings.workloads.model_dump_json(), encoding="utf-8")

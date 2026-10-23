@@ -171,9 +171,16 @@ async def execute(
         )
     if config.images is None or payload.image is None:
         raise WorkflowError("model_unavailable")
-    from PIL import Image
 
     images = await Automatic1111(config.images).generate(payload.instruction, payload.image)
+    return image_output(images, payload)
+
+
+def image_output(images: list[bytes], payload: WorkflowInput) -> WorkloadOutput:
+    from PIL import Image
+
+    if payload.image is None:
+        raise WorkflowError("workflow_validation")
     files = []
     for i, raw in enumerate(images, 1):
         # Re-encode a bounded decoded bitmap; backend metadata/paths never become deliverables.
@@ -183,7 +190,7 @@ async def execute(
                     raise ValueError("Unexpected dimensions")
                 output = io.BytesIO()
                 picture.convert("RGB").save(output, format="PNG")
-        except (ValueError, OSError):
+        except (ValueError, OSError, Image.DecompressionBombError):
             raise WorkflowError("workflow_validation") from None
         files.append(data_program.download(f"image-{i}.png", "image/png", output.getvalue()))
     return WorkloadOutput(
@@ -191,15 +198,14 @@ async def execute(
         title="Generated images",
         summary=(
             f"Generated {len(files)} images with {payload.image.model} "
-            "on the explicitly selected local backend."
+            f"with the explicitly selected {payload.image.backend} backend."
         ),
         analysis={"prompt": payload.instruction, "settings": payload.image.model_dump(mode="json")},
         files=files,
         limitations=[
             (
-                "Cancellation stops accepting results; the local backend may fini"
-                "sh an already submitted generation. No automatic replay or paid "
-                "fallback."
+                "Cancellation stops accepting results; the provider may finish and bill "
+                "an accepted generation. No automatic replay or provider fallback."
             )
         ],
     )

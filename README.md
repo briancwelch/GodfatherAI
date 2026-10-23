@@ -86,7 +86,10 @@ requires the project's separate local permission. See [coding setup](docs/operat
 and [preview and apply](docs/operations/results-and-apply.md).
 
 Use **Images** or **Analytics and Reports** for those workloads after enabling the
-matching local backend or isolated data environment. Use **Distributed Tasks**
+matching image connection or isolated data environment. Images supports local
+AUTOMATIC1111 and explicitly selected OpenAI/Gemini account connections in the
+new source implementation; see [cloud image setup](docs/operations/cloud-images.md)
+for required worker opt-ins and release availability. Use **Distributed Tasks**
 for dependent tasks across computers. **Distributed Jobs** runs one model request
 through an owner-configured shared inference engine; that advanced setup is not
 created automatically. See [shared inference and task variables](docs/operations/shared-inference-and-tasks-2026-10-22.md).

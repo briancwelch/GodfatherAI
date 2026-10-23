@@ -266,13 +266,18 @@ def deployment_for(
             )
             and model.connection_id == selection.connection_id
             and (
-                model.provider not in ("openai", "anthropic")
+                model.provider not in ("openai", "anthropic", "gemini")
                 or (selection.paid_consent and selection.connection_id is not None)
             )
             and (selection.identifier is None or model.identifier in order)
             and (selection.provider is None or selection.provider == model.provider)
             and set(selection.capabilities) <= capabilities
-            and "chat" in model.operations
+            and (
+                "image_generation"
+                if "image_generation" in selection.required_operations
+                else "chat"
+            )
+            in model.operations
             and set(selection.required_operations) <= set(model.operations)
             and (not selection.stream or "stream" in model.operations)
             and (
