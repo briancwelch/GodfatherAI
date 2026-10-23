@@ -211,6 +211,9 @@ def test_legacy_registration_omits_new_sharing_field() -> None:
 def test_contribution_change_applies_when_idle_without_cancelling_the_current_job(
     tmp_path: Path,
 ) -> None:
+    pytest.importorskip(
+        "tkinter", reason="Native Tk lifecycle is covered by desktop packaging jobs"
+    )
     from godfather_worker.desktop_app import Application
 
     app = object.__new__(Application)
