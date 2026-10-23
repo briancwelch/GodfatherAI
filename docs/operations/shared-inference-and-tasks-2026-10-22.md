@@ -1,6 +1,6 @@
 # Shared inference, Distributed Tasks and corner feedback
 
-This is an owner-authorized **local source milestone**. It adds the requested screens, APIs, scheduler integration, worker contracts, variable resolution, toasts and Nodes heartbeat indicator. It does not install inference software, download weights, reconfigure contributor hosts, rebuild/publish installers or deploy to the VPS. Existing worker identity and permissions are preserved.
+This began as an owner-authorized **local source milestone**. It adds the requested screens, APIs, scheduler integration, worker contracts, variable resolution, toasts and Nodes heartbeat indicator. Its original scope excluded engine installation, weights, contributor-host changes, packaging and deployment. The owner subsequently authorized packaging and deployment: coordinator and all three installers are now published as **0.8.0-rc.1**. See the [deployment verification](shared-inference-deployment-2026-10-22.md). Existing worker identity and permissions are preserved. Engine installation and hardware acceptance remain separate.
 
 ## What appears in the Command Center
 
@@ -110,4 +110,4 @@ Executed validation:
 
 Ignored local evidence: `.cache/shared-inference-regression.log`, `.cache/shared-inference-final-focused.log`, and `.cache/distributed-ui/` (`result.json`, `error-toast.png`, `shared-inference.png`, `heartbeat.png`, plus light/dark/narrow task captures).
 
-These checks establish local source behavior using controlled provider responses. They do not establish physical multi-GPU, mixed-host, cross-location throughput, recipient installer acceptance, paid inference or production deployment. No external service or contributor host was changed.
+These implementation checks establish local source behavior using controlled provider responses. They do not establish physical multi-GPU, mixed-host or cross-location throughput, recipient installer acceptance or paid inference. The subsequent authorized packaging and production checks are recorded in the [deployment verification](shared-inference-deployment-2026-10-22.md). No contributor host was reconfigured.

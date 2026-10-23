@@ -4,8 +4,8 @@ Private, cross-platform AI orchestration platform for two founding administrator
 
 One developer builds the platform for both administrators. The second administrator does not need a development environment.
 
-**Coordinator 0.7.0-rc.2; Consigliere 0.7.0-rc.1 are published.**
-[Workspace contribution verification](docs/operations/workspace-contribution-verification-2026-10-22.md).
+**Coordinator and Consigliere 0.8.0-rc.1 are published.**
+[Shared inference deployment verification](docs/operations/shared-inference-deployment-2026-10-22.md).
 Workspace contribution replaces sharing ID entry with
 **Contribute this computer to my workspaces**. Install, connect, approve and use
 workspace membership for ordinary/distributed work. Existing computers keep their
@@ -20,7 +20,7 @@ No real dataset or paid image call is authorized; live customer acceptance remai
 pending. Google Sign-In remains separate from data-source and provider consent.
 Existing [Phase 11 coding/BYOK](docs/operations/phase-11.md) functionality is preserved.
 
-**Local source update:** [Shared inference and Distributed Tasks](docs/operations/shared-inference-and-tasks-2026-10-22.md) separates one-model Distributed Jobs from the existing task graphs, adds named result variables, persistent corner job feedback and a factual Nodes heartbeat trace. Physical shared inference requires an owner-configured private engine and hardware acceptance; this source update is not deployed or packaged.
+**Published update:** [Shared inference and Distributed Tasks](docs/operations/shared-inference-and-tasks-2026-10-22.md) separates one-model Distributed Jobs from the existing task graphs, adds named result variables, persistent corner job feedback and a factual Nodes heartbeat trace. Coordinator and all three installers are published as **0.8.0-rc.1**. Physical shared inference requires an owner-configured private engine and hardware acceptance.
 
 ## Start here
 
@@ -43,7 +43,7 @@ navy/cyan command ribbon and expanded owner-local Settings. See the
 [Consigliere UI and upgrade guide](docs/operations/consigliere-ui.md).
 Worker downloads are under **Nodes â†’ Downloads**. Tailscale is detected when
 installed and remains optional; existing private routing is preferred where
-configured. Consigliere **0.7.0-rc.1** is the current worker. The earlier coordinator
+configured. Consigliere **0.8.0-rc.1** is the current worker. The earlier coordinator
 release introduced Phase 12;
 see the [verification report](docs/operations/phase-12-verification-2026-10-21.md).
 
@@ -94,7 +94,7 @@ Use the private remote `https://github.com/briancwelch/GodfatherAI.git`. GitHub 
 
 Command Center maintenance: [UI changes and verification](docs/operations/command-center-ui-2026-10-22.md) adds shared appearance settings, readable owner/audit identities, worker build status and AJAX credential deletion. The previous **0.4.2-rc.2** [onboarding repair](docs/operations/worker-onboarding-2026-10-22.md) introduced pairing, build-version reporting and connection indicators. Quit the existing tray worker before installing the replacement; saved identities and settings are preserved.
 
-**Distributed Jobs (0.6.0-rc.1):** [Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. The coordinator and updated Windows, Apple silicon and Intel Mac installers are deployed. Update participating workers through File > Check for updates before using synthesis.
+**Earlier task release (0.6.0-rc.1), now Distributed Tasks:** [Original Distributed Jobs](docs/operations/distributed-jobs-2026-10-22.md) adds selected-node parallel tasks, durable dependency handling, final synthesis and workload graphs. The coordinator and updated Windows, Apple silicon and Intel Mac installers are deployed. Update participating workers through File > Check for updates before using synthesis.
 
 ## Local development
 

@@ -1,6 +1,6 @@
 # Shared inference, Distributed Tasks and literal variables
 
-Owner-authorized local implementation, 2026-10-22, including the later Nodes heartbeat indicator request. No new deployment, installer publication, engine installation, model download or billable inference is authorized by this change.
+Owner-authorized local implementation, 2026-10-22, including the later Nodes heartbeat indicator request. The original source scope excluded deployment, installer publication, engine installation, model downloads and billable inference. The owner subsequently explicitly authorized packaging and deployment; coordinator and all three installers are published as 0.8.0-rc.1. See the [deployment verification](../operations/shared-inference-deployment-2026-10-22.md). Engine installation, model downloads and billable inference remain separate.
 
 ## Decision
 
