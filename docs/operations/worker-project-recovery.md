@@ -1,7 +1,7 @@
 # A coding project needs attention
 
-Consigliere keeps your saved project configuration when a dependency becomes
-unavailable. In the updated source, the worker connects for other enabled work
+Consigliere **0.9.0-rc.2** keeps your saved project configuration when a dependency
+becomes unavailable. The worker connects for other enabled work
 and excludes the affected project from coding and Apply jobs. The Connection tab
 keeps a **PROJECT NEEDS ATTENTION** panel visible, including the project name,
 problem and next steps. Open **Projects** and select an affected row for its full
