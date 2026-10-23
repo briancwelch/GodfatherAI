@@ -20,11 +20,16 @@ authorization. Release publication is recorded below after package validation.
   up to 60 seconds/64 receipts. New heartbeats retain earlier pulses. Duplicate
   snapshots add none. Offline/stale traces dim and expire; reduced-motion mode
   uses slower updates. Reloading starts a new observation window.
+- Distributed Jobs places its execution-setup legend above a separate choice
+  grid. All three choices align in one desktop row and stack within the mobile
+  viewport, retaining their radio-group semantics.
 
-The Carbon diagnostic established the missing image and startup failure, not the
-time or cause of image removal. The updater and release scripts inspected here
+The Carbon diagnostic established the missing image and startup failure. The
+owner subsequently confirmed that an earlier requested cleanup removed the image;
+the update's restart exposed it. The updater and release scripts inspected here
 do not prune Docker images. Installer regression coverage verifies exact saved
-project and cloud-image options survive automatic updates.
+project and cloud-image options survive automatic updates. Future cleanup must
+retain image pins referenced by saved projects and data workload settings.
 
 See [recovery steps](worker-project-recovery.md) and
 [ADR 0028](../decisions/0028-optional-project-readiness.md).
@@ -39,6 +44,9 @@ See [recovery steps](worker-project-recovery.md) and
 | Dashboard formatting/lint/strict types/build | Passed                                                                                                                                                          |
 | Native Windows Tk/tray lifecycle             | Passed fresh and saved-identity fixture flows, warning panel and selected-project instructions, repair clearing, resizing, settings and idle-safe update checks |
 | Fixture browser acceptance                   | Passed, including two retained pulses, movement between receipts, duplicate refresh, offline history, reduced motion and expiry with no page errors             |
+
+The final browser run also passed equal-width execution choices in one desktop
+row and stacked choices within a 390-pixel viewport, with no page errors.
 
 Python regression tests exercise the actual desktop-to-CLI registration path with
 mocked dependencies on Windows/macOS/Linux profiles, including mixed ready/unready

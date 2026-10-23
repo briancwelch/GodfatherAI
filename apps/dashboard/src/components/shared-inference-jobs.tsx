@@ -58,23 +58,25 @@ export function InferenceSetups({
   return (
     <fieldset className="inference-setups">
       <legend>Execution setup</legend>
-      {inferenceModes.map((setup) => (
-        <label
-          key={setup.id}
-          className={`inference-setup ${mode === setup.id ? "selected" : ""}`}
-        >
-          <input
-            className="form-check-input"
-            type="radio"
-            name="inference-mode"
-            value={setup.id}
-            checked={mode === setup.id}
-            onChange={() => select(setup.id)}
-          />
-          <strong>{setup.name}</strong>
-          <span>{setup.description}</span>
-        </label>
-      ))}
+      <div className="inference-setup-options">
+        {inferenceModes.map((setup) => (
+          <label
+            key={setup.id}
+            className={`inference-setup ${mode === setup.id ? "selected" : ""}`}
+          >
+            <input
+              className="form-check-input"
+              type="radio"
+              name="inference-mode"
+              value={setup.id}
+              checked={mode === setup.id}
+              onChange={() => select(setup.id)}
+            />
+            <strong>{setup.name}</strong>
+            <span>{setup.description}</span>
+          </label>
+        ))}
+      </div>
     </fieldset>
   );
 }

@@ -33,8 +33,10 @@ identity. No image downloads or permission changes happen automatically.
 
 Updates preserve saved connections and project settings. An update restarts the
 worker and therefore rechecks dependencies, which can expose an already missing
-image. The Carbon investigation confirmed the missing image and startup failure;
-it did not establish when or why that image disappeared.
+image. The owner confirmed Carbon's image had been removed by an earlier requested
+cleanup; the restart exposed it. Before future Docker cleanup, preserve the exact
+image pins in retained coding projects and data workload settings. A configured
+test image may have no running container and still be required.
 
 The Nodes heartbeat graph now keeps the actual timestamps observed while the
 view is open for up to 60 seconds. A new receipt adds a pulse; old pulses scroll

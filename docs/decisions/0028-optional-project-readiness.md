@@ -6,9 +6,10 @@ A saved coding project can outlive its Docker test image, local engine, Git
 installation or folder access. Previously one unavailable dependency stopped the
 entire worker before registration, behind a generic error. Carbon reproduced the
 missing-image case after its 0.9.0-rc.1 update; excluding the project allowed
-startup with cloud images still enabled. This establishes the startup blocker,
-not what removed the Docker image. Installer code replaces application payloads
-and does not manage Docker images.
+startup with cloud images still enabled. The owner subsequently confirmed that
+an earlier requested cleanup removed the image; the update's restart exposed
+that missing dependency. Installer code replaces application payloads and does
+not manage Docker images.
 
 Check owner-approved projects read-only, concurrently, within a 15-second
 deadline at each Resume. Withhold unavailable projects from repository, coding

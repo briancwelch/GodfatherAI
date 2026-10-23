@@ -2363,6 +2363,15 @@ body {
   gap: 10px;
 }
 .inference-setups {
+  display: block;
+}
+.inference-setups > legend {
+  float: none;
+  width: auto;
+  font-size: inherit;
+  margin-bottom: 12px;
+}
+.inference-setup-options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
@@ -2418,7 +2427,7 @@ body {
   }
 }
 @media (max-width: 760px) {
-  .inference-setups {
+  .inference-setup-options {
     grid-template-columns: 1fr;
   }
   .corner-toasts {

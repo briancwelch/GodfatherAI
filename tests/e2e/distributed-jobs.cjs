@@ -563,6 +563,49 @@ const server = http.createServer(async (req, res) => {
       .getByRole("heading", { name: "Distributed Jobs", exact: true })
       .waitFor();
     assert.equal(await page.getByRole("radio").count(), 3);
+    const cards = await page
+      .locator(".inference-setup")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const box = element.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        }),
+      );
+    assert.ok(
+      cards.every((card) => Math.abs(card.y - cards[0].y) < 1),
+      "All execution choices share one desktop row",
+    );
+    assert.ok(
+      cards.every((card) => Math.abs(card.width - cards[0].width) < 1),
+      "Execution choices have equal widths",
+    );
+    await page.screenshot({
+      path: path.join(folder, "execution-setup-desktop.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const narrowCards = await page
+      .locator(".inference-setup")
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const box = element.getBoundingClientRect();
+          return { x: box.x, y: box.y, bottom: box.bottom, right: box.right };
+        }),
+      );
+    assert.ok(
+      narrowCards[1].y >= narrowCards[0].bottom &&
+        narrowCards[2].y >= narrowCards[1].bottom,
+      "Execution choices stack on mobile",
+    );
+    assert.ok(
+      narrowCards.every((card) => card.x >= 0 && card.right <= 390),
+      "Execution choices fit the mobile viewport",
+    );
+    await page.screenshot({
+      path: path.join(folder, "execution-setup-mobile.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1500, height: 1050 });
     await page
       .getByLabel("Computers across locations", { exact: false })
       .check();
@@ -681,6 +724,7 @@ const server = http.createServer(async (req, res) => {
             "corner errors stay visible while scrolling",
             "processing toast survives eight seconds and becomes success",
             "three shared inference setup choices",
+            "execution setup choices align in one desktop row and stack within a mobile viewport",
             "cross-location prompt consent before submission",
             "processing tracking restored after reload",
             "scrolling heartbeat history survives new and duplicate receipts, dims offline, and expires without invented pulses",
