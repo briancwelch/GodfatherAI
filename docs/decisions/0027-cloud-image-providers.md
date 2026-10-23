@@ -3,6 +3,10 @@
 Accepted for implementation by the owner, 2026-10-22. Deployment and live billable
 acceptance remain separate actions.
 
+Coordinator and worker **0.9.0-rc.1** were published with owner authorization on
+2026-10-23; see [release verification](../operations/cloud-images-deployment-2026-10-23.md).
+Live billable image acceptance remains separate.
+
 Extend the existing model gateway, encrypted account connections and fenced
 workflow execution with OpenAI Images and Google Gemini native image APIs.
 This supersedes Phase 12's local-only image boundary for explicitly selected

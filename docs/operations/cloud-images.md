@@ -1,8 +1,8 @@
 # Cloud images
 
-Source implementation, 2026-10-22. This guide requires a coordinator and worker
-containing the cloud image changes. No release or deployment is implied by this
-guide. Local AUTOMATIC1111 instructions remain in the [Phase 12 history](../history/phases.md#phase-12).
+Published in coordinator and Consigliere **0.9.0-rc.1** on 2026-10-23. See the
+[release verification](cloud-images-deployment-2026-10-23.md) for packaging and live
+checks. Local AUTOMATIC1111 instructions remain in the [Phase 12 history](../history/phases.md#phase-12).
 
 ## Setup and use
 
