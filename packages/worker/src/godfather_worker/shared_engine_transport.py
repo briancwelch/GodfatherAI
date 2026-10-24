@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+import select
 import socket
 import ssl
 import threading
@@ -157,7 +158,6 @@ class Bridge:
 
     def forward(self, incoming: socket.socket) -> None:
         sockets: list[socket.socket] = [incoming]
-        finished = threading.Event()
         try:
             incoming.settimeout(5)
             if self.server:
@@ -178,30 +178,10 @@ class Bridge:
             with self.guard:
                 self.connections.update(sockets)
 
-            def copy(source: socket.socket, destination: socket.socket) -> None:
-                try:
-                    while not self.stop_event.is_set() and not finished.is_set():
-                        try:
-                            data = source.recv(65536)
-                        except TimeoutError:
-                            continue
-                        if not data:
-                            return
-                        destination.sendall(data)
-                except OSError:
-                    pass
-                finally:
-                    finished.set()
-
-            incoming.settimeout(1)
-            other.settimeout(1)
-            reverse = threading.Thread(target=copy, args=(other, incoming), daemon=True)
-            reverse.start()
-            copy(incoming, other)
+            self.relay(incoming, other)
             for connection in sockets:
                 with suppress(OSError):
                     connection.shutdown(socket.SHUT_RDWR)
-            reverse.join(2)
         except OSError:
             pass
         finally:
@@ -211,6 +191,57 @@ class Bridge:
                 self.connections.difference_update(sockets)
                 self.workers.discard(threading.current_thread())
             self.slots.release()
+
+    def relay(self, first: socket.socket, second: socket.socket) -> None:
+        """One thread owns each SSL object; bounded buffers handle partial TLS I/O."""
+        peers = {first: second, second: first}
+        outgoing = {first: bytearray(), second: bytearray()}
+        read_needs_write: set[socket.socket] = set()
+        write_needs_read: set[socket.socket] = set()
+        for connection in peers:
+            connection.setblocking(False)
+        while not self.stop_event.is_set():
+            readers = [
+                s for s in peers if len(outgoing[peers[s]]) < 1024**2 or s in write_needs_read
+            ]
+            writers = [
+                s
+                for s in peers
+                if outgoing[s] and s not in write_needs_read or s in read_needs_write
+            ]
+            buffered = {s for s in readers if isinstance(s, ssl.SSLSocket) and s.pending() > 0}
+            ready_read, ready_write, _ = select.select(readers, writers, [], 0 if buffered else 0.2)
+            for connection, peer in peers.items():
+                pending = connection in buffered
+                if len(outgoing[peer]) < 1024**2 and (
+                    connection in ready_read
+                    or pending
+                    or connection in read_needs_write
+                    and connection in ready_write
+                ):
+                    try:
+                        data = connection.recv(min(65536, 1024**2 - len(outgoing[peer])))
+                        read_needs_write.discard(connection)
+                        if not data:
+                            return
+                        outgoing[peer].extend(data)
+                    except ssl.SSLWantWriteError:
+                        read_needs_write.add(connection)
+                    except (ssl.SSLWantReadError, BlockingIOError):
+                        read_needs_write.discard(connection)
+                if outgoing[connection] and (
+                    connection in ready_write
+                    or connection in write_needs_read
+                    and connection in ready_read
+                ):
+                    try:
+                        count = connection.send(outgoing[connection])
+                        del outgoing[connection][:count]
+                        write_needs_read.discard(connection)
+                    except ssl.SSLWantReadError:
+                        write_needs_read.add(connection)
+                    except (ssl.SSLWantWriteError, BlockingIOError):
+                        write_needs_read.discard(connection)
 
     def close(self) -> None:
         self.stop_event.set()

@@ -180,7 +180,7 @@ def test_engine_environment_does_not_inherit_keys_or_override_scope(
 def test_local_approval_is_bound_to_proposal_devices_certificate_and_credential(
     tmp_path: Path,
 ) -> None:
-    pytest.importorskip("tkinter")
+    pytest.importorskip("tkinter", exc_type=ImportError)
     from godfather_worker.shared_inference_ui import load_consent, save_consent
 
     consent, group = group_fixture(tmp_path)
@@ -295,8 +295,14 @@ def test_real_bidirectional_mtls_bridge_and_unapproved_peer_denied(
     )
     try:
         with socket.create_connection(("127.0.0.1", proxy.port), timeout=3) as client:
-            client.sendall(b"approved engine RPC")
-            assert client.recv(100) == b"approved engine RPC"
+            for payload in (b"approved engine RPC", bytes(range(256)) * 1000, b"next RPC"):
+                client.sendall(payload)
+                received = bytearray()
+                while len(received) < len(payload):
+                    chunk = client.recv(min(65536, len(payload) - len(received)))
+                    assert chunk
+                    received.extend(chunk)
+                assert received == payload
         unapproved = contexts(folder_rogue, rogue, group_id, pem_b, False)
         with (
             pytest.raises((OSError, ssl.SSLError)),
@@ -410,7 +416,7 @@ def test_leader_launch_is_offline_loopback_and_uses_confirmed_rpc_devices(
 
 
 def panel_fixture(tmp_path: Path) -> tuple[Any, LocalEngineConsent, EngineGroup]:
-    pytest.importorskip("tkinter")
+    pytest.importorskip("tkinter", exc_type=ImportError)
     from godfather_worker.shared_inference_ui import SharedInference, save_consent
 
     panel: Any = object.__new__(SharedInference)

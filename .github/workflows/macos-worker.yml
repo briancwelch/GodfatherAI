@@ -58,6 +58,13 @@ jobs:
           echo "GODFATHER_BUILD_PYTHON=$build_python" >> "$GITHUB_ENV"
           "$build_python" -c 'import os, platform, tkinter; assert platform.machine() == os.environ["EXPECTED_MACHINE"]; r = tkinter.Tk(); r.withdraw(); r.update(); r.destroy()'
           xcrun --find clang
+          if [[ "$EXPECTED_MACHINE" == x86_64 ]]; then
+            # Cryptography 50 provides ARM-only Mac wheels. Build the current
+            # release with a pinned Python build toolchain and static OpenSSL.
+            brew install rust openssl@3
+            echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+            echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+          fi
       - name: Install locked worker and test dependencies
         run: uv sync --locked --package godfather-worker --group dev --python "$GODFATHER_BUILD_PYTHON"
       - name: Validate candidate version and record source

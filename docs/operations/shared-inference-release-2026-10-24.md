@@ -2,7 +2,7 @@
 
 The owner authorized building and deploying the pending worker and Command Center
 changes on 2026-10-24, lifting the prior publishing/deployment hold. The selected
-release is **0.10.0-rc.1** for the coordinator and all three native installers.
+release is **0.10.0-rc.2** for the coordinator and all three native installers.
 Production acceptance is recorded after the build and backup-first upgrade.
 
 This release includes the [Shared Inference wizard](shared-inference-wizard-2026-10-23.md),
@@ -31,6 +31,14 @@ explicit scan and setup-refresh boundaries. Fresh and saved-identity Tk/tray
 flows passed. Packaged startup now also imports the shared-engine transport and
 checks its bundled pinned runtime catalog without downloading or starting an
 engine.
+
+The initial unpublished rc.1 candidate found a concurrent SSL read/write timeout
+on Linux and an Intel Mac dependency-build gap. The TLS bridge now uses one
+nonblocking I/O owner per connection with bounded buffers and partial-write
+handling. Round-trip tests include fragmented bulk transfers. Intel packaging
+builds the same current cryptography release with hash-pinned Maturin/CFFI/
+setuptools and static OpenSSL; it does not downgrade cryptography. Rc.1 was
+not deployed.
 
 ## Release acceptance
 
