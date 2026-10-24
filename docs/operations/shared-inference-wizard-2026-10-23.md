@@ -1,15 +1,17 @@
 # Set up Shared Inference in Consigliere
 
-Published in **0.10.0-rc.3**, 2026-10-24, together with local model scanning,
+Introduced in **0.10.0-rc.3**, 2026-10-24, together with local model scanning,
 node permissions, the reconnect warning and update feedback. Update Consigliere
 through **File > Check for updates**. See the
 [release verification](shared-inference-release-2026-10-24.md). The source
-milestone's earlier validation record below remains historical.
+milestone's earlier validation record below remains historical. Setup removal and
+action feedback are published in **0.10.0-rc.5**; see the
+[current release verification](shared-inference-feedback-release-2026-10-24.md).
 
 ## User flow
 
 1. Connect each computer using the updated worker source and grant its normal
-   workspace contribution permission. Open **Shared Inference → Set up Shared
+   workspace contribution permission. Open **Shared Inference â†’ Set up Shared
    Inference** on the computer that holds the model.
 2. Choose an installed compatible GGUF model. **Scan for Local Models** populates
    the list; **Browse installed model** selects another existing file. Compatible
@@ -44,7 +46,7 @@ approximately 30 seconds without a successful setup refresh. Worker updates wait
 for a shared engine to be stopped before installation. Ordinary settings and
 node identity/history remain preserved.
 
-## Pending source update: remove setups and see action results
+## Remove setups and see action results (rc.5)
 
 Right-click a setup and choose **Delete setup**, use the **Delete setup** button,
 or press Delete on the selected row. A confirmation identifies the setup and its
@@ -68,8 +70,8 @@ the worker does not claim central deletion/withdrawal succeeded without an
 acknowledgement. Old refresh responses cannot undo a confirmed change.
 
 This update requires coordinator migration **0018_shared_engine_removal**.
-These additions are source changes and are not part of the published rc.3
-installers. See [the verification record](shared-inference-feedback-2026-10-24.md).
+These additions are published in **0.10.0-rc.5**. See the
+[release verification](shared-inference-feedback-release-2026-10-24.md).
 
 ## Requirements and troubleshooting
 
@@ -136,7 +138,7 @@ Checks executed for this combined pending update:
   Ruff formatting/lint and mypy passed. The preceding scan/permission update's
   production dashboard build and management browser smoke also passed.
 - Native tab geometry: approval/start/withdraw/progress remain visible at
-  **1120×760** and **760×600**. A native wizard fixture exercised installed-model
+  **1120Ã—760** and **760Ã—600**. A native wizard fixture exercised installed-model
   and two-computer selection and safely handled closing before its response.
 - Real pinned Windows x64 CPU executable version/options and native RPC device
   discovery through the mutual TLS bridge passed. Independent socket tests also

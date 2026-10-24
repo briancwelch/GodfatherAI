@@ -1,8 +1,8 @@
 # Shared Inference removal and action feedback
 
-Source update, 2026-10-24. The published Command Center and native installers
-remain **0.10.0-rc.3**. No installer packaging or deployment was performed for
-this correction.
+Published as **0.10.0-rc.5**, 2026-10-24, after separate owner authorization.
+See the [release verification](shared-inference-feedback-release-2026-10-24.md).
+The implementation checks below record source validation before packaging.
 
 ## Changes
 
@@ -44,5 +44,5 @@ this correction.
 
 Core tests use isolated fixtures and actual PostgreSQL; they do not prove a new
 installed build, live accounts, multi-computer inference or physical GPU behavior.
-Native macOS/Linux interaction still needs platform acceptance. Existing published
-workers need a subsequent authorized build/release to receive these changes.
+Native macOS/Linux interaction still needs platform acceptance. Existing installed
+workers receive these changes through **File > Check for updates**.

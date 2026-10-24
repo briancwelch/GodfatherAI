@@ -5,13 +5,15 @@ models. The **Command Center** is where you manage workspaces, agents and jobs.
 **Consigliere** is the worker app you install on each computer that will do the work.
 
 The Command Center and Windows/Apple Silicon/Intel Mac workers are published as
-**0.10.0-rc.3**. See the [release verification](docs/operations/shared-inference-release-2026-10-24.md)
+**0.10.0-rc.5**. See the [release verification](docs/operations/shared-inference-feedback-release-2026-10-24.md)
 for package hashes, native checks, backup and data preservation results.
 
 Consigliere now includes **Scan for Local Models** and a **Shared Inference** tab
 with guided llama.cpp setup and each computer owner's device approval. Platform
 administrators can choose which roles may add new computers. Update workers using
 **File > Check for updates**; existing connections, settings and history remain.
+Shared Inference now supports right-click **Delete setup** and shows explicit
+progress and results for approval, withdrawal and other setup actions.
 
 ## Sign in
 
