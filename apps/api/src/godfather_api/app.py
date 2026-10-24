@@ -28,10 +28,12 @@ from godfather_api.enrollment import router as enrollment_router
 from godfather_api.inference import router as inference_router
 from godfather_api.jobs import router as jobs_router
 from godfather_api.logging import configure_logging, correlation_id
+from godfather_api.node_registration import router as node_registration_router
 from godfather_api.nodes import router as nodes_router
 from godfather_api.nodes import sweep_health
 from godfather_api.provider_connections import router as provider_connections_router
 from godfather_api.scheduler import scheduler_tick
+from godfather_api.shared_engine_setup import router as shared_engine_setup_router
 
 logger = logging.getLogger("godfather.api")
 CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -91,6 +93,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(provider_connections_router)
     app.include_router(appearance_router)
+    app.include_router(node_registration_router)
+    app.include_router(shared_engine_setup_router)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:

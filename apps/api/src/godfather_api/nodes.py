@@ -317,6 +317,9 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
     node = session.scalar(select(Node).where(Node.id == credential.node_id).with_for_update())
     created = node is None
     if node is None:
+        from godfather_api.node_registration import require_add_nodes
+
+        require_add_nodes(session, credential.owner_id)
         node = Node(
             id=credential.id,
             owner_id=credential.owner_id,

@@ -12,7 +12,7 @@ import webbrowser
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any
 
 from godfather_model_gateway import ProviderConfig
@@ -29,7 +29,7 @@ from godfather_worker.desktop import (
     save_settings,
 )
 from godfather_worker.discovery import discover
-from godfather_worker.inference import discover_models
+from godfather_worker.local_model_scan import ScanResult, default_roots, local_servers, scan
 from godfather_worker.native_desktop import (
     CredentialStore,
     acquire_lock,
@@ -72,7 +72,13 @@ class Application:
         self.address = tk.StringVar(value=WEB_ORIGIN)
         self.owner = tk.StringVar(value="")
         self.code = tk.StringVar(value="")
-        self.inventory = tk.StringVar(value="Checking existing local AI models...")
+        self.inventory = tk.StringVar(value="Select Scan for Local Models to search this computer.")
+        self.scan_busy = False
+        self.scan_cancel = threading.Event()
+        self.scan_result: ScanResult | None = None
+        self.scan_roots: list[Path] = []
+        self.scan_servers: list[ProviderConfig] = []
+        self.scan_status = tk.StringVar(value="Local library paths stay on this computer.")
         self.hardware = tk.StringVar(value="")
         self.inference = tk.BooleanVar(value=False)
         self.model_installation = tk.BooleanVar(value=False)
@@ -211,7 +217,7 @@ class Application:
         )
         command(connection_commands, "Open Center", "workspaces", self.open_center)
         execution_commands = group("CONTRIBUTION")
-        self.resume_button = command(execution_commands, "Resume", "run", self.start, True)
+        self.resume_button = command(execution_commands, "Resume", "run", self.resume, True)
         self.pause_button = command(execution_commands, "Pause", "disable", self.pause, True)
         computer_commands = group("WORKSPACE")
         command(computer_commands, "Projects", "workspaces", self.projects)
@@ -221,13 +227,31 @@ class Application:
         footer.pack(side="bottom", fill="x")
         ttk.Label(
             footer,
-            text="Build " + (self.build_version or "Source checkout (unreleased)"),
+            text="Build " + (self.build_version or "Source checkout"),
             style="Muted.TLabel",
         ).pack(side="left")
-        ttk.Button(footer, textvariable=self.update_status, command=self.check_updates).pack(
-            side="left", padx=12
+        ttk.Button(
+            footer, textvariable=self.update_status, command=self.check_updates, width=25
+        ).pack(side="left", padx=12)
+        connection_status = ttk.Frame(footer)
+        connection_status.pack(side="right", fill="x", expand=True)
+        # A drawn icon avoids platform-dependent emoji/font rendering.
+        self.secure_icon = tk.PhotoImage(width=14, height=16)
+        self.secure_icon.put("#087F8C", to=(2, 7, 12, 15))
+        for x, y in ((4, 3), (5, 2), (6, 2), (7, 2), (8, 3)):
+            self.secure_icon.put("#087F8C", to=(x, y, x + 2, 8))
+        self.secure_label = ttk.Label(connection_status, image=self.secure_icon)
+        self.secure_label.pack(side="left", padx=(0, 5))
+        self.secure_label.pack_forget()
+        self.footer_status = ttk.Label(
+            connection_status, textvariable=self.status, style="Muted.TLabel", wraplength=240
         )
-        ttk.Label(footer, textvariable=self.status, style="Muted.TLabel").pack(side="right")
+        self.footer_status.pack(side="left", fill="x", expand=True)
+        self.footer_status.bind(
+            "<Configure>",
+            lambda event: self.footer_status.configure(wraplength=max(1, min(400, event.width))),
+        )
+        self.update_progress = ttk.Progressbar(connection_status, mode="indeterminate", length=90)
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
         self.notebook = ttk.Notebook(body)
@@ -235,9 +259,16 @@ class Application:
         connection = ttk.Frame(self.notebook, padding=20)
         self.projects_tab = ttk.Frame(self.notebook)
         models = ttk.Frame(self.notebook, padding=20)
+        self.scan_tab = ttk.Frame(self.notebook, padding=20)
         self.notebook.add(connection, text="Connection")
         self.notebook.add(self.projects_tab, text="Projects")
         self.notebook.add(models, text="Models & API connections")
+        self.notebook.add(self.scan_tab, text="Local model scan")
+        self.shared_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.shared_tab, text="Shared Inference")
+        from godfather_worker.shared_inference_ui import SharedInference
+
+        self.shared_inference = SharedInference(self, self.shared_tab)
         self.projects_placeholder = ttk.Label(
             self.projects_tab,
             text="Connect this computer, then open Projects to configure your workspace.",
@@ -304,6 +335,60 @@ class Application:
             row=1, column=0, columnspan=2, sticky="w", pady=16
         )
         ttk.Label(models, text="Local models", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        self.model_scan_button = ttk.Button(
+            models, text="Scan for Local Models", command=self.scan_models
+        )
+        self.model_scan_button.pack(anchor="w", pady=(0, 8))
+        scan_controls = ttk.Frame(self.scan_tab)
+        scan_controls.pack(fill="x", pady=(0, 8))
+        self.scan_button = ttk.Button(
+            scan_controls, text="Scan for Local Models", command=self.scan_models
+        )
+        self.scan_button.pack(side="left")
+        self.cancel_scan_button = ttk.Button(
+            scan_controls, text="Cancel scan", command=self.scan_cancel.set, state="disabled"
+        )
+        self.cancel_scan_button.pack(side="left", padx=6)
+        ttk.Button(scan_controls, text="Add folder…", command=self.add_scan_folder).pack(
+            side="left", padx=6
+        )
+        ttk.Button(scan_controls, text="Add local server…", command=self.add_scan_server).pack(
+            side="left"
+        )
+        ttk.Label(
+            self.scan_tab, textvariable=self.scan_status, wraplength=850, style="Muted.TLabel"
+        ).pack(anchor="w")
+        table_frame = ttk.Frame(self.scan_tab)
+        table_frame.pack(fill="both", expand=True, pady=8)
+        self.scan_table = ttk.Treeview(
+            table_frame, columns=("model", "status", "location"), show="headings", height=5
+        )
+        for column, caption, width in (
+            ("model", "Model", 240),
+            ("status", "Discovery", 160),
+            ("location", "Local location / server", 360),
+        ):
+            self.scan_table.heading(column, text=caption)
+            self.scan_table.column(column, width=width)
+        scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.scan_table.yview)
+        scroll.pack(side="right", fill="y")
+        self.scan_table.configure(yscrollcommand=scroll.set)
+        self.scan_table.pack(side="left", fill="both", expand=True)
+        self.use_scanned_button = ttk.Button(
+            self.scan_tab,
+            text="Use detected local text servers",
+            command=self.use_scanned_models,
+            state="disabled",
+        )
+        self.use_scanned_button.pack(anchor="w")
+        ttk.Label(
+            self.scan_tab,
+            text="Searches common model libraries and any folders you add, up to 128 results. "
+            "Files found on disk need a compatible running server. Use detected servers enables "
+            "local chat and streaming; workspace permissions stay separate.",
+            wraplength=850,
+            style="Muted.TLabel",
+        ).pack(anchor="w", pady=(4, 8))
         ttk.Checkbutton(
             models,
             text="Allow my existing local AI models",
@@ -370,8 +455,19 @@ class Application:
             or not self.identity
             or not self.build_version
         ):
+            if not self.identity:
+                self.update_status.set("Connect to check updates")
+            elif not self.build_version:
+                self.update_status.set("Source checkout · No update")
             return
         if self.update_info:
+            if (
+                self.shared_inference.engine
+                or self.shared_inference.activating
+                or self.shared_inference.stopping
+            ):
+                self.update_status.set("Update ready · Stop shared engine")
+                return
             if self.preferences.automatic_updates or messagebox.askyesno(
                 "Update Available",
                 f"Install Consigliere {self.update_info['version']}? "
@@ -381,7 +477,8 @@ class Application:
                 self.update_busy = True
                 item = dict(self.update_info)
                 origin = self.identity.get("origin", self.address.get())
-                self.update_status.set("Downloading verified update…")
+                self.update_status.set("Downloading update…")
+                self.show_update_progress(True)
 
                 def download() -> None:
                     from godfather_worker.updates import download_update
@@ -395,6 +492,8 @@ class Application:
                 self.background(download)
             return
         self.update_checking = True
+        self.update_status.set("Checking for updates…")
+        self.show_update_progress(True)
         origin, current = self.identity.get("origin", self.address.get()), self.build_version
 
         def check() -> None:
@@ -406,6 +505,125 @@ class Application:
                 self.event("update_failed")
 
         self.background(check)
+
+    def show_update_progress(self, active: bool) -> None:
+        if active:
+            before = (
+                self.secure_label
+                if self.secure_label.winfo_manager() == "pack"
+                else self.footer_status
+            )
+            self.update_progress.pack(side="left", before=before, padx=(0, 8))
+            self.update_progress.start(12)
+        else:
+            self.update_progress.stop()
+            self.update_progress.pack_forget()
+
+    def add_scan_folder(self) -> None:
+        folder = filedialog.askdirectory(
+            title="Choose another local model folder", parent=self.root
+        )
+        if folder and Path(folder) not in self.scan_roots:
+            self.scan_roots.append(Path(folder))
+            self.scan_status.set(
+                f"{len(self.scan_roots)} additional folder(s). Select Scan for Local Models."
+            )
+
+    def add_scan_server(self) -> None:
+        port = simpledialog.askinteger(
+            "Local model server",
+            "Local OpenAI-compatible server port:",
+            minvalue=1,
+            maxvalue=65535,
+            parent=self.root,
+        )
+        if port is None:
+            return
+        config = ProviderConfig(
+            id=f"local-server-{port}",
+            provider="openai_compatible",
+            url=f"http://127.0.0.1:{port}/v1",
+        )
+        if not any(c.id == config.id for c in self.scan_servers):
+            if len(self.scan_servers) >= 7:
+                self.scan_status.set(
+                    "The existing limit is eight local providers including Ollama."
+                )
+                return
+            self.scan_servers.append(config)
+        self.scan_status.set("Local server added. Select Scan for Local Models.")
+
+    def scan_models(self) -> None:
+        if self.scan_busy or self.closing:
+            return
+        self.scan_busy = True
+        self.notebook.select(self.scan_tab)  # type: ignore[no-untyped-call]
+        self.scan_cancel.clear()
+        self.scan_button.configure(state="disabled")
+        self.model_scan_button.configure(state="disabled")
+        self.cancel_scan_button.configure(state="normal")
+        self.use_scanned_button.configure(state="disabled")
+        self.scan_status.set("Scanning local models…")
+        roots = [*default_roots(), *self.scan_roots]
+        defaults = local_servers()
+        configs = list(
+            {
+                c.id: c
+                for c in [
+                    defaults[0],
+                    *self.scan_servers,
+                    *self.settings.local_providers,
+                    *defaults[1:],
+                ]
+            }.values()
+        )[:8]
+
+        def search() -> None:
+            try:
+                result = scan(
+                    roots,
+                    configs,
+                    self.scan_cancel,
+                    lambda message: self.event("scan_progress", message=message),
+                )
+                self.event("scan_finished", result=result)
+            except (OSError, ValueError):
+                self.event("scan_failed")
+
+        self.background(search)
+
+    def use_scanned_models(self) -> None:
+        if not self.scan_result or self.scan_busy or self.scan_result.cancelled:
+            return
+        detected = [
+            p.model_copy(update={"chat_enabled": True, "stream_enabled": True})
+            for p in self.scan_result.providers
+            if p.provider == "openai_compatible"
+        ]
+        providers = list({p.id: p for p in [*self.settings.local_providers, *detected]}.values())
+        if len(providers) > 7:
+            if not messagebox.askyesno(
+                "Local server limit",
+                "Only seven text servers plus Ollama fit the existing provider limit. "
+                "Replace the saved text-server list with the servers found by this scan? "
+                "Current work finishes first.\n\n" + "\n".join(p.url for p in detected),
+                parent=self.root,
+            ):
+                self.scan_status.set("Saved local servers retained. No model permissions changed.")
+                return
+            providers = detected
+        try:
+            self.apply_settings(
+                self.settings.model_copy(update={"inference": True, "local_providers": providers})
+            )
+        except (OSError, ValueError):
+            self.scan_status.set(
+                "Local server settings were not saved. Check worker-folder access."
+            )
+            return
+        self.scan_status.set(
+            "Detected local text servers enabled. Current work finishes before inventory refreshes."
+        )
 
     def finish_update(self) -> None:
         if self.controller and self.controller.running:
@@ -419,7 +637,7 @@ class Application:
             except (OSError, ValueError):
                 self.update_busy = False
                 self.update_pending = None
-                self.update_status.set("Update failed. Retry from File → Check for updates.")
+                self.update_status.set("Update failed · Click to retry")
                 return
             self.quit()
 
@@ -489,6 +707,13 @@ class Application:
     def set_connection_state(self, state: str) -> None:
         self.connection_state.set(state)
         self.connection_badge.configure(background="#176044" if state == "CONNECTED" else "#58431B")
+        self.secure_label.pack_forget()
+        if (
+            state == "CONNECTED"
+            and self.controller
+            and self.controller.origin.startswith("https://")
+        ):
+            self.secure_label.pack(side="left", before=self.footer_status, padx=(0, 5))
 
     def background(self, action: Callable[[], None]) -> None:
         def work() -> None:
@@ -539,18 +764,15 @@ class Application:
         settings = (
             Contribution.model_validate_json(path.read_text()) if path.exists() else Contribution()
         )
-        advertisement = discover()
+        advertisement = discover(include_models=False)
         if not path.exists() and identity is None:
             settings = first_run_contribution(advertisement.resources)
-        deployments = asyncio.run(
-            discover_models([ProviderConfig(id="local-ollama", provider="ollama")])
-        )
         self.event(
             "loaded",
             identity=identity,
             settings=settings,
             advertisement=advertisement,
-            models=[m.identifier for m in deployments],
+            models=[],
             startup=login_startup_enabled(),
         )
 
@@ -599,8 +821,15 @@ class Application:
         self.background(exchange)
         webbrowser.open(pairing.browser_url)
 
+    def resume(self) -> None:
+        self.shared_inference.suspended = False
+        self.start()
+        self.shared_inference.refresh()
+
     def start(self) -> None:
         if not self.identity or self.closing or (self.controller and self.controller.running):
+            return
+        if self.shared_inference.activating or self.shared_inference.stopping:
             return
         try:
             self.settings = self.settings.model_copy(
@@ -611,7 +840,9 @@ class Application:
                 }
             )
             self.controller = Controller(self.identity, self.folder, self.event)
-            self.controller.start(self.settings)
+            self.controller.start(
+                self.settings, self.shared_inference.engine if self.shared_inference.ready else None
+            )
             self.status.set("Connecting...")
             self.set_connection_state("CONNECTING")
             self.resume_button.configure(state="disabled")
@@ -678,6 +909,9 @@ class Application:
 
     def pause(self) -> None:
         self.settings_restart_pending = False
+        self.shared_inference.pending = None
+        self.shared_inference.suspended = True
+        self.shared_inference.stop_local(resume=False)
         if self.controller and self.controller.running:
             self.controller.stop()
             self.status.set("Pausing safely...")
@@ -734,7 +968,14 @@ class Application:
             messagebox.showerror("Start at login", str(error))
 
     def forget(self) -> None:
-        if self.pairing_busy or (self.controller and self.controller.running):
+        if (
+            self.pairing_busy
+            or self.shared_inference.busy
+            or self.shared_inference.engine
+            or self.shared_inference.activating
+            or self.shared_inference.stopping
+            or (self.controller and self.controller.running)
+        ):
             messagebox.showinfo(
                 "Pause first", "Pause and wait for the worker to stop before disconnecting."
             )
@@ -770,6 +1011,9 @@ class Application:
             self.quit()
 
     def quit(self) -> None:
+        self.scan_cancel.set()
+        self.shared_inference.cancel.set()
+        self.show_update_progress(False)
         if self.update_timer:
             self.root.after_cancel(self.update_timer)
             self.update_timer = None
@@ -784,7 +1028,13 @@ class Application:
         self.await_close()
 
     def await_close(self) -> None:
-        if self.pairing_busy or (self.controller and self.controller.running):
+        if (
+            self.pairing_busy
+            or self.shared_inference.activating
+            or self.shared_inference.stopping
+            or self.shared_inference.busy
+            or (self.controller and self.controller.running)
+        ):
             self.root.after(100, self.await_close)
         else:
             if self.tray:
@@ -850,8 +1100,47 @@ class Application:
             if name == "network":
                 self.network_checking = False
                 self.network.set(values["message"])
+            elif name == "scan_progress":
+                self.scan_status.set(values["message"])
+            elif name in ("scan_finished", "scan_failed"):
+                self.scan_busy = False
+                self.scan_button.configure(state="normal")
+                self.model_scan_button.configure(state="normal")
+                self.cancel_scan_button.configure(state="disabled")
+                if name == "scan_failed":
+                    self.scan_status.set("Scan failed. Check folder access and scan again.")
+                else:
+                    self.scan_result = values["result"]
+                    self.scan_table.delete(*self.scan_table.get_children())
+                    for model in self.scan_result.models:
+                        self.scan_table.insert(
+                            "",
+                            "end",
+                            values=(
+                                model.name,
+                                "Local server" if model.served else "Files · runtime unverified",
+                                model.location,
+                            ),
+                        )
+                    summary = f"Found {len(self.scan_result.models)} model(s); limit 128."
+                    if self.scan_result.omitted:
+                        summary += f" {self.scan_result.omitted} additional result(s) omitted."
+                    if self.scan_result.incomplete:
+                        summary += (
+                            " Scan cancelled or search safety limit reached; "
+                            "narrow the folders and retry."
+                        )
+                    if self.scan_result.unreadable:
+                        summary += f" {self.scan_result.unreadable} unreadable item(s) skipped."
+                    self.scan_status.set(summary)
+                    self.use_scanned_button.configure(
+                        state="normal"
+                        if self.scan_result.providers and not self.scan_result.cancelled
+                        else "disabled"
+                    )
             elif name == "update_checked":
                 self.update_checking = False
+                self.show_update_progress(False)
                 self.update_info = values["item"]
                 self.update_status.set(
                     "Update Available" if self.update_info else "Worker is up to date"
@@ -862,15 +1151,17 @@ class Application:
                     self.root.after_cancel(self.update_timer)
                 self.update_timer = self.root.after(1800000, self.periodic_update_check)
             elif name == "update_failed":
+                self.show_update_progress(False)
                 self.update_busy = self.update_checking = False
                 self.update_info = None
-                self.update_status.set("Update check/download failed. Click to retry.")
+                self.update_status.set("Update failed · Click to retry")
                 if self.update_timer:
                     self.root.after_cancel(self.update_timer)
                 self.update_timer = self.root.after(1800000, self.periodic_update_check)
             elif name == "update_downloaded":
+                self.show_update_progress(False)
                 self.update_pending = (values["path"], values["sha256"])
-                self.update_status.set("Update ready · waiting for current work")
+                self.update_status.set("Update ready · Waiting…")
                 if self.controller and self.controller.running:
                     self.controller.maintenance_event.set()
                 else:
@@ -909,12 +1200,7 @@ class Application:
             elif name == "loaded":
                 self.models = values["models"]
                 self.inventory.set(
-                    "Local models: "
-                    + (
-                        ", ".join(self.models)
-                        or "None found. Choose Set up local AI to add a model, or connect "
-                        "an API provider under Models & API connections."
-                    )
+                    "Select Scan for Local Models to search installed libraries and local servers."
                 )
                 self.settings = values["settings"]
                 self.autostart.set(values["startup"])
@@ -1006,7 +1292,9 @@ class Application:
                 self.pause_button.configure(state="disabled")
                 if self.status.get().startswith("Pausing"):
                     self.status.set("Paused")
-                if self.update_pending:
+                if self.shared_inference.worker_stopped():
+                    pass
+                elif self.update_pending:
                     self.root.after(100, self.finish_update)
                 elif self.local_setup_pending:
                     self.root.after(100, self.begin_local_setup)
@@ -1014,13 +1302,13 @@ class Application:
                     self.root.after(100, self.restart_after_settings)
             elif name == "error":
                 self.status.set(values["message"])
-            elif name == "project_update" and not self.closing:
+            elif name == "shared_update" or name == "project_update" and not self.closing:
                 values["apply"]()
             elif name in ("show", "open", "resume", "pause", "quit"):
                 {
                     "show": self.show,
                     "open": self.open_center,
-                    "resume": self.start,
+                    "resume": self.resume,
                     "pause": self.pause,
                     "quit": self.quit,
                 }[name]()
@@ -1079,6 +1367,12 @@ def main() -> int:
 
         assert program_source().is_file()
         self_test_stage("source_ready")
+        from godfather_worker.llama_runtime import catalog
+        from godfather_worker.shared_engine_transport import hostname
+
+        assert catalog()["version"] == "b11846"
+        assert callable(hostname)
+        self_test_stage("shared_engine_ready")
         root.withdraw()
         import pystray
         from PIL import Image

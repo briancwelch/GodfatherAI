@@ -357,6 +357,7 @@ version = "0.1.0"
 source = { editable = "packages/worker" }
 dependencies = [
     { name = "certifi" },
+    { name = "cryptography" },
     { name = "godfather-agent-runtime" },
     { name = "godfather-contracts" },
     { name = "godfather-model-gateway" },
@@ -369,6 +370,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "certifi", specifier = ">=2026.9.30" },
+    { name = "cryptography", specifier = ">=50,<51" },
     { name = "godfather-agent-runtime", editable = "packages/agent-runtime" },
     { name = "godfather-contracts", editable = "packages/shared-schemas" },
     { name = "godfather-model-gateway", editable = "packages/model-gateway" },

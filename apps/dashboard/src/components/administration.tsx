@@ -20,6 +20,7 @@ import {
 } from "./operational";
 import { UserName } from "./node-identity";
 import { AppearanceSettings } from "./appearance-settings";
+import { NodeRegistrationSettings } from "./node-registration-settings";
 import { BulkTable } from "./bulk-table";
 import type { Page, Snapshot } from "../lib/contracts";
 import { ConnectComputer } from "./connect-computer";
@@ -150,7 +151,7 @@ export default function Administration({
     "Permissions",
     "Computers",
     ...(user.permissions.includes("platform.manage")
-      ? ["Users", "Invitations", "Appearance", "Audit"]
+      ? ["Users", "Invitations", "Node permissions", "Appearance", "Audit"]
       : []),
   ];
   const platform = user.permissions.includes("platform.manage");
@@ -612,7 +613,7 @@ export default function Administration({
                 after your browser approval. Revoke a lost or retired computer
                 below.
               </p>
-              {user.permissions.includes("nodes.contribute") && (
+              {user.permissions.includes("nodes.add") && (
                 <details>
                   <summary>
                     Advanced: manual command-line worker credential
@@ -716,6 +717,13 @@ export default function Administration({
           )}
           {platform && (
             <>
+              <section
+                role="tabpanel"
+                aria-label="Node permissions"
+                hidden={tab !== "Node permissions"}
+              >
+                {tab === "Node permissions" && <NodeRegistrationSettings />}
+              </section>
               <section
                 role="tabpanel"
                 aria-label="Appearance"

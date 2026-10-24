@@ -11,18 +11,22 @@ import subprocess
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from uuid import UUID
 
 from godfather_contracts import Contract, Heartbeat, Registration, Resources
 from godfather_contracts.coding import CodingRepository
-from pydantic import Field
+from godfather_model_gateway import ProviderConfig
+from pydantic import Field, field_validator
 
 from godfather_worker import cli
 from godfather_worker.client import WorkerClient
 from godfather_worker.workloads import WorkloadConfig
+
+if TYPE_CHECKING:
+    from godfather_worker.shared_engine import Engine
 
 WEB_ORIGIN = "https://app.the-godfather.ai"
 API_ORIGIN = "https://api.the-godfather.ai"
@@ -107,6 +111,24 @@ class Contribution(Contract):
     allowed_workspace_ids: list[UUID] = Field(default_factory=list, max_length=128)
     repositories: list[CodingRepository] = Field(default_factory=list, max_length=8, repr=False)
     workloads: WorkloadConfig | None = None
+    local_providers: list[ProviderConfig] = Field(default_factory=list, max_length=7)
+
+    @field_validator("local_providers")
+    @classmethod
+    def local_only(cls, providers: list[ProviderConfig]) -> list[ProviderConfig]:
+        if len({p.id for p in providers}) != len(providers):
+            raise ValueError("Local server aliases must be unique")
+        for provider in providers:
+            if (
+                provider.provider != "openai_compatible"
+                or urlsplit(provider.url).hostname not in ("127.0.0.1", "localhost", "::1")
+                or provider.api_key_env
+                or provider.connection_id
+                or provider.shared_inference_group_id
+                or provider.id == "local-ollama"
+            ):
+                raise ValueError("Scanned local servers must be owner-local, without account keys")
+        return providers
 
     def with_workspace_contribution(self, enabled: bool) -> "Contribution":
         """One explicit local choice; legacy scopes and unrelated permissions survive."""
@@ -142,15 +164,23 @@ def first_run_contribution(actual: Resources) -> Contribution:
 
 
 class LimitedClient(WorkerClient):
-    def __init__(self, token: str, contribution: Contribution, origin: str = API_ORIGIN) -> None:
+    def __init__(
+        self,
+        token: str,
+        contribution: Contribution,
+        origin: str = API_ORIGIN,
+        engine: "Engine | None" = None,
+    ) -> None:
         super().__init__(coordinator_origin(origin), token)
         self.contribution = contribution
+        self.engine = engine
 
     def post_document(self, path: str, payload: Contract) -> object:
         if isinstance(payload, (Registration, Heartbeat)):
-            payload = payload.model_copy(
-                update={"resources": self.contribution.resources(payload.resources)}
-            )
+            resources = self.contribution.resources(payload.resources)
+            if self.engine is not None and self.engine.alive:
+                resources = resources.model_copy(update={"gpus": self.engine.gpu_advertisement()})
+            payload = payload.model_copy(update={"resources": resources})
         return super().post_document(path, payload)
 
 
@@ -204,7 +234,7 @@ class Controller:
     def running(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
 
-    def start(self, settings: Contribution) -> None:
+    def start(self, settings: Contribution, engine: "Engine | None" = None) -> None:
         if self.running:
             raise ValueError("Worker is already running")
         if (
@@ -232,6 +262,23 @@ class Controller:
             if len({r.id for r in settings.repositories}) != len(settings.repositories):
                 raise ValueError("Each coding project must have a distinct identity")
         save_settings(self.folder / "settings.json", settings)
+        budgets = settings
+        if engine is not None:
+            if not engine.alive or engine.group.group is None:
+                raise ValueError("The shared engine must be ready before contributing")
+            # Keep saved choices; reserve this session for the approved shared model.
+            settings = settings.model_copy(
+                update={
+                    "primary": "inference",
+                    "inference": False,
+                    "account_providers": False,
+                    "cloud_images": False,
+                    "model_installation": False,
+                    "runtime_installation": False,
+                    "repositories": [],
+                    "workloads": None,
+                }
+            )
         arguments = [
             "--url",
             self.origin,
@@ -241,10 +288,40 @@ class Controller:
             "1",
             "--policy",
             "shared" if settings.shared else "dedicated",
+            "--shared-engine-setup",
         ]
+        if engine is not None:
+            assert engine.group.group is not None
+            group_path = self.folder / "shared-engine/active-group.json"
+            group_path.write_text(
+                json.dumps([engine.group.group.model_dump(mode="json")]), encoding="utf-8"
+            )
+            arguments += [
+                "--shared-inference-config",
+                str(group_path),
+                "--managed-shared-inference",
+                str(engine.group.proposal.id),
+            ]
+            if engine.provider:
+                provider_path = self.folder / "shared-engine/active-provider.json"
+                provider_path.write_text(
+                    json.dumps([engine.provider.model_dump(mode="json")]), encoding="utf-8"
+                )
+                arguments += ["--inference-config", str(provider_path)]
         if settings.inference:
             provider = self.folder / "ollama.json"
-            provider.write_text('[{"id":"local-ollama","provider":"ollama"}]', encoding="utf-8")
+            provider.write_text(
+                json.dumps(
+                    [
+                        {
+                            "id": "local-ollama",
+                            "provider": "ollama",
+                        },
+                        *(p.model_dump(mode="json") for p in settings.local_providers),
+                    ]
+                ),
+                encoding="utf-8",
+            )
             secondary = "inference" if settings.primary == "cpu" else "cpu"
             arguments += ["--secondary", secondary, "--inference-config", str(provider)]
         if settings.model_installation:
@@ -295,7 +372,7 @@ class Controller:
             arguments += ["--allow-workspace", str(workspace)]
         self.stop_event = threading.Event()
         self.maintenance_event.clear()
-        client = LimitedClient(self.identity["token"], settings, self.origin)
+        client = LimitedClient(self.identity["token"], budgets, self.origin, engine)
 
         def run() -> None:
             try:

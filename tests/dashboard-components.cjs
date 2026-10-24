@@ -33,6 +33,31 @@ const workspaces = require("../apps/dashboard/src/components/workspace-directory
 const client = require("../apps/dashboard/src/lib/control-client.ts");
 const imageReadiness = require("../apps/dashboard/src/components/image-readiness.tsx");
 
+test("node registration settings use the authenticated control bridge only", () => {
+  const nodeSettings = require("../apps/dashboard/src/components/node-registration-settings.tsx");
+  const html = renderToStaticMarkup(
+    React.createElement(nodeSettings.NodeRegistrationSettings),
+  );
+  assert.match(html, /Node registration permissions/);
+  assert.match(html, /Loading saved permissions/);
+  assert.equal(
+    server.allowedPath("administration/node-registration", "GET"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("administration/node-registration", "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("administration/node-registration", "DELETE"),
+    false,
+  );
+  assert.equal(
+    server.allowedPath("administration/node-registration/other", "POST"),
+    false,
+  );
+});
+
 test("image readiness names the workspace blocker and exposes an explicit administrator action", () => {
   const model = {
     node_name: "Test computer",
@@ -682,10 +707,13 @@ test("administration renders backend account identity and hides platform control
   assert.match(html, /&lt;Test contributor&gt;/);
   assert.match(html, /Owned computers and credentials/);
   assert.match(html, /Consigliere downloads/);
-  assert.match(
-    html,
-    /<details><summary>Advanced: manual command-line worker credential/,
+  assert.doesNotMatch(html, /Advanced: manual command-line worker credential/);
+  const allowed = renderToStaticMarkup(
+    React.createElement(administration.default, {
+      initialUser: { ...user, permissions: ["nodes.contribute", "nodes.add"] },
+    }),
   );
+  assert.match(allowed, /Advanced: manual command-line worker credential/);
   assert.ok(!html.includes("<h2>Users</h2>"));
   assert.ok(!html.includes("<h2>Invitations</h2>"));
   assert.match(html, /Loading authorized workspaces/);

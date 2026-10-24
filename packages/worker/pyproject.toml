@@ -12,6 +12,7 @@ dependencies = [
     "pystray>=0.19.5,<0.20",
     "Pillow>=12,<13",
     "certifi>=2026.9.30",
+    "cryptography>=50,<51",
 ]
 
 [project.scripts]

@@ -122,9 +122,15 @@ class OllamaProvider(HTTPProvider):
         result: list[ModelDeployment] = []
         try:
             models = data["models"]
-            if not isinstance(models, list) or len(models) > 128:
+            if not isinstance(models, list):
                 raise GatewayError("invalid_response")
-            for model in models:
+            if self.config.discovery_models is not None:
+                models = [
+                    m
+                    for m in models
+                    if isinstance(m, dict) and m.get("name") in self.config.discovery_models
+                ]
+            for model in models[:128]:
                 identifier = model["name"]
                 info = await self.request("POST", "api/show", {"model": identifier})
                 capabilities = info.get("capabilities", [])
@@ -196,7 +202,15 @@ class OpenAICompatibleProvider(HTTPProvider):
         data = await self.request("GET", "models")
         try:
             models = data["data"]
-            if not isinstance(models, list) or len(models) > 128:
+            if not isinstance(models, list):
+                raise GatewayError("invalid_response")
+            if self.config.discovery_models is not None:
+                models = [
+                    m
+                    for m in models
+                    if isinstance(m, dict) and m.get("id") in self.config.discovery_models
+                ]
+            if len(models) > 128:
                 raise GatewayError("invalid_response")
             operations: list[Any] = []
             if self.config.chat_enabled:

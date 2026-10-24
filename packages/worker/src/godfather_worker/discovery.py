@@ -194,7 +194,7 @@ def discover_resources() -> tuple[Resources, list[str]]:
 _primed = [False]
 
 
-def discover() -> Advertisement:
+def discover(*, include_models: bool = True) -> Advertisement:
     systems: dict[str, Literal["windows", "macos", "linux"]] = {
         "Windows": "windows",
         "Darwin": "macos",
@@ -214,7 +214,7 @@ def discover() -> Advertisement:
     resources, warnings = discover_resources()
     runtimes = ["python"]
     models = []
-    if shutil.which("ollama"):
+    if include_models and shutil.which("ollama"):
         runtimes.append("ollama")
         output = run("ollama", "list")
         if not output:

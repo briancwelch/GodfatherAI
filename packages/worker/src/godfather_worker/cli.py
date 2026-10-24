@@ -12,7 +12,7 @@ from pathlib import Path
 from time import monotonic
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from godfather_agent_runtime import WorkflowError
 from godfather_agent_runtime.tools import ToolError
@@ -121,6 +121,8 @@ def main(
     parser.add_argument("--allow-owner", type=str, action="append", default=[])
     parser.add_argument("--allow-workspace", type=str, action="append", default=[])
     parser.add_argument("--share-with-workspaces", action="store_true")
+    parser.add_argument("--shared-engine-setup", action="store_true")
+    parser.add_argument("--managed-shared-inference", type=UUID)
     args = parser.parse_args(argv)
     try:
         if args.execute_synthetic and not args.simulate:
@@ -246,6 +248,16 @@ def main(
 
         values["worker_version"] = worker_version()
         values["shared_inference_groups"] = groups
+        if args.shared_engine_setup:
+            from godfather_contracts.shared_engine import SETUP_RUNTIME as SHARED_SETUP_RUNTIME
+
+            values["runtimes"].append(SHARED_SETUP_RUNTIME)
+        if args.managed_shared_inference:
+            from godfather_contracts.shared_engine import ACTIVE_PREFIX
+
+            if len(groups) != 1 or groups[0].id != args.managed_shared_inference:
+                raise ValueError("Managed execution requires exactly the approved group")
+            values["runtimes"].append(ACTIVE_PREFIX + str(groups[0].id))
         if args.primary:
             values["primary_capabilities"] = args.primary
         if args.secondary:

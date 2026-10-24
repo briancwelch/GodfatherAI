@@ -18,7 +18,7 @@ const account = {
   email: "owner@example.invalid",
   display_name: "Isolated owner",
   roles: ["platform_admin"],
-  permissions: ["platform.manage", "nodes.contribute"],
+  permissions: ["platform.manage", "nodes.contribute", "nodes.add"],
   enabled: true,
   picture: null,
 };
@@ -96,6 +96,11 @@ new Function(
   }).outputText,
 )(appearanceModule, appearanceModule.exports);
 let siteAppearance = structuredClone(appearanceModule.exports.defaults);
+let nodePolicy = {
+  members_can_add_nodes: true,
+  contributors_can_add_nodes: true,
+};
+let failPolicySave = false;
 let computers = [1, 2, 3].map((i) => ({
   id: uuid(600 + i),
   name: `Fixture computer ${i}`,
@@ -149,6 +154,14 @@ const server = http.createServer(async (req, res) => {
   else if (route === "appearance") {
     if (req.method === "POST") siteAppearance = payload;
     value = siteAppearance;
+  } else if (route === "administration/node-registration") {
+    if (req.method === "POST" && failPolicySave) {
+      res.statusCode = 503;
+      value = { detail: "Fixture save unavailable" };
+    } else {
+      if (req.method === "POST") nodePolicy = payload;
+      value = nodePolicy;
+    }
   } else if (route === "administration/node-credentials")
     value = {
       items: computers.slice(offset, offset + 25),
@@ -602,7 +615,7 @@ const server = http.createServer(async (req, res) => {
     await ownerName.hover();
     assert.equal(await ownerName.getAttribute("title"), owner);
     assert.equal(await ownerName.getByRole("tooltip").isVisible(), true);
-    await page.getByText("Out of Date", { exact: true }).waitFor();
+    await page.getByText("Update Available", { exact: true }).waitFor();
     const tooltipBox = await ownerName.getByRole("tooltip").boundingBox();
     const tableBox = await page.locator(".table-scroll").boundingBox();
     assert.ok(
@@ -720,8 +733,109 @@ const server = http.createServer(async (req, res) => {
     await page.screenshot({
       path: path.join(folder, "audit-actor-tooltip.png"),
     });
+    await page
+      .getByRole("tab", { name: "Node permissions", exact: true })
+      .click();
+    const registration = page.getByRole("region", {
+      name: "Node registration permissions",
+    });
+    const members = registration.getByRole("switch", {
+      name: "Members can add nodes",
+      exact: true,
+    });
+    const contributors = registration.getByRole("switch", {
+      name: "Contributors can add nodes",
+      exact: true,
+    });
+    await members.waitFor();
+    assert.equal(await members.isChecked(), true);
+    assert.equal(await contributors.isChecked(), true);
+    const policyOrigin = await page.evaluate(() => performance.timeOrigin);
+    await members.uncheck();
+    await contributors.uncheck();
+    failPolicySave = true;
+    await registration
+      .getByRole("button", { name: "Save node permissions", exact: true })
+      .click();
+    await registration
+      .getByRole("alert")
+      .filter({ hasText: "Fixture save unavailable" })
+      .waitFor();
+    assert.equal(nodePolicy.members_can_add_nodes, true);
+    failPolicySave = false;
+    await registration
+      .getByRole("button", { name: "Save node permissions", exact: true })
+      .click();
+    await registration
+      .getByRole("status")
+      .filter({ hasText: "permissions saved" })
+      .waitFor();
+    assert.deepEqual(nodePolicy, {
+      members_can_add_nodes: false,
+      contributors_can_add_nodes: false,
+    });
+    assert.equal(
+      await page.evaluate(() => performance.timeOrigin),
+      policyOrigin,
+    );
+    await page.getByRole("tab", { name: "Settings", exact: true }).click();
+    await page
+      .getByRole("tab", { name: "Node permissions", exact: true })
+      .click();
+    await members.waitFor();
+    assert.equal(await members.isChecked(), false);
+    await page.screenshot({
+      path: path.join(folder, "node-registration-permissions.png"),
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: path.join(folder, "node-registration-permissions-mobile.png"),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const priorRoles = account.roles,
+      priorPermissions = account.permissions;
+    account.roles = ["member"];
+    account.permissions = ["nodes.contribute"];
+    await page.goto(origin + "/worker-enrollment#challenge=" + "a".repeat(64));
+    const reconnect = page.getByRole("checkbox", {
+      name: "Reconnect this computer, keeping its name and history.",
+    });
+    await reconnect.waitFor();
+    assert.equal(await reconnect.isChecked(), false);
+    assert.equal(await page.locator("#reconnect-guidance").isVisible(), true);
+    assert.match(
+      await page.locator("#reconnect-guidance").innerText(),
+      /Do not select this if you are connecting a new node for the first time/,
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Approve this computer", exact: true })
+        .isDisabled(),
+      true,
+    );
+    await reconnect.check();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Approve this computer", exact: true })
+        .isDisabled(),
+      false,
+    );
+    await page.screenshot({ path: path.join(folder, "reconnect-warning.png") });
+    account.roles = priorRoles;
+    account.permissions = priorPermissions;
     assert.deepEqual(errors, []);
     const result = {
+      node_registration_role_switches: true,
+      node_policy_save_failure_and_retry: true,
+      node_policy_persistence: true,
+      reconnect_warning_and_restricted_member: true,
       audit_actor_tooltip: true,
       owner_tooltip: true,
       worker_outdated: true,

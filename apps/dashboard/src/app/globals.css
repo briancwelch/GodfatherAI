@@ -56,6 +56,11 @@
   height: 16px;
   padding: 0;
 }
+.administration-page .form-switch input[type="checkbox"] {
+  width: 2.25em;
+  height: 1.2em;
+  border-radius: 2em;
+}
 .administration-page pre {
   max-width: 100%;
   overflow: auto;

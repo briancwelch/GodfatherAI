@@ -6,6 +6,11 @@ workers remain **0.9.0-rc.2**. The [member registration deployment verification]
 records packaging, preservation and public checks. See [cloud image setup](operations/cloud-images.md)
 for OpenAI/Gemini account connections and the required worker opt-ins.
 
+The [local model scan and node permissions update](operations/worker-scan-and-node-permissions-2026-10-23.md)
+is unreleased source work. Publishing and deployment are on hold.
+It now includes the [worker Shared Inference wizard](operations/shared-inference-wizard-2026-10-23.md)
+and owner-approved llama.cpp lifecycle management.
+
 ## Using the platform
 
 | Task                                            | Guide                                                                                       |

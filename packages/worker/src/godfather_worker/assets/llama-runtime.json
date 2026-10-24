@@ -1,0 +1,51 @@
+{
+  "version": "b11846",
+  "source": "https://github.com/ggml-org/llama.cpp/releases/tag/b11846",
+  "license": "MIT",
+  "artifacts": {
+    "windows-x64/cpu": [
+      "llama-b11846-bin-win-cpu-x64.zip",
+      "d4eeebd157d93085ef64b56bb35e4c8771d14ce1b0f15a97b982b3f42a25bb9d"
+    ],
+    "windows-arm64/cpu": [
+      "llama-b11846-bin-win-cpu-arm64.zip",
+      "50e7e8a4624e55a4b5deb0a8d48174ce81ac135ed6901f683e382c5a3686581a"
+    ],
+    "windows-x64/vulkan": [
+      "llama-b11846-bin-win-vulkan-x64.zip",
+      "e2f44c4e16e1db544716ecdce8f86d3ce9f92e1c8d8f5b8e5efc5a3e0757c3b2"
+    ],
+    "windows-arm64/vulkan": [
+      "llama-b11846-bin-win-vulkan-arm64.zip",
+      "55576a1039ed46952bf4365a5a380efb05f88aa22c38861a54ebd6b2f7eff0f8"
+    ],
+    "macos-arm64/cpu": [
+      "llama-b11846-bin-macos-arm64.tar.gz",
+      "b145e8065883ef6b124d47fa2ff5fc8a046bafe415a7e1db1efb00b0809a2ee1"
+    ],
+    "macos-arm64/metal": [
+      "llama-b11846-bin-macos-arm64.tar.gz",
+      "b145e8065883ef6b124d47fa2ff5fc8a046bafe415a7e1db1efb00b0809a2ee1"
+    ],
+    "macos-x64/cpu": [
+      "llama-b11846-bin-macos-x64.tar.gz",
+      "9a8008cb27a9d5ec7948ad479edb6fb2b6acdfbb31492cf4af4f36a7b9fe8a52"
+    ],
+    "linux-x64/cpu": [
+      "llama-b11846-bin-ubuntu-x64.tar.gz",
+      "eb26d338963f04eda3f70f23ef4a8575d44bc643f58d26c2f51925a58fbd43ff"
+    ],
+    "linux-arm64/cpu": [
+      "llama-b11846-bin-ubuntu-arm64.tar.gz",
+      "78c5fda29fc9f47e3c2c7af9ab82ed571858292ae18114b32e8f7b36f1d212c1"
+    ],
+    "linux-x64/vulkan": [
+      "llama-b11846-bin-ubuntu-vulkan-x64.tar.gz",
+      "92d10e8f3a4370988b6b7f7aa23647fb74dc3e59f8a9d2d407cb381c4932fc7a"
+    ],
+    "linux-arm64/vulkan": [
+      "llama-b11846-bin-ubuntu-vulkan-arm64.tar.gz",
+      "3ffa58a7fcfad72ca6f64ff8cc03e6d27fe0eee154f7877a848cfd6629a70a08"
+    ]
+  }
+}

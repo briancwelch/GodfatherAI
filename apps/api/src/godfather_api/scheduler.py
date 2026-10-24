@@ -107,6 +107,18 @@ def base_permitted(session: Session, job: Job, node: Node) -> bool:
         return False
     workspace = session.get(Workspace, job.workspace_id)
     requirements = Requirements.model_validate(job.requirements or {})
+    from godfather_contracts.shared_engine import ACTIVE_PREFIX
+
+    exclusive = [
+        r[len(ACTIVE_PREFIX) :]
+        for r in node_view(session, node).runtimes
+        if r.startswith(ACTIVE_PREFIX)
+    ]
+    if exclusive and (
+        requirements.shared_inference is None
+        or str(requirements.shared_inference.id) not in exclusive
+    ):
+        return False
     if workspace is None:
         return False
     if workspace.allowed_models is not None:

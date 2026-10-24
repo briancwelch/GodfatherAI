@@ -56,7 +56,13 @@ def require_permission(session: Session, owner_id: UUID, permission: str) -> Use
     return user
 
 
-def user_data(user: User) -> dict[str, object]:
+def user_data(user: User, session: Session | None = None) -> dict[str, object]:
+    effective = permissions(user)
+    if session is not None:
+        from godfather_api.node_registration import can_add_nodes
+
+        if user.enabled and can_add_nodes(session, user):
+            effective = sorted([*effective, "nodes.add"])
     return {
         "id": str(user.id),
         "email": user.email,
@@ -64,7 +70,7 @@ def user_data(user: User) -> dict[str, object]:
         "picture": user.picture,
         "enabled": user.enabled,
         "roles": roles(user),
-        "permissions": permissions(user),
+        "permissions": effective,
         "location": (user.profile or {}).get("location", ""),
     }
 
@@ -432,7 +438,7 @@ def me(request: Request, session: SessionDep) -> dict[str, object]:
     actor = human(request, session)
     user = session.get(User, actor.owner_id)
     assert user is not None
-    return user_data(user)
+    return user_data(user, session)
 
 
 @router.post("/logout")

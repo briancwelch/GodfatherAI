@@ -21,6 +21,12 @@ Task 2 waits for Task 1's durable output and receives it as quoted data. Readine
 
 ## Owner-controlled engine setup
 
+Unreleased 2026-10-23 source update: Consigliere now offers a
+[Shared Inference wizard](shared-inference-wizard-2026-10-23.md) to configure
+llama.cpp with each owner's local device approval. The manual declarations below
+remain supported for existing installations. Publishing/deployment of the wizard
+is on hold.
+
 A shared engine must already be installed and configured by the participating owners. Every member runs the updated worker source with the same `--shared-inference-config` JSON array. This locally opts that computer into that particular topology. The leader additionally uses `--inference-config` containing the loopback OpenAI-compatible engine provider. Followers need no provider configuration; they continue outbound authenticated heartbeats and advertise group consent. Do not run two Godfather workers under one identity simultaneously.
 
 Create one group per actual engine topology. Replace all example IDs with existing node IDs; do not create replacement node identities. Use a stable new group UUID. Member declarations must match exactly, including order and model alias. Supported engine labels are `llama_cpp` and `vllm`; supported splits are `pipeline` and `tensor`. These are descriptions of an engine configured by its owner, not engine launch commands.

@@ -37,6 +37,8 @@ class ProviderConfig(Contract):
     connection_id: UUID | None = None
     shared_inference_group_id: UUID | None = None
     model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
+    # Optional owner-local selection from an explicit scan; never sent as host paths.
+    discovery_models: list[Label] | None = Field(default=None, max_length=128)
     _api_key: SecretStr | None = PrivateAttr(default=None)
     _account_key: bool = PrivateAttr(default=False)
     url: str = Field(default="http://127.0.0.1:11434", max_length=2048, repr=False)

@@ -46,6 +46,10 @@ def group_permitted(session: Session, job: Job, node: Node) -> bool:
     group = Requirements.model_validate(job.requirements).shared_inference
     if group is None:
         return True
+    from godfather_api.shared_engine_setup import managed_permitted
+
+    if not managed_permitted(session, group):
+        return False
     if (
         group.mode == "wide_area"
         and not Requirements.model_validate(job.requirements).wide_area_consent

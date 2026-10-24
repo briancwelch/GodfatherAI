@@ -86,7 +86,7 @@ def users(
             )
         )
     rows, total = page_rows(session, query.order_by(User.created_at, User.id), offset, paged)
-    items = [user_data(u) for u in rows]
+    items = [user_data(u, session) for u in rows]
     return page_result(items, total, offset, paged)
 
 
@@ -129,7 +129,7 @@ def change_user(
         },
     )
     audit(session, "sessions_revoked", actor.owner_id, user_id)
-    return user_data(user)
+    return user_data(user, session)
 
 
 @router.post("/users/{user_id}/revoke-sessions")
@@ -421,6 +421,9 @@ def revoke_owned_credential(
 def node_credential(payload: NodeCreate, request: Request, session: SessionDep) -> dict[str, str]:
     actor = authenticate(request, session, "human")
     require_permission(session, actor.owner_id, "nodes.contribute")
+    from godfather_api.node_registration import require_add_nodes
+
+    require_add_nodes(session, actor.owner_id)
     if session.scalar(
         select(AccessCredential.id).where(
             AccessCredential.owner_id == actor.owner_id, AccessCredential.name == payload.name
@@ -670,7 +673,7 @@ def member_access(
     return {
         "user_id": str(user_id),
         "role": "owner" if workspace.owner_id == user_id else member.role if member else "none",
-        "account": user_data(user)
+        "account": user_data(user, session)
         if actor_user and "platform.manage" in permissions(actor_user)
         else None,
     }

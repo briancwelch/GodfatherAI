@@ -575,3 +575,31 @@ class DistributedTask(Base):
     depends_on: Mapped[list[str]] = mapped_column(JSONB)
     allowed_node_ids: Mapped[list[str]] = mapped_column(JSONB)
     ready: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
+class SharedEngineSetup(Entity, Owned, Base):
+    __tablename__ = "shared_engine_setups"
+    workspace_id: Mapped[UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="RESTRICT"), index=True
+    )
+    leader_node_id: Mapped[UUID] = mapped_column(ForeignKey("nodes.id", ondelete="RESTRICT"))
+    proposal: Mapped[dict[str, object]] = mapped_column(JSONB)
+    desired_running: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    generation: Mapped[int] = mapped_column(Integer, server_default="0")
+
+
+class SharedEngineConsent(Base):
+    __tablename__ = "shared_engine_consents"
+    group_id: Mapped[UUID] = mapped_column(
+        ForeignKey("shared_engine_setups.id", ondelete="RESTRICT"), primary_key=True
+    )
+    node_id: Mapped[UUID] = mapped_column(
+        ForeignKey("nodes.id", ondelete="RESTRICT"), primary_key=True, index=True
+    )
+    credential_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("access_credentials.id", ondelete="RESTRICT")
+    )
+    approved: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    configuration: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
+    phase: Mapped[str] = mapped_column(String(16), server_default="waiting")
+    error_code: Mapped[str | None] = mapped_column(String(64))

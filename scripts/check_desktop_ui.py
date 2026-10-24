@@ -62,7 +62,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         tempfile.TemporaryDirectory() as folder,
         patch("godfather_worker.desktop_app.CredentialStore", return_value=store),
         patch("godfather_worker.desktop_app.discover", return_value=profile("LV-01")),
-        patch("godfather_worker.desktop_app.discover_models", new=Mock()),
+        patch("godfather_worker.shared_inference_ui.SharedInference.refresh", new=Mock()),
         patch("godfather_worker.desktop_app.Controller", side_effect=controller),
         patch("godfather_worker.desktop_app.await_approval", side_effect=approve),
         patch("godfather_worker.desktop_app.webbrowser.open") as browser,
@@ -80,245 +80,240 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         patch("godfather_worker.coding_projects.local_images", images),
         patch("godfather_worker.desktop_settings.local_images", images),
         patch("godfather_worker.coding_projects.check_project", project_check),
+        patch(
+            "godfather_worker.desktop_app.scan",
+            side_effect=AssertionError("Scan requires an owner button click"),
+        ),
     ):
+        app = Application(root, Path(folder))
+        # Native tray creation is real; never contact a coordinator or credential store.
+        assert app.tray is not None, "Native tray integration unavailable"
+        deadline = threading.Event()
 
-        async def models(*_: object) -> list[object]:
-            return []
+        def loaded() -> None:
+            if app.connect_button["state"] == "disabled":
+                root.after(30, loaded)
+                return
+            app.connect()
+            root.update_idletasks()
+            assert app.connection_state.get() == "AWAITING APPROVAL"
+            assert "Match this code" in app.code.get()
+            from urllib.parse import urlsplit
 
-        with patch("godfather_worker.desktop_app.discover_models", models):
-            app = Application(root, Path(folder))
-            # Native tray creation is real; never contact a coordinator or credential store.
-            assert app.tray is not None, "Native tray integration unavailable"
-            deadline = threading.Event()
+            challenge = urlsplit(browser.call_args.args[0]).fragment.split("=", 1)[1]
+            assert challenge[:12].upper() in app.code.get()
+            if screenshot:
+                from PIL import ImageGrab
 
-            def loaded() -> None:
-                if app.connect_button["state"] == "disabled":
-                    root.after(30, loaded)
-                    return
-                app.connect()
-                root.update_idletasks()
-                assert app.connection_state.get() == "AWAITING APPROVAL"
-                assert "Match this code" in app.code.get()
-                from urllib.parse import urlsplit
+                screenshot.parent.mkdir(parents=True, exist_ok=True)
+                ImageGrab.grab(window=root.winfo_id()).save(
+                    screenshot.with_stem(screenshot.stem + "-pairing")
+                )
+            approval_ready.set()
+            root.after(30, connected)
 
-                challenge = urlsplit(browser.call_args.args[0]).fragment.split("=", 1)[1]
-                assert challenge[:12].upper() in app.code.get()
-                if screenshot:
-                    from PIL import ImageGrab
-
-                    screenshot.parent.mkdir(parents=True, exist_ok=True)
-                    ImageGrab.grab(window=root.winfo_id()).save(
-                        screenshot.with_stem(screenshot.stem + "-pairing")
-                    )
-                approval_ready.set()
+        def connected() -> None:
+            if not app.status.get().startswith("Connected"):
                 root.after(30, connected)
+                return
+            assert app.identity == identity and len(controllers) == 1
+            assert app.connection_state.get() == "CONNECTED"
+            assert app.settings.share_with_workspaces is (not saved)
+            assert app.contribute.get() is (not saved)
+            assert not app.code.get()
+            if saved:
+                browser.assert_not_called()
+            else:
+                browser.assert_called_once()
+            if screenshot:
+                from PIL import ImageGrab
 
-            def connected() -> None:
-                if not app.status.get().startswith("Connected"):
-                    root.after(30, connected)
+                root.update_idletasks()
+                screenshot.parent.mkdir(parents=True, exist_ok=True)
+                import platform
+
+                if platform.system() == "Windows":
+                    ImageGrab.grab(window=root.winfo_id()).save(screenshot)
+            app.hide()
+            assert root.state() == "withdrawn"
+            app.tray()  # Native tray activation invokes the default Show action.
+            root.after(150, restored)
+
+        def restored() -> None:
+            assert root.state() == "normal"
+            root.geometry("800x600")
+            root.update()
+            assert root.winfo_width() == 800
+            expanded_width = min(1200, root.winfo_screenwidth() - 64)
+            expanded_height = min(900, root.winfo_screenheight() - 96)
+            root.geometry(f"{expanded_width}x{expanded_height}")
+            root.update()
+            # Cocoa may reduce the client height for its menu/dock/work area.
+            # Verify useful expansion, rather than requiring Windows pixel parity.
+            print(
+                "Native resized client",
+                root.winfo_width(),
+                root.winfo_height(),
+                "requested",
+                expanded_width,
+                expanded_height,
+                flush=True,
+            )
+            assert root.winfo_width() >= expanded_width - 32
+            assert root.winfo_height() >= min(600, expanded_height - 64)
+            assert root.maxsize()[0] > 900
+            app.pause()
+            root.after(130, paused)
+
+        def paused() -> None:
+            assert app.status.get() == "Paused"
+            assert app.connection_state.get() == "PAUSED"
+            app.projects()
+            project = app.project_editor
+            assert isinstance(project, Projects)
+            assert not isinstance(project.window, tk.Toplevel)
+
+            def add_project() -> None:
+                if project.options is None:
+                    root.after(30, add_project)
                     return
-                assert app.identity == identity and len(controllers) == 1
-                assert app.connection_state.get() == "CONNECTED"
-                assert app.settings.share_with_workspaces is (not saved)
-                assert app.contribute.get() is (not saved)
-                assert not app.code.get()
-                if saved:
-                    browser.assert_not_called()
-                else:
-                    browser.assert_called_once()
+                project.name.set("Fixture project")
+                project.folder.set(folder)
+                project.patterns.set("src/*.py")
+                project.command.set("python -m unittest")
+                project.save()
+                root.after(30, saved_project)
+
+            def saved_project() -> None:
+                if not app.settings.repositories:
+                    root.after(30, saved_project)
+                    return
+                assert app.settings.repositories[0].allowed_user_ids == [UUID(identity["owner_id"])]
+                repo = app.settings.repositories[0]
+                app.show_project_readiness(
+                    [{"repository_id": str(repo.id), "code": "image_missing"}]
+                )
+                app.notebook.select(0)  # type: ignore[no-untyped-call]
+                root.update()
+                assert app.project_notice.winfo_ismapped()
+                assert "image is missing" in app.project_warning.get()
                 if screenshot:
                     from PIL import ImageGrab
 
-                    root.update_idletasks()
-                    screenshot.parent.mkdir(parents=True, exist_ok=True)
-                    import platform
+                    ImageGrab.grab(window=root.winfo_id()).save(
+                        screenshot.with_stem(screenshot.stem + "-project-warning")
+                    )
+                app.projects()
+                project.projects.selection_set(str(repo.id))
+                project.selected_readiness()
+                assert repo.image in project.readiness.get()
+                root.update()
+                if screenshot:
+                    from PIL import ImageGrab
 
-                    if platform.system() == "Windows":
-                        ImageGrab.grab(window=root.winfo_id()).save(screenshot)
-                app.hide()
-                assert root.state() == "withdrawn"
-                app.tray()  # Native tray activation invokes the default Show action.
-                root.after(150, restored)
-
-            def restored() -> None:
-                assert root.state() == "normal"
+                    ImageGrab.grab(window=root.winfo_id()).save(
+                        screenshot.with_stem(screenshot.stem + "-projects")
+                    )
                 root.geometry("800x600")
                 root.update()
-                assert root.winfo_width() == 800
-                expanded_width = min(1200, root.winfo_screenwidth() - 64)
-                expanded_height = min(900, root.winfo_screenheight() - 96)
-                root.geometry(f"{expanded_width}x{expanded_height}")
-                root.update()
-                # Cocoa may reduce the client height for its menu/dock/work area.
-                # Verify useful expansion, rather than requiring Windows pixel parity.
-                print(
-                    "Native resized client",
-                    root.winfo_width(),
-                    root.winfo_height(),
-                    "requested",
-                    expanded_width,
-                    expanded_height,
-                    flush=True,
+                assert (
+                    project.save_button.winfo_rooty() + project.save_button.winfo_height()
+                    <= root.winfo_rooty() + root.winfo_height()
                 )
-                assert root.winfo_width() >= expanded_width - 32
-                assert root.winfo_height() >= min(600, expanded_height - 64)
-                assert root.maxsize()[0] > 900
+                app.show_project_readiness([])
+                assert not app.project_notice.winfo_ismapped()
+                app.advanced()
+                dialog = app.settings_dialog
+                assert len(dialog.notebook.tabs()) == 6
+                assert "owners" not in dialog.values and "workspaces" not in dialog.values
+                assert "share_with_workspaces" in dialog.values
+                assert not dialog.values["model_installation"].get()
+                dialog.values["inference"].set(False)
+                dialog.values["model_installation"].set(True)
+                dialog.save()
+                assert "Enable local AI models" in dialog.status.get()
+                assert dialog.window.winfo_exists()
+                assert not app.settings.model_installation
+                dialog.values["inference"].set(True)
+                dialog.values["theme"].set("dark")
+                dialog.save()
+                assert app.preferences.theme == "dark"
+                assert app.settings.model_installation and app.model_installation.get()
+                assert json.loads((app.folder / "settings.json").read_text())["model_installation"]
+                assert not dialog.window.winfo_exists()
+                app.advanced()
+                dialog = app.settings_dialog
+                dialog.notebook.select(dialog.pages["Resources"])
+                root.update()
+                page = dialog.pages["Resources"]
+                for child in page.winfo_children():
+                    assert child.winfo_y() + child.winfo_height() <= page.winfo_height()
+                if screenshot:
+                    ImageGrab.grab(window=dialog.window.winfo_id()).save(
+                        screenshot.with_stem(screenshot.stem + "-settings")
+                    )
+                dialog.window.destroy()
+                project.projects.selection_set(project.projects.get_children()[0])
+                assert not app.settings.repositories[0].allow_apply
+                project.toggle_apply()
+                assert app.settings.repositories[0].allow_apply
+                project.projects.selection_set(project.projects.get_children()[0])
+                project.toggle_apply()
+                assert not app.settings.repositories[0].allow_apply
+                project.projects.selection_set(project.projects.get_children()[0])
+                project.remove()
+                assert not app.settings.repositories
+                # Projects remains embedded in the main notebook.
+                app.start()
+                assert len(controllers) == 2
+                assert not app.models  # First-model downloads must not block Resume.
+                assert controllers[-1].start.call_args.args[0].model_installation
+                app.model_installation.set(False)
+                app.apply_models()
+                assert not app.model_installation.get()
+                assert app.settings_restart_pending
+                app.advanced()
+                dialog = app.settings_dialog
+                dialog.values["model_installation"].set(False)
+                dialog.save()
+                assert not dialog.window.winfo_exists()
+                assert not app.settings.model_installation
+                assert app.settings_restart_pending
+                controllers[-1].maintenance_event.set.assert_called_once()
                 app.pause()
-                root.after(130, paused)
+                app.advanced()
+                dialog = app.settings_dialog
+                dialog.values["model_installation"].set(False)
+                dialog.save()
+                assert not app.settings.model_installation
+                assert not app.model_installation.get()
+                app.start()
+                assert not controllers[-1].start.call_args.args[0].model_installation
+                app.contribute.set(True)
+                app.apply_contribution()
+                assert app.settings.share_with_workspaces and app.settings.inference
+                assert app.settings_restart_pending
+                assert not app.settings.allowed_owner_ids
+                assert not app.settings.allowed_workspace_ids
+                result.append(
+                    "pairing, tray restore, expanded resizing, embedded Projects, "
+                    "tabbed Settings, theme persistence, project permissions, "
+                    "model-download consent, ID-free contribution and idle-safe updates"
+                )
+                deadline.set()
+                app.quit()
 
-            def paused() -> None:
-                assert app.status.get() == "Paused"
-                assert app.connection_state.get() == "PAUSED"
-                app.projects()
-                project = app.project_editor
-                assert isinstance(project, Projects)
-                assert not isinstance(project.window, tk.Toplevel)
+            root.after(30, add_project)
 
-                def add_project() -> None:
-                    if project.options is None:
-                        root.after(30, add_project)
-                        return
-                    project.name.set("Fixture project")
-                    project.folder.set(folder)
-                    project.patterns.set("src/*.py")
-                    project.command.set("python -m unittest")
-                    project.save()
-                    root.after(30, saved_project)
+        def expired() -> None:
+            if not deadline.is_set():
+                app.quit()
 
-                def saved_project() -> None:
-                    if not app.settings.repositories:
-                        root.after(30, saved_project)
-                        return
-                    assert app.settings.repositories[0].allowed_user_ids == [
-                        UUID(identity["owner_id"])
-                    ]
-                    repo = app.settings.repositories[0]
-                    app.show_project_readiness(
-                        [{"repository_id": str(repo.id), "code": "image_missing"}]
-                    )
-                    app.notebook.select(0)  # type: ignore[no-untyped-call]
-                    root.update()
-                    assert app.project_notice.winfo_ismapped()
-                    assert "image is missing" in app.project_warning.get()
-                    if screenshot:
-                        from PIL import ImageGrab
-
-                        ImageGrab.grab(window=root.winfo_id()).save(
-                            screenshot.with_stem(screenshot.stem + "-project-warning")
-                        )
-                    app.projects()
-                    project.projects.selection_set(str(repo.id))
-                    project.selected_readiness()
-                    assert repo.image in project.readiness.get()
-                    root.update()
-                    if screenshot:
-                        from PIL import ImageGrab
-
-                        ImageGrab.grab(window=root.winfo_id()).save(
-                            screenshot.with_stem(screenshot.stem + "-projects")
-                        )
-                    root.geometry("800x600")
-                    root.update()
-                    assert (
-                        project.save_button.winfo_rooty() + project.save_button.winfo_height()
-                        <= root.winfo_rooty() + root.winfo_height()
-                    )
-                    app.show_project_readiness([])
-                    assert not app.project_notice.winfo_ismapped()
-                    app.advanced()
-                    dialog = app.settings_dialog
-                    assert len(dialog.notebook.tabs()) == 6
-                    assert "owners" not in dialog.values and "workspaces" not in dialog.values
-                    assert "share_with_workspaces" in dialog.values
-                    assert not dialog.values["model_installation"].get()
-                    dialog.values["inference"].set(False)
-                    dialog.values["model_installation"].set(True)
-                    dialog.save()
-                    assert "Enable local AI models" in dialog.status.get()
-                    assert dialog.window.winfo_exists()
-                    assert not app.settings.model_installation
-                    dialog.values["inference"].set(True)
-                    dialog.values["theme"].set("dark")
-                    dialog.save()
-                    assert app.preferences.theme == "dark"
-                    assert app.settings.model_installation and app.model_installation.get()
-                    assert json.loads((app.folder / "settings.json").read_text())[
-                        "model_installation"
-                    ]
-                    assert not dialog.window.winfo_exists()
-                    app.advanced()
-                    dialog = app.settings_dialog
-                    dialog.notebook.select(dialog.pages["Resources"])
-                    root.update()
-                    page = dialog.pages["Resources"]
-                    for child in page.winfo_children():
-                        assert child.winfo_y() + child.winfo_height() <= page.winfo_height()
-                    if screenshot:
-                        ImageGrab.grab(window=dialog.window.winfo_id()).save(
-                            screenshot.with_stem(screenshot.stem + "-settings")
-                        )
-                    dialog.window.destroy()
-                    project.projects.selection_set(project.projects.get_children()[0])
-                    assert not app.settings.repositories[0].allow_apply
-                    project.toggle_apply()
-                    assert app.settings.repositories[0].allow_apply
-                    project.projects.selection_set(project.projects.get_children()[0])
-                    project.toggle_apply()
-                    assert not app.settings.repositories[0].allow_apply
-                    project.projects.selection_set(project.projects.get_children()[0])
-                    project.remove()
-                    assert not app.settings.repositories
-                    # Projects remains embedded in the main notebook.
-                    app.start()
-                    assert len(controllers) == 2
-                    assert not app.models  # First-model downloads must not block Resume.
-                    assert controllers[-1].start.call_args.args[0].model_installation
-                    app.model_installation.set(False)
-                    app.apply_models()
-                    assert not app.model_installation.get()
-                    assert app.settings_restart_pending
-                    app.advanced()
-                    dialog = app.settings_dialog
-                    dialog.values["model_installation"].set(False)
-                    dialog.save()
-                    assert not dialog.window.winfo_exists()
-                    assert not app.settings.model_installation
-                    assert app.settings_restart_pending
-                    controllers[-1].maintenance_event.set.assert_called_once()
-                    app.pause()
-                    app.advanced()
-                    dialog = app.settings_dialog
-                    dialog.values["model_installation"].set(False)
-                    dialog.save()
-                    assert not app.settings.model_installation
-                    assert not app.model_installation.get()
-                    app.start()
-                    assert not controllers[-1].start.call_args.args[0].model_installation
-                    app.contribute.set(True)
-                    app.apply_contribution()
-                    assert app.settings.share_with_workspaces and app.settings.inference
-                    assert app.settings_restart_pending
-                    assert not app.settings.allowed_owner_ids
-                    assert not app.settings.allowed_workspace_ids
-                    result.append(
-                        "pairing, tray restore, expanded resizing, embedded Projects, "
-                        "tabbed Settings, theme persistence, project permissions, "
-                        "model-download consent, ID-free contribution and idle-safe updates"
-                    )
-                    deadline.set()
-                    app.quit()
-
-                root.after(30, add_project)
-
-            def expired() -> None:
-                if not deadline.is_set():
-                    app.quit()
-
-            root.after(30, connected if saved else loaded)
-            # Intel hosted Macs can spend >15s in Cocoa window/tray activation.
-            # This is an overall safety deadline, never a sleep or success condition.
-            root.after(60000, expired)
-            root.mainloop()
+        root.after(30, connected if saved else loaded)
+        # Intel hosted Macs can spend >15s in Cocoa window/tray activation.
+        # This is an overall safety deadline, never a sleep or success condition.
+        root.after(60000, expired)
+        root.mainloop()
     assert result, "Native desktop lifecycle did not complete"
     print("Passed native UI smoke: " + result[0] + "; quit")
 

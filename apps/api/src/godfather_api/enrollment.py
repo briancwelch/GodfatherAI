@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from godfather_api.authentication import audit, human, require_permission, throttle
 from godfather_api.models import AccessCredential, Attempt, GoogleIdentity, Node, WorkerEnrollment
+from godfather_api.node_registration import require_add_nodes
 from godfather_api.nodes import SessionDep, connection_at, token_digest
 
 router = APIRouter(prefix="/api/v1")
@@ -95,6 +96,8 @@ def approve(payload: EnrollmentApproval, request: Request, session: SessionDep) 
                 404, "No owned computer has that name. Uncheck Reconnect to add it."
             )
         reconnect_node(session, existing, request)
+    if not payload.reconnect or existing is None or existing.node_id is None:
+        require_add_nodes(session, owner.id)
     row = WorkerEnrollment(
         owner_id=owner.id,
         challenge=payload.challenge,
@@ -141,6 +144,8 @@ def exchange(payload: EnrollmentExchange, request: Request, session: SessionDep)
         if previous is None:
             raise HTTPException(409, "Connection already replaced. Start Connect again.")
         node = reconnect_node(session, previous, request)
+    if node is None:
+        require_add_nodes(session, owner.id)
     credential = AccessCredential(
         owner_id=owner.id,
         kind="worker",

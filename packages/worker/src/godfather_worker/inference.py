@@ -49,8 +49,8 @@ async def discover_models(configs: list[ProviderConfig]) -> list[ModelDeployment
     batches = await asyncio.gather(*(discover_one(config) for config in configs))
     deployments = [model for batch in batches for model in batch]
     if len(deployments) > 128:
-        raise ValueError("Combined inventory exceeds the protocol limit of 128 deployments")
-    return deployments
+        logging.getLogger("godfather.worker").warning("provider.inventory_limited limit=128")
+    return deployments[:128]
 
 
 async def maintain_execution(

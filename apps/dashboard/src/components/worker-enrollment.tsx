@@ -10,6 +10,8 @@ export default function WorkerEnrollment() {
   const [busy, setBusy] = useState(false);
   const [approved, setApproved] = useState(false);
   const [nodeName, setNodeName] = useState("");
+  const [canAdd, setCanAdd] = useState(false);
+  const [reconnect, setReconnect] = useState(false);
   useEffect(() => {
     const value =
       new URLSearchParams(location.hash.slice(1)).get("challenge") ?? "";
@@ -30,6 +32,7 @@ export default function WorkerEnrollment() {
           return;
         }
         setOwner(user.email);
+        setCanAdd(user.permissions.includes("nodes.add"));
         setStatus("");
       })
       .catch(() => setStatus("Command Center unavailable. Try again shortly."));
@@ -116,6 +119,12 @@ export default function WorkerEnrollment() {
       {owner && challenge && !approved && (
         <form onSubmit={approve}>
           <p>Signed in as {owner}</p>
+          {!canAdd && (
+            <p role="status" className="alert alert-info">
+              Your role can reconnect an existing owned node. Adding a new node
+              is restricted by your administrator.
+            </p>
+          )}
           <p>
             Compare this code with the code in your worker:{" "}
             <strong>{challenge.slice(0, 12).toUpperCase()}</strong>
@@ -143,9 +152,21 @@ export default function WorkerEnrollment() {
               className="form-check-input"
               type="checkbox"
               name="reconnect"
+              checked={reconnect}
+              onChange={(event) => setReconnect(event.target.checked)}
+              aria-describedby="reconnect-guidance"
             />
             Reconnect this computer, keeping its name and history.
           </label>
+          <div
+            id="reconnect-guidance"
+            className="alert alert-warning"
+            role="note"
+          >
+            Only select this if you are <em>Reconnecting</em> a node and wishing
+            to use the same worker name and retain job history. Do not select
+            this if you are connecting a new node for the first time.
+          </div>
           <p>
             Use the existing name and quit the old worker first. Reconnecting
             permanently replaces its old credential. Existing computer
@@ -156,7 +177,10 @@ export default function WorkerEnrollment() {
             <input className="form-check-input" type="checkbox" required />
             The code matches my computer, and I approve its registration.
           </label>
-          <button className="btn btn-primary action" disabled={busy}>
+          <button
+            className="btn btn-primary action"
+            disabled={busy || (!canAdd && !reconnect)}
+          >
             {busy ? "Approving…" : "Approve this computer"}
           </button>
         </form>

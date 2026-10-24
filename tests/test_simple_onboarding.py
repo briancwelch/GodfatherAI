@@ -142,6 +142,7 @@ def test_failed_pairing_preserves_code_and_never_claims_connected(
     app.identity, app.tray = None, None
     app.pairing_busy, app.destroyed = False, False
     app.status, app.code, app.connection_state = Mock(), Mock(), Mock()
+    app.secure_label = Mock()
     app.connection_badge, app.connect_button, app.address_entry, app.notebook = (
         Mock(),
         Mock(),

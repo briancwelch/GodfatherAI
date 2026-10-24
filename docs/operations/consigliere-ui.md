@@ -4,6 +4,12 @@ Owner-authorized update, 2026-10-21. The worker desktop app is now **Consigliere
 carrying **The Godfather AI** branding. Worker protocol, authentication, node
 ownership, local project consent and provider permissions are unchanged.
 
+Unreleased source update, 2026-10-23: see [local model scanning, node registration
+permissions and status feedback](worker-scan-and-node-permissions-2026-10-23.md).
+Publishing and deployment are on hold; existing installers do not include it yet.
+The same pending update now includes the [Shared Inference wizard](shared-inference-wizard-2026-10-23.md)
+with owner-approved managed llama.cpp setup in its own tab.
+
 ## Native layout revision during Phase 12
 
 The owner requested closer alignment with the Element desktop reference. The new
@@ -11,7 +17,8 @@ candidate uses the shared navy/cyan header, compact menu and grouped icon ribbon
 The command icons are rendered from the existing bundled Font Awesome vectors.
 The main window expands normally; it no longer caps its size to 900 pixels or
 recalculates a maximum height from its contents. There is no window-wide scrolling
-canvas. Only genuinely overflowing project rows display a vertical scrollbar.
+canvas. Overflowing project rows and the Shared Inference approval form scroll
+within their own panes; approval/start/withdraw controls remain visible.
 
 **Projects** is a main tab, with a resizable approved-project list and an embedded
 editor. Project details and Files & testing are compact subtabs. Existing owner,
