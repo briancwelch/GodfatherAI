@@ -434,10 +434,189 @@ def panel_fixture(tmp_path: Path) -> tuple[Any, LocalEngineConsent, EngineGroup]
     panel.selection = Mock()
     panel.engine = None
     panel.ready = panel.activating = panel.stopping = panel.suspended = False
+    panel.busy = panel.polling = False
+    panel.revision = 0
+    panel.revoked = set()
+    panel.stop_notice = ""
+    panel.progress = Mock()
+    panel.cancel = threading.Event()
+    panel.node_id = consent.node_id
+    panel.local_models = {group.proposal.id: consent.model_path}
     panel.failed_run = panel.pending = None
     panel.activate = Mock()
     panel.stop_local = Mock()
     return panel, consent, group
+
+
+def action_panel(tmp_path: Path) -> tuple[Any, LocalEngineConsent, EngineGroup, list[Any]]:
+    panel, consent, group = panel_fixture(tmp_path)
+    group.desired_running = False
+    panel.groups = {str(group.proposal.id): group}
+    panel.table.selection.return_value = [str(group.proposal.id)]
+    panel.app.settings.cpu_cores = 2
+    panel.available = consent.devices
+    panel.device_list = Mock(curselection=Mock(return_value=(0,)))
+    panel.backend = Mock(get=Mock(return_value="cpu"))
+    panel.detected_backend = "cpu"
+    panel.host = Mock(get=Mock(return_value=consent.host))
+    panel.port = Mock(get=Mock(return_value=str(consent.port)))
+    panel.client = Mock(return_value=Mock())
+    work: list[Any] = []
+    panel.app.background.side_effect = work.append
+    panel.deliver = lambda apply: apply()
+    return panel, consent, group, work
+
+
+def test_approval_acknowledges_pending_then_committed_result_without_waiting_for_poll(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _, group, work = action_panel(tmp_path)
+    monkeypatch.setattr(
+        "godfather_worker.shared_inference_ui.messagebox.askyesno", lambda *a, **k: True
+    )
+    panel.client().post_document.return_value = group.model_dump(mode="json")
+    panel.approve()
+    assert panel.busy
+    assert "Saving" in panel.message.set.call_args.args[0]
+    panel.progress.start.assert_called_once()
+    work.pop()()
+    assert not panel.busy
+    assert "This computer is approved" in panel.message.set.call_args.args[0]
+    assert panel.groups[str(group.proposal.id)].members[0].approved
+
+
+def test_missing_devices_and_cancelled_approval_explain_why_nothing_was_granted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _, _, work = action_panel(tmp_path)
+    panel.device_list.curselection.return_value = ()
+    panel.approve()
+    assert "Detect and select devices" in panel.message.set.call_args.args[0]
+    panel.device_list.curselection.return_value = (0,)
+    monkeypatch.setattr(
+        "godfather_worker.shared_inference_ui.messagebox.askyesno", lambda *a, **k: False
+    )
+    panel.approve()
+    assert "Approval cancelled" in panel.message.set.call_args.args[0]
+    assert not work
+    panel.client().post_document.assert_not_called()
+
+
+def test_withdrawal_shows_pending_then_withdrawn_row_and_blocks_local_restart(
+    tmp_path: Path,
+) -> None:
+    from godfather_worker.shared_inference_ui import consent_path
+
+    panel, consent, group, work = action_panel(tmp_path)
+    panel.pending = group
+    result = group.model_copy(deep=True)
+    result.group = None
+    result.members[0].approved = False
+    result.members[0].phase = "stopped"
+    panel.client().post_document.return_value = result.model_dump(mode="json")
+    panel.withdraw()
+    assert panel.busy and panel.pending is None
+    assert "withdrawing" in panel.message.set.call_args.args[0]
+    work.pop()()
+    assert not consent_path(tmp_path, group.proposal.id).exists()
+    assert group.proposal.id in panel.revoked
+    assert "Approval withdrawn" in panel.message.set.call_args.args[0]
+    assert panel.table.insert.call_args.kwargs["values"][1] == "Withdrawn"
+    group.desired_running = True
+    panel.received(consent.node_id, [group])
+    panel.activate.assert_not_called()
+
+
+def test_network_failure_is_visible_and_does_not_claim_withdrawal_succeeded(tmp_path: Path) -> None:
+    panel, _, _, work = action_panel(tmp_path)
+    panel.client().post_document.side_effect = OSError("Connection unavailable")
+    panel.withdraw()
+    work.pop()()
+    assert not panel.busy
+    assert "withdrawal was not confirmed" in panel.message.set.call_args.args[0]
+    panel.progress.stop.assert_called()
+
+
+@pytest.mark.parametrize("confirmed", [True, False])
+def test_delete_requires_confirmation_and_removes_row_only_after_server_acknowledgement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, confirmed: bool
+) -> None:
+    panel, _, group, work = action_panel(tmp_path)
+    monkeypatch.setattr(
+        "godfather_worker.shared_inference_ui.messagebox.askyesno", lambda *a, **k: confirmed
+    )
+    panel.client().post_document.return_value = {"removed": True, "scope": "setup"}
+    panel.delete()
+    assert str(group.proposal.id) in panel.groups
+    if not confirmed:
+        assert "Deletion cancelled" in panel.message.set.call_args.args[0]
+        assert not work
+        return
+    assert "Deleting" in panel.message.set.call_args.args[0]
+    work.pop()()
+    assert str(group.proposal.id) not in panel.groups
+    assert "Setup deleted" in panel.message.set.call_args.args[0]
+
+
+def test_failed_delete_keeps_row_and_shows_retry_feedback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _, group, work = action_panel(tmp_path)
+    monkeypatch.setattr(
+        "godfather_worker.shared_inference_ui.messagebox.askyesno", lambda *a, **k: True
+    )
+    panel.client().post_document.side_effect = OSError("Connection unavailable")
+    panel.delete()
+    work.pop()()
+    assert str(group.proposal.id) in panel.groups
+    assert "deletion was not confirmed" in panel.message.set.call_args.args[0]
+
+
+def test_old_poll_cannot_restore_a_deleted_or_unapproved_row_after_mutation(tmp_path: Path) -> None:
+    panel, consent, group, work = action_panel(tmp_path)
+    panel.client().post_document.return_value = {
+        "node_id": str(consent.node_id),
+        "groups": [group.model_dump(mode="json")],
+    }
+    queued: list[Any] = []
+    panel.deliver = queued.append
+    panel.refresh()
+    work.pop()()
+    assert len(queued) == 1
+    panel.revision += 1  # A mutation started after this poll's snapshot.
+    panel.groups.clear()
+    queued.pop()()
+    assert not panel.groups
+    panel.table.insert.assert_not_called()
+
+
+def test_explicit_refresh_and_busy_click_always_show_feedback(tmp_path: Path) -> None:
+    panel, consent, _, work = action_panel(tmp_path)
+    panel.client().post_document.return_value = {"node_id": str(consent.node_id), "groups": []}
+    panel.refresh(manual=True)
+    assert "Refreshing" in panel.message.set.call_args.args[0]
+    work.pop()()
+    assert "Refresh complete" in panel.message.set.call_args.args[0]
+    panel.busy = True
+    panel.task(Mock(), Mock(), pending="Should not replace current request")
+    assert "already in progress" in panel.message.set.call_args.args[0]
+    assert not work
+
+
+def test_context_menu_selects_clicked_row_and_blank_space_does_not_target_another_setup(
+    tmp_path: Path,
+) -> None:
+    panel, _, group, _ = action_panel(tmp_path)
+    panel.menu = Mock()
+    panel.table.identify_row.return_value = str(group.proposal.id)
+    event = Mock(y=40, x_root=100, y_root=200)
+    panel.context_menu(event)
+    panel.table.selection_set.assert_called_with(str(group.proposal.id))
+    panel.menu.tk_popup.assert_called_once_with(100, 200)
+    panel.menu.reset_mock()
+    panel.table.identify_row.return_value = ""
+    panel.context_menu(event)
+    panel.menu.tk_popup.assert_not_called()
 
 
 def test_wizard_finishes_current_work_before_starting_and_waits_for_peers(tmp_path: Path) -> None:

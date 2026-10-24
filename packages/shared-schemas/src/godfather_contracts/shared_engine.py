@@ -102,6 +102,10 @@ class EngineAction(Contract):
     action: Literal["start", "stop", "withdraw"]
 
 
+class EngineDelete(Contract):
+    group_id: UUID
+
+
 class EngineReport(Contract):
     group_id: UUID
     generation: int = Field(ge=0)

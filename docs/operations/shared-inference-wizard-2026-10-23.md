@@ -44,6 +44,33 @@ approximately 30 seconds without a successful setup refresh. Worker updates wait
 for a shared engine to be stopped before installation. Ordinary settings and
 node identity/history remain preserved.
 
+## Pending source update: remove setups and see action results
+
+Right-click a setup and choose **Delete setup**, use the **Delete setup** button,
+or press Delete on the selected row. A confirmation identifies the setup and its
+model. On the initiating computer, deletion removes the setup for all
+participants. On another participant, removal withdraws that computer and hides
+its invitation; the initiator retains its setup. Either action stops the group.
+Model files and job history are retained. To participate after removal, create a
+new setup and obtain fresh local approvals.
+
+Feedback stays directly below the approval/withdrawal controls. Approval shows
+**Saving** followed by an explicit approval result. Withdrawal shows its pending
+request followed by **Approval withdrawn** and, if necessary, the engine's local
+shutdown progress. The list immediately reflects **Approved; awaiting owners**,
+**Ready to start**, or **Withdrawn**. Validation and cancelled actions explain why
+no new permission was granted. Refresh, GPU detection and setup creation also
+show pending and completion feedback. Requests disable duplicate actions.
+
+Deletion removes the row after coordinator confirmation. A failed request keeps
+the row visible and gives a retry message. Local participation is stopped, but
+the worker does not claim central deletion/withdrawal succeeded without an
+acknowledgement. Old refresh responses cannot undo a confirmed change.
+
+This update requires coordinator migration **0018_shared_engine_removal**.
+These additions are source changes and are not part of the published rc.3
+installers. See [the verification record](shared-inference-feedback-2026-10-24.md).
+
 ## Requirements and troubleshooting
 
 The coordinator needs migration **0017_shared_engine_setup** and this source

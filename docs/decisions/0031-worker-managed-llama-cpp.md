@@ -86,6 +86,29 @@ Migration 0017 adds setup/consent tables without replacing identities or job his
 Deployment must update the coordinator schema and workers together when separately
 authorized.
 
+## Setup removal and action feedback (2026-10-24 source update)
+
+The worker offers **Delete setup** through the list's context menu, a visible
+button and keyboard access. The initiating computer may delete its whole setup.
+Another participant may remove its own invitation and withdraw approval, stopping
+the group without deleting other owners' setup records. The confirmation states
+the scope and warns that active distributed work may be interrupted.
+
+Migration `0018_shared_engine_removal` adds logical deletion and per-computer
+dismissal. Retain the setup tombstone so a stale advertisement cannot be accepted
+as a legacy manually configured group. Removed setups cannot be started or
+reapproved; stopped reports may still retire idle sessions. Job history, audit
+records, node identities, owner settings, models and runtime files remain intact.
+Repeated deletion is idempotent and hidden invitations do not consume the limit.
+
+Approval, withdrawal, deletion, refresh, device detection and wizard requests show
+pending and completion/error feedback beside their controls. Mutations apply the
+confirmed response immediately, disable duplicate submissions and invalidate
+older refresh snapshots. Local withdrawal stops participation even if the network
+request fails; the UI explicitly states when coordinator confirmation is missing.
+Existing response contracts remain compatible with earlier workers. The new delete
+operation needs the updated coordinator before updated workers are distributed.
+
 Primary upstream references: [llama.cpp](https://github.com/ggml-org/llama.cpp),
 [pinned release](https://github.com/ggml-org/llama.cpp/releases/tag/b11846),
 [RPC source](https://github.com/ggml-org/llama.cpp/blob/b11846/tools/rpc/rpc-server.cpp),

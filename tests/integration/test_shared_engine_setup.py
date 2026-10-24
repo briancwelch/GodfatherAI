@@ -5,7 +5,14 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from godfather_api.models import AccessCredential, Job, Node, SharedEngineSetup, WorkspaceMember
+from godfather_api.models import (
+    AccessCredential,
+    Job,
+    Node,
+    SharedEngineConsent,
+    SharedEngineSetup,
+    WorkspaceMember,
+)
 from godfather_api.provision import provision
 from godfather_api.shared_engine_setup import managed_permitted
 from godfather_contracts import ModelDeployment, SharedInferenceGroup
@@ -235,8 +242,9 @@ def test_competing_groups_cannot_reserve_the_same_computers(h: Harness, tmp_path
     action(h, second, "start", expected=409)
 
 
-def test_shared_session_does_not_accept_ordinary_jobs_and_withdraw_fences_result(
-    h: Harness, tmp_path: Path
+@pytest.mark.parametrize("operation,index", [("withdraw", 1), ("delete", 0), ("delete", 1)])
+def test_shared_session_does_not_accept_ordinary_jobs_and_revocation_fences_result(
+    h: Harness, tmp_path: Path, operation: str, index: int
 ) -> None:
     capable(h)
     group = create(h)
@@ -280,10 +288,103 @@ def test_shared_session_does_not_accept_ordinary_jobs_and_withdraw_fences_result
     assignment = h.poll()
     assert assignment
     h.start(assignment)
-    action(h, group, "withdraw", 1)
+    if operation == "delete":
+        api(h, "delete", {"group_id": group["proposal"]["id"]}, index)
+    else:
+        action(h, group, "withdraw", index)
     h.report(assignment, "complete", expected=409, result=inference_result(model))
     h.tick()
     assert h.get(job["id"])["status"] == "FAILED"
+
+
+def test_initiator_delete_is_durable_idempotent_and_keeps_history_and_identity(
+    h: Harness, tmp_path: Path
+) -> None:
+    capable(h)
+    group = create(h)
+    approve(h, group, tmp_path)
+    group = approve(h, group, tmp_path, 1)
+    group = action(h, group, "start")
+    for index in (0, 1):
+        report(h, group, "ready", index)
+    topology = SharedInferenceGroup.model_validate(group["group"])
+    job = h.submit()
+    payload = {"group_id": group["proposal"]["id"]}
+    assert api(h, "delete", payload) == {"removed": True, "scope": "setup"}
+    assert api(h, "delete", payload) == {"removed": True, "scope": "setup"}
+    for index in (0, 1):
+        assert not api(h, "groups", {}, index)["groups"]
+        action(h, group, "start", index, 409)
+        report(h, group, "ready", index, 409)
+        report(h, group, "stopped", index)
+    with h.database.sessions() as session:
+        row = session.get(SharedEngineSetup, UUID(payload["group_id"]))
+        assert row and row.deleted_at is not None and not row.desired_running
+        assert not managed_permitted(session, topology)
+        for node_id in group["proposal"]["node_ids"]:
+            consent = session.get(SharedEngineConsent, (row.id, UUID(node_id)))
+            assert consent and consent.dismissed and not consent.approved
+            assert not consent.configuration
+            node = session.get(Node, UUID(node_id))
+            assert node and node.name and node.owner_id == UUID(h.admin["owner_id"])
+        assert session.get(Job, UUID(job["id"])) is not None
+
+
+def test_participant_delete_only_removes_own_invitation_and_cannot_be_reapproved(
+    h: Harness, tmp_path: Path
+) -> None:
+    capable(h)
+    group = create(h)
+    approve(h, group, tmp_path)
+    group = approve(h, group, tmp_path, 1)
+    payload = {"group_id": group["proposal"]["id"]}
+    assert api(h, "delete", payload, 1) == {"removed": True, "scope": "computer"}
+    assert api(h, "delete", payload, 1) == {"removed": True, "scope": "computer"}
+    assert not api(h, "groups", {}, 1)["groups"]
+    remaining = api(h, "groups", {})["groups"]
+    assert len(remaining) == 1 and remaining[0]["group"] is None
+    assert [m["approved"] for m in remaining[0]["members"]] == [True, False]
+    action(h, group, "start", expected=409)
+    api(
+        h,
+        "approve",
+        {
+            **payload,
+            "devices": [{"id": "CPU", "name": "CPU", "backend": "cpu"}],
+            "host": "10.0.0.2",
+            "port": 50053,
+            "certificate": "x" * 100,
+        },
+        1,
+        409,
+    )
+    with h.database.sessions() as session:
+        row = session.get(SharedEngineSetup, UUID(payload["group_id"]))
+        assert row and row.deleted_at is None
+    # The initiating computer may still delete its whole setup.
+    assert api(h, "delete", payload)["scope"] == "setup"
+    assert not api(h, "groups", {})["groups"]
+
+
+def test_nonparticipant_and_admin_session_cannot_delete_another_computers_setup(h: Harness) -> None:
+    capable(h)
+    group = create(h, "single_host")
+    payload = {"group_id": group["proposal"]["id"]}
+    api(h, "delete", payload, 1, 404)
+    result = h.client.post(PREFIX + "delete", json=payload, headers=headers(h.admin))
+    assert result.status_code == 401
+    assert len(api(h, "groups", {})["groups"]) == 1
+
+
+def test_deleted_invitations_free_capacity_and_do_not_displace_visible_setups(h: Harness) -> None:
+    capable(h)
+    for _ in range(10):
+        group = create(h)
+        api(h, "delete", {"group_id": group["proposal"]["id"]})
+    remaining = create(h)
+    for index in (0, 1):
+        visible = api(h, "groups", {}, index)["groups"]
+        assert [g["proposal"]["id"] for g in visible] == [remaining["proposal"]["id"]]
 
 
 def test_starting_never_resets_a_live_attempt(h: Harness, tmp_path: Path) -> None:

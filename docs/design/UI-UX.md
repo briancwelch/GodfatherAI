@@ -23,6 +23,14 @@ This document governs the design and interaction of the browser-based Command Ce
    keep execution logs behind progressive disclosure. Coding follows Run agent →
    Preview changes → Apply to my project. Producing a patch and applying it are
    separate, explicitly labeled outcomes.
+10. Action feedback applies to the Command Center and native worker. Every user
+    action must immediately show that it was received. While work is pending,
+    show progress and prevent duplicate submissions. Show a clear success or
+    error beside the relevant controls, including validation and cancellation
+    outcomes. Name the affected item when selection can change. Update displayed
+    state from the confirmed result; background refreshes must not restore stale
+    state or erase useful feedback. Never require users to infer success from a
+    button click or an unchanged screen.
 
 ## Bootstrap component revision (owner authorized 2026-10-22)
 

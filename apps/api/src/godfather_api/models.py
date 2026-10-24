@@ -586,6 +586,7 @@ class SharedEngineSetup(Entity, Owned, Base):
     proposal: Mapped[dict[str, object]] = mapped_column(JSONB)
     desired_running: Mapped[bool] = mapped_column(Boolean, server_default="false")
     generation: Mapped[int] = mapped_column(Integer, server_default="0")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SharedEngineConsent(Base):
@@ -600,6 +601,7 @@ class SharedEngineConsent(Base):
         ForeignKey("access_credentials.id", ondelete="RESTRICT")
     )
     approved: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    dismissed: Mapped[bool] = mapped_column(Boolean, server_default="false")
     configuration: Mapped[dict[str, object]] = mapped_column(JSONB, server_default="{}")
     phase: Mapped[str] = mapped_column(String(16), server_default="waiting")
     error_code: Mapped[str | None] = mapped_column(String(64))

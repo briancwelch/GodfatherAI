@@ -13,6 +13,7 @@ from godfather_contracts.shared_engine import (
     EngineAction,
     EngineApproval,
     EngineCreate,
+    EngineDelete,
     EngineGroup,
     EngineMember,
     EngineProposal,
@@ -66,6 +67,7 @@ def approved(session: Session, consent: SharedEngineConsent) -> bool:
     )
     return bool(
         consent.approved
+        and not consent.dismissed
         and credential
         and not credential.revoked
         and credential.node_id == consent.node_id
@@ -73,6 +75,8 @@ def approved(session: Session, consent: SharedEngineConsent) -> bool:
 
 
 def topology(session: Session, row: SharedEngineSetup) -> SharedInferenceGroup | None:
+    if row.deleted_at is not None:
+        return None
     plan = proposal(row)
     members = consents(session, row.id)
     if {m.node_id for m in members} != set(plan.node_ids) or not all(
@@ -97,12 +101,14 @@ def topology(session: Session, row: SharedEngineSetup) -> SharedInferenceGroup |
 
 
 def member_row(
-    session: Session, group_id: UUID, node_id: UUID
+    session: Session, group_id: UUID, node_id: UUID, *, include_removed: bool = False
 ) -> tuple[SharedEngineSetup, SharedEngineConsent]:
     row = session.get(SharedEngineSetup, group_id, with_for_update=True)
     member = session.get(SharedEngineConsent, (group_id, node_id), with_for_update=True)
     if row is None or member is None:
         raise HTTPException(404, "Shared inference invitation not found for this computer")
+    if not include_removed and (row.deleted_at is not None or member.dismissed):
+        raise HTTPException(409, "This shared inference setup was removed; create a new setup")
     return row, member
 
 
@@ -238,7 +244,11 @@ def groups(_: OptionsRequest, request: Request, session: SessionDep) -> dict[str
     rows = session.scalars(
         select(SharedEngineSetup)
         .join(SharedEngineConsent, SharedEngineConsent.group_id == SharedEngineSetup.id)
-        .where(SharedEngineConsent.node_id == node.id)
+        .where(
+            SharedEngineConsent.node_id == node.id,
+            SharedEngineConsent.dismissed.is_(False),
+            SharedEngineSetup.deleted_at.is_(None),
+        )
         .order_by(SharedEngineSetup.desired_running.desc(), SharedEngineSetup.created_at.desc())
         .limit(8)
     )
@@ -294,8 +304,13 @@ def create(payload: EngineCreate, request: Request, session: SessionDep) -> Engi
         if not base_permitted(session, probe, node):
             raise HTTPException(404, "A selected computer is not permitted in this workspace")
         pending = session.scalars(
-            select(SharedEngineConsent).where(
-                SharedEngineConsent.node_id == node.id, SharedEngineConsent.phase != "stopped"
+            select(SharedEngineConsent)
+            .join(SharedEngineSetup, SharedEngineSetup.id == SharedEngineConsent.group_id)
+            .where(
+                SharedEngineConsent.node_id == node.id,
+                SharedEngineConsent.phase != "stopped",
+                SharedEngineConsent.dismissed.is_(False),
+                SharedEngineSetup.deleted_at.is_(None),
             )
         ).all()
         if len(pending) >= 8:
@@ -434,10 +449,36 @@ def control(payload: EngineAction, request: Request, session: SessionDep) -> Eng
     return view(session, row, node.id)
 
 
+@router.post("/delete")
+def delete(payload: EngineDelete, request: Request, session: SessionDep) -> dict[str, object]:
+    credential, node = owned(request, session)
+    row, member = member_row(session, payload.group_id, node.id, include_removed=True)
+    entire_setup = row.leader_node_id == node.id
+    if row.deleted_at is None and (entire_setup or not member.dismissed):
+        row.desired_running = False
+        if entire_setup:
+            row.deleted_at = datetime.now(UTC)
+        for participant in consents(session, row.id) if entire_setup else [member]:
+            participant.approved, participant.dismissed = False, True
+            participant.configuration = {}
+            participant.phase, participant.error_code = "stopped", None
+        audit(
+            session,
+            "shared_engine_deleted" if entire_setup else "shared_engine_dismissed",
+            credential.owner_id,
+            row.id,
+            workspace_id=row.workspace_id,
+            metadata={"node_id": str(node.id)},
+        )
+    return {"removed": True, "scope": "setup" if entire_setup else "computer"}
+
+
 @router.post("/report")
 def report(payload: EngineReport, request: Request, session: SessionDep) -> dict[str, bool]:
     _, node = owned(request, session)
-    row, member = member_row(session, payload.group_id, node.id)
+    row, member = member_row(
+        session, payload.group_id, node.id, include_removed=payload.phase == "stopped"
+    )
     if payload.generation != row.generation:
         raise HTTPException(409, "This engine run has been superseded")
     if payload.phase in ("starting", "ready") and (
@@ -467,7 +508,8 @@ def report(payload: EngineReport, request: Request, session: SessionDep) -> dict
 def managed_permitted(session: Session, group: SharedInferenceGroup) -> bool:
     row = session.get(SharedEngineSetup, group.id)
     return row is None or (
-        row.desired_running
+        row.deleted_at is None
+        and row.desired_running
         and topology(session, row) == group
         and all(m.phase == "ready" for m in consents(session, row.id))
     )

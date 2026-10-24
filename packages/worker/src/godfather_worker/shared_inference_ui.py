@@ -18,6 +18,7 @@ from godfather_contracts.shared_engine import (
     EngineAction,
     EngineApproval,
     EngineCreate,
+    EngineDelete,
     EngineDevice,
     EngineGroup,
     EngineReport,
@@ -112,6 +113,9 @@ class SharedInference:
         self.detected_backend = ""
         self.cancel = threading.Event()
         self.busy = False
+        self.revision = 0
+        self.revoked: set[UUID] = set()
+        self.stop_notice = ""
         self.wizard_window: tk.Toplevel | None = None
         self.suspended = False
         self.message = tk.StringVar(
@@ -125,13 +129,14 @@ class SharedInference:
         self.port = tk.StringVar(value="50053")
         controls = ttk.Frame(parent, padding=(16, 10))
         controls.pack(fill="x")
-        ttk.Button(controls, text="Set up Shared Inference", command=self.wizard).pack(side="left")
-        ttk.Button(controls, text="Refresh", command=self.refresh).pack(side="left", padx=6)
-        message = ttk.Label(parent, textvariable=self.message, wraplength=900, padding=(16, 4))
-        message.pack(fill="x")
-        message.bind(
-            "<Configure>", lambda event: message.configure(wraplength=max(100, event.width - 32))
+        self.setup_button = ttk.Button(
+            controls, text="Set up Shared Inference", command=self.wizard
         )
+        self.setup_button.pack(side="left")
+        self.refresh_button = ttk.Button(
+            controls, text="Refresh", command=lambda: self.refresh(manual=True)
+        )
+        self.refresh_button.pack(side="left", padx=6)
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.pack(side="bottom", fill="x", padx=16, pady=(0, 8))
         panes = ttk.Panedwindow(parent, orient="horizontal")
@@ -166,6 +171,15 @@ class SharedInference:
         self.table.column("state", width=95, minwidth=60)
         self.table.pack(fill="both", expand=True)
         self.table.bind("<<TreeviewSelect>>", self.selection)
+        self.menu = tk.Menu(self.table, tearoff=False)
+        self.menu.add_command(label="Delete setup...", command=self.delete)
+        for binding in ("<Button-3>", "<Button-2>", "<Control-Button-1>"):
+            self.table.bind(binding, self.context_menu)
+        for binding in ("<Menu>", "<Shift-F10>"):
+            self.table.bind(binding, self.keyboard_menu)
+        self.table.bind("<Delete>", lambda _: self.delete())
+        self.delete_button = ttk.Button(left, text="Delete setup...", command=self.delete)
+        self.delete_button.pack(anchor="w", pady=(6, 0))
         self.detail = tk.StringVar(value="Choose a group to review participation.")
         ttk.Label(right, textvariable=self.detail, wraplength=550).pack(fill="x", pady=(0, 8))
         row = ttk.Frame(right)
@@ -174,9 +188,8 @@ class SharedInference:
         ttk.Combobox(
             row, textvariable=self.backend, values=variants(), state="readonly", width=10
         ).pack(side="left", padx=6)
-        ttk.Button(right, text="Detect available GPUs", command=self.detect).pack(
-            anchor="w", pady=4
-        )
+        self.detect_button = ttk.Button(right, text="Detect available GPUs", command=self.detect)
+        self.detect_button.pack(anchor="w", pady=4)
         ttk.Checkbutton(
             right, text="Allow verified llama.cpp runtime download", variable=self.allow_download
         ).pack(anchor="w", pady=6)
@@ -213,6 +226,11 @@ class SharedInference:
             action_area, text="Stop and withdraw this computer", command=self.withdraw
         )
         self.withdraw_button.pack(anchor="w")
+        message = ttk.Label(action_area, textvariable=self.message, wraplength=550, padding=(0, 8))
+        message.pack(fill="x")
+        message.bind(
+            "<Configure>", lambda event: message.configure(wraplength=max(100, event.width - 12))
+        )
         self.selection()
         self.timer = app.root.after(3000, self.tick)
 
@@ -220,24 +238,58 @@ class SharedInference:
         selection = self.table.selection()
         return self.groups.get(selection[0]) if selection else None
 
+    def context_menu(self, event: Any) -> str:
+        row = self.table.identify_row(event.y)
+        if row:
+            self.table.selection_set(row)
+            self.table.focus(row)
+            self.table.focus_set()
+            self.selection()
+            self.menu.tk_popup(event.x_root, event.y_root)
+        return "break"
+
+    def keyboard_menu(self, _: object = None) -> str:
+        if self.selected():
+            self.menu.tk_popup(self.table.winfo_rootx() + 24, self.table.winfo_rooty() + 24)
+        return "break"
+
     def selection(self, _: object = None) -> None:
         group = self.selected()
+        enabled = group is not None and not self.busy
         leader = group is not None and group.proposal.leader_node_id == self.node_id
         self.approve_button.configure(
-            state="normal" if group and not group.desired_running else "disabled"
+            state="normal" if enabled and group and not group.desired_running else "disabled"
         )
         self.start_button.configure(
             state="normal"
-            if leader and group and not group.desired_running and group.group
+            if enabled and leader and group and not group.desired_running and group.group
             else "disabled"
         )
-        self.withdraw_button.configure(state="normal" if group else "disabled")
+        self.withdraw_button.configure(state="normal" if enabled else "disabled")
+        self.delete_button.configure(state="normal" if enabled else "disabled")
+        self.menu.entryconfigure(0, state="normal" if enabled else "disabled")
+        for button in (self.setup_button, self.refresh_button, self.detect_button):
+            button.configure(state="disabled" if self.busy else "normal")
         if group:
             states = "; ".join(
-                f"{m.name} ({m.owner}): {m.phase if m.approved else 'owner approval needed'}"
+                f"{m.name} ({m.owner}): "
+                + (
+                    "Approved - waiting to start"
+                    if m.approved and m.phase == "waiting"
+                    else m.phase.capitalize()
+                    if m.approved
+                    else "Withdrawn"
+                    if m.phase == "stopped"
+                    else "Owner approval needed"
+                )
                 for m in group.members
             )
-            self.detail.set(f"{group.proposal.model_name}\n{states}")
+            self.detail.set(
+                f"{group.proposal.name} ({str(group.proposal.id)[:8]})\n"
+                f"{group.proposal.model_name}\n{states}"
+            )
+        else:
+            self.detail.set("Choose a setup to review participation.")
 
     def client(self) -> WorkerClient:
         account = self.app.identity
@@ -248,10 +300,24 @@ class SharedInference:
     def deliver(self, action: Callable[[], None]) -> None:
         self.app.event("shared_update", apply=action)
 
-    def task(self, action: Callable[[], Any], done: Callable[[Any], None]) -> None:
+    def task(
+        self,
+        action: Callable[[], Any],
+        done: Callable[[Any], None],
+        *,
+        pending: str,
+        failure: str = "",
+    ) -> None:
         if self.busy or self.app.closing:
+            if not self.app.closing:
+                self.message.set(
+                    "An operation is already in progress. Please wait, then try again."
+                )
             return
         self.busy = True
+        self.revision += 1
+        self.message.set(pending)
+        self.selection()
         self.cancel.clear()
         self.progress.start(12)
 
@@ -278,13 +344,19 @@ class SharedInference:
                         else "Shared inference setup failed. "
                         "Check this computer's engine and retry."
                     )
-                self.deliver(lambda: self.finished(text))
+                self.deliver(lambda: self.finished((failure + " " + text).strip()))
             else:
 
                 def complete() -> None:
                     self.finished()
                     if not self.app.closing:
-                        done(result)
+                        try:
+                            done(result)
+                        except (ValueError, KeyError, TypeError):
+                            self.finished(
+                                "The coordinator returned an invalid setup response. "
+                                "Refresh and retry."
+                            )
 
                 self.deliver(complete)
 
@@ -295,6 +367,8 @@ class SharedInference:
         self.progress.stop()
         if error:
             self.message.set(error)
+            self.stop_notice = ""
+        self.selection()
 
     def tick(self) -> None:
         if self.app.closing:
@@ -302,11 +376,40 @@ class SharedInference:
         self.refresh()
         self.timer = self.app.root.after(5000, self.tick)
 
-    def refresh(self) -> None:
-        if not self.app.identity or self.polling or self.app.closing:
+    def refresh(self, *, manual: bool = False) -> None:
+        if not self.app.identity or self.polling or self.busy or self.app.closing:
+            if manual and not self.app.closing:
+                self.message.set(
+                    "Connect this computer first."
+                    if not self.app.identity
+                    else "An operation is already in progress. Please wait for it to finish."
+                )
             return
         self.polling = True
+        if manual:
+            self.message.set("Refreshing shared inference setups...")
+            self.progress.start(12)
+        revision = self.revision
         client = self.client()
+
+        def apply(node_id: UUID | None = None, groups: list[EngineGroup] | None = None) -> None:
+            self.polling = False
+            if revision != self.revision or self.busy:
+                return
+            if manual and not self.activating and not self.stopping:
+                self.progress.stop()
+            if node_id is None or groups is None:
+                if manual:
+                    self.message.set(
+                        "Could not refresh shared inference setups. Check the connection and retry."
+                    )
+                self.unavailable()
+            else:
+                self.received(node_id, groups)
+                if manual:
+                    self.message.set(
+                        f"Refresh complete. {len(groups)} shared inference setup(s) found."
+                    )
 
         def poll() -> None:
             try:
@@ -315,9 +418,9 @@ class SharedInference:
                     raise ValueError("Invalid setup response")
                 groups = [EngineGroup.model_validate(g) for g in raw["groups"]]
                 node_id = UUID(raw["node_id"])
-                self.deliver(lambda: self.received(node_id, groups))
+                self.deliver(lambda: apply(node_id, groups))
             except Exception:
-                self.deliver(self.unavailable)
+                self.deliver(apply)
 
         self.app.background(poll)
 
@@ -339,12 +442,19 @@ class SharedInference:
         self.groups = {str(g.proposal.id): g for g in groups}
         self.table.delete(*self.table.get_children())
         for key, group in self.groups.items():
+            own = next(m for m in group.members if m.node_id == node_id)
             state = (
-                "Starting / running"
+                ("Running" if all(m.phase == "ready" for m in group.members) else "Starting")
                 if group.desired_running
-                else "Ready to configure"
-                if group.group
-                else "Awaiting owners"
+                else (
+                    "Withdrawn"
+                    if not own.approved and own.phase == "stopped"
+                    else "Ready to start"
+                    if group.group
+                    else "Approved; awaiting owners"
+                    if own.approved
+                    else "Awaiting your approval"
+                )
             )
             self.table.insert("", "end", iid=key, values=(group.proposal.name, state))
         if selected and selected[0] in self.groups:
@@ -352,6 +462,12 @@ class SharedInference:
         elif groups:
             self.table.selection_set(str(groups[0].proposal.id))
         self.selection()
+        if self.message.get() == "Connect this computer, then set up a shared local model.":
+            self.message.set(
+                "Select a setup to approve participation. Right-click a setup to delete it."
+                if groups
+                else "No shared inference setups. Select Set up Shared Inference to begin."
+            )
         account = self.app.identity or {}
         if self.engine:
             current = self.groups.get(str(self.engine.group.proposal.id))
@@ -372,9 +488,14 @@ class SharedInference:
             return
         self.pending = None
         for group in groups:
-            if not group.desired_running or self.failed_run == (
-                group.proposal.id,
-                group.generation,
+            if (
+                group.proposal.id in self.revoked
+                or not group.desired_running
+                or self.failed_run
+                == (
+                    group.proposal.id,
+                    group.generation,
+                )
             ):
                 continue
             consent = load_consent(self.app.folder, group, account.get("credential_id", ""))
@@ -431,7 +552,7 @@ class SharedInference:
                     raise ValueError("Detect available GPUs and approve the runtime locally first")
                 engine = Engine(self.app.folder, consent, runtime, group)
                 self.engine = engine
-                if self.app.closing or self.suspended:
+                if self.app.closing or self.suspended or group.proposal.id in self.revoked:
                     raise ValueError("Shared engine startup cancelled")
                 engine.start()
                 client.post_document(
@@ -519,22 +640,102 @@ class SharedInference:
     def stopped(self, resume: bool) -> None:
         self.engine = None
         self.ready = self.activating = self.stopping = False
-        self.progress.stop()
+        if not self.busy:
+            self.progress.stop()
+        if self.stop_notice and not self.busy:
+            self.message.set(self.stop_notice)
+            self.stop_notice = ""
         if resume and not self.app.closing:
             self.app.start()
 
     def withdraw(self) -> None:
         group = self.selected()
-        if group:
-            self.cancel.set()
+        if not group:
+            self.message.set("Select a shared inference setup first.")
+            return
+        self.control("withdraw")
+
+    def revoke_local(self, group: EngineGroup) -> None:
+        self.revoked.add(group.proposal.id)
+        if self.pending and self.pending.proposal.id == group.proposal.id:
+            self.pending = None
+        if self.engine and self.engine.group.proposal.id == group.proposal.id:
+            self.stop_local()
+
+    def updated(self, raw: Any, message: str) -> None:
+        group = EngineGroup.model_validate(raw)
+        self.groups[str(group.proposal.id)] = group
+        if self.node_id:
+            self.received(self.node_id, list(self.groups.values()))
+        self.message.set(message)
+
+    def delete(self) -> None:
+        group = self.selected()
+        if not group:
+            self.message.set("Select a shared inference setup first.")
+            return
+        if self.busy:
+            self.message.set("An operation is already in progress. Please wait, then try again.")
+            return
+        leader = group.proposal.leader_node_id == self.node_id
+        scope = (
+            "This deletes the setup for all participating computers."
+            if leader
+            else "This removes the setup from this computer and withdraws its approval. "
+            "Other computers keep their setup."
+        )
+        if not messagebox.askyesno(
+            "Delete shared inference setup",
+            f'Delete "{group.proposal.name}" ({str(group.proposal.id)[:8]})?\n'
+            f"Model: {group.proposal.model_name}\n\n{scope}\n\n"
+            "The shared engine will stop and active distributed jobs may be interrupted. "
+            "Installed model files and job history are retained.",
+            parent=self.app.root,
+        ):
+            self.message.set("Deletion cancelled. The setup is unchanged.")
+            return
+        self.revoke_local(group)
+
+        def remove() -> object:
             consent_path(self.app.folder, group.proposal.id).unlink(missing_ok=True)
-            if self.engine and self.engine.group.proposal.id == group.proposal.id:
-                self.stop_local()
-            self.control("withdraw")
+            return self.client().post_document(
+                PREFIX + "delete", EngineDelete(group_id=group.proposal.id)
+            )
+
+        def removed(raw: Any) -> None:
+            if not isinstance(raw, dict) or raw.get("removed") is not True:
+                self.message.set("Deletion was not confirmed. Refresh and retry.")
+                return
+            self.local_models.pop(group.proposal.id, None)
+            self.groups.pop(str(group.proposal.id), None)
+            if self.node_id:
+                self.received(self.node_id, list(self.groups.values()))
+            notice = (
+                f'Setup deleted: "{group.proposal.name}" ({str(group.proposal.id)[:8]}). '
+                "Installed models and job history are retained."
+                if raw.get("scope") == "setup"
+                else f'Setup "{group.proposal.name}" ({str(group.proposal.id)[:8]}) removed '
+                "from this computer. Its participation approval is withdrawn."
+            )
+            if self.stopping:
+                self.stop_notice = notice
+                notice += " Stopping this computer's shared engine..."
+            self.message.set(notice)
+
+        self.task(
+            remove,
+            removed,
+            pending="Deleting shared inference setup...",
+            failure="Participation stopped locally; deletion was not confirmed. Retry deletion.",
+        )
 
     def control(self, action: str) -> None:
         group = self.selected()
         if not group:
+            self.message.set("Select a shared inference setup first.")
+            return
+        if self.busy:
+            self.message.set("An operation is already in progress. Please wait, then try again.")
             return
         if action == "start":
             self.suspended = False
@@ -544,11 +745,42 @@ class SharedInference:
             if not consent:
                 self.message.set("Approve this computer locally before starting this group.")
                 return
-        self.task(
-            lambda: self.client().post_document(
+        if action == "withdraw":
+            self.revoke_local(group)
+
+        def send() -> object:
+            if action == "withdraw":
+                consent_path(self.app.folder, group.proposal.id).unlink(missing_ok=True)
+            return self.client().post_document(
                 PREFIX + "control", EngineAction(group_id=group.proposal.id, action=action)
-            ),
-            lambda _: self.refresh(),
+            )
+
+        def done(raw: Any) -> None:
+            label = f'"{group.proposal.name}" ({str(group.proposal.id)[:8]})'
+            notice = {
+                "withdraw": f"Approval withdrawn for {label}. "
+                "This computer is no longer participating.",
+                "start": f"Start requested for {label}. Waiting for participating computers "
+                "to start the engine...",
+                "stop": f"Stop requested for {label}. Participating computers "
+                "are stopping the shared engine...",
+            }[action]
+            if action == "withdraw" and self.stopping:
+                self.stop_notice = notice
+                notice += " Stopping this computer's shared engine..."
+            self.updated(raw, notice)
+
+        self.task(
+            send,
+            done,
+            pending={
+                "withdraw": "Stopping shared inference and withdrawing this computer's approval...",
+                "start": "Requesting shared inference startup...",
+                "stop": "Requesting shared inference shutdown...",
+            }[action],
+            failure="Local participation stopped; withdrawal was not confirmed. Retry withdrawal."
+            if action == "withdraw"
+            else "",
         )
 
     def detect(self) -> None:
@@ -571,11 +803,15 @@ class SharedInference:
                 self.device_list.insert("end", f"{device.id}: {device.name}")
             self.message.set("Choose this computer's participating devices, then approve.")
 
-        self.task(probe, show)
+        self.task(probe, show, pending="Detecting this computer's available devices...")
 
     def approve(self) -> None:
         group = self.selected()
         if not group or not self.node_id or not self.app.identity:
+            self.message.set("Connect this computer and select a shared inference setup first.")
+            return
+        if self.busy:
+            self.message.set("An operation is already in progress. Please wait, then try again.")
             return
         self.suspended = False
         selected = [self.available[int(i)] for i in self.device_list.curselection()]  # type: ignore[no-untyped-call]
@@ -588,6 +824,7 @@ class SharedInference:
                 title="Choose the installed GGUF model", filetypes=[("GGUF models", "*.gguf")]
             )
             if not path:
+                self.message.set("Approval cancelled. Choose an installed GGUF model to continue.")
                 return
         try:
             consent = LocalEngineConsent(
@@ -623,6 +860,7 @@ class SharedInference:
             "No host files or shell access are granted.",
             parent=self.app.root,
         ):
+            self.message.set("Approval cancelled. This computer has not granted new permission.")
             return
 
         def approve() -> object:
@@ -639,7 +877,22 @@ class SharedInference:
                 ),
             )
 
-        self.task(approve, lambda _: self.refresh())
+        def approved(raw: Any) -> None:
+            self.revoked.discard(group.proposal.id)
+            result = EngineGroup.model_validate(raw)
+            self.updated(
+                result,
+                f'This computer is approved for "{group.proposal.name}" '
+                f"({str(group.proposal.id)[:8]}). "
+                + (
+                    "All owners have approved; select Configure and Start "
+                    "on the initiating computer."
+                    if result.group
+                    else "Waiting for the other computer owners to approve."
+                ),
+            )
+
+        self.task(approve, approved, pending="Saving this computer's participation approval...")
 
     def wizard(self) -> None:
         if self.wizard_window and self.wizard_window.winfo_exists():
@@ -649,7 +902,9 @@ class SharedInference:
             self.message.set("Connect this computer first.")
             return
         self.task(
-            lambda: self.client().post_document(PREFIX + "options", Options()), self.open_wizard
+            lambda: self.client().post_document(PREFIX + "options", Options()),
+            self.open_wizard,
+            pending="Loading available workspaces and computers...",
         )
 
     def open_wizard(self, raw: Any) -> None:
@@ -661,6 +916,17 @@ class SharedInference:
         window.title("Set up Shared Inference")
         frame = ttk.Frame(window, padding=16)
         frame.pack(fill="both", expand=True)
+
+        def close() -> None:
+            self.message.set(
+                "Setup window closed. Any request already sent will still appear in the list."
+                if self.busy
+                else "Setup cancelled. No new shared inference setup was created."
+            )
+            window.destroy()
+
+        window.protocol("WM_DELETE_WINDOW", close)
+        self.message.set("Choose an installed model, workspace and participating computers.")
         workspaces = {f"{w['name']} ({w['id'][:8]})": UUID(w["id"]) for w in raw["workspaces"]}
         workspace = tk.StringVar(value=next(iter(workspaces), ""))
         name = tk.StringVar(value="Shared local model")
@@ -730,6 +996,10 @@ class SharedInference:
                         computers.insert("end", f"{node['name']} · {node['owner']} · {node['os']}")
                         if node["node_id"] == str(self.node_id):
                             computers.selection_set(len(candidates) - 1)
+                self.message.set(
+                    f"{len(candidates)} compatible computer(s) available. "
+                    "Choose participants, then Continue to owner approvals."
+                )
 
         def load_nodes(_: object = None) -> None:
             if workspace.get() in workspaces:
@@ -739,6 +1009,7 @@ class SharedInference:
                         PREFIX + "options", Options(workspace_id=workspace_id)
                     ),
                     show_computers,
+                    pending="Loading available participating computers...",
                 )
 
         workspace_box.bind("<<ComboboxSelected>>", load_nodes)
@@ -780,14 +1051,23 @@ class SharedInference:
                 if window.winfo_exists():
                     window.destroy()
                 self.message.set(
-                    "3. Detect and select this computer's devices, then approve. "
+                    "Setup created. Detect and select this computer's devices, then approve. "
                     "Each other owner approves on their own worker. "
                     "Finally select Configure and Start."
                 )
-                self.refresh()
+                self.groups[str(group.proposal.id)] = group
+                if self.node_id:
+                    self.received(self.node_id, list(self.groups.values()))
+                self.table.selection_set(str(group.proposal.id))
+                self.selection()
 
-            self.task(lambda: self.client().post_document(PREFIX + "create", plan), created)
+            self.task(
+                lambda: self.client().post_document(PREFIX + "create", plan),
+                created,
+                pending="Creating shared inference setup...",
+            )
 
+        ttk.Label(frame, textvariable=self.message, wraplength=580).pack(fill="x", pady=6)
         ttk.Button(frame, text="Continue to owner approvals", command=create).pack(
             anchor="e", pady=8
         )
