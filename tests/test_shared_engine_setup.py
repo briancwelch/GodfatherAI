@@ -505,9 +505,9 @@ def test_missing_devices_and_cancelled_approval_explain_why_nothing_was_granted(
 def test_withdrawal_shows_pending_then_withdrawn_row_and_blocks_local_restart(
     tmp_path: Path,
 ) -> None:
+    panel, consent, group, work = action_panel(tmp_path)
     from godfather_worker.shared_inference_ui import consent_path
 
-    panel, consent, group, work = action_panel(tmp_path)
     panel.pending = group
     result = group.model_copy(deep=True)
     result.group = None
