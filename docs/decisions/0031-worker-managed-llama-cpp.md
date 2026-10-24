@@ -6,6 +6,7 @@ deployment is authorized by this milestone.
 
 The owner separately authorized builds and deployment on 2026-10-24. See the
 [release report](../operations/shared-inference-release-2026-10-24.md).
+Coordinator and all three native installers are published as **0.10.0-rc.3**.
 
 The worker now configures shared inference through its own **Shared Inference**
 tab. The user chooses an installed GGUF model, workspace and participating

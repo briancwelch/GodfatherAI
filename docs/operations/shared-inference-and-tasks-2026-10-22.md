@@ -21,11 +21,11 @@ Task 2 waits for Task 1's durable output and receives it as quoted data. Readine
 
 ## Owner-controlled engine setup
 
-Unreleased 2026-10-23 source update: Consigliere now offers a
+Published in 0.10.0-rc.3 on 2026-10-24: Consigliere now offers a
 [Shared Inference wizard](shared-inference-wizard-2026-10-23.md) to configure
 llama.cpp with each owner's local device approval. The manual declarations below
-remain supported for existing installations. Publishing/deployment of the wizard
-is on hold.
+remain supported for existing installations. See the
+[release verification](shared-inference-release-2026-10-24.md).
 
 A shared engine must already be installed and configured by the participating owners. Every member runs the updated worker source with the same `--shared-inference-config` JSON array. This locally opts that computer into that particular topology. The leader additionally uses `--inference-config` containing the loopback OpenAI-compatible engine provider. Followers need no provider configuration; they continue outbound authenticated heartbeats and advertise group consent. Do not run two Godfather workers under one identity simultaneously.
 

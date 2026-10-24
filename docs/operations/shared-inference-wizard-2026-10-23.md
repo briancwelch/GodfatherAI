@@ -1,13 +1,10 @@
 # Set up Shared Inference in Consigliere
 
-Unreleased local source work, 2026-10-23. Included with the pending local model
-scan, node permission, reconnect warning and update-feedback changes. Existing
-published workers and coordinator have not been changed. Publishing and deployment
-remain on hold.
-
-Update, 2026-10-24: the owner authorized worker/Command Center builds and deployment.
-See the [release verification](shared-inference-release-2026-10-24.md). The source
-milestone's validation record below remains historical.
+Published in **0.10.0-rc.3**, 2026-10-24, together with local model scanning,
+node permissions, the reconnect warning and update feedback. Update Consigliere
+through **File > Check for updates**. See the
+[release verification](shared-inference-release-2026-10-24.md). The source
+milestone's earlier validation record below remains historical.
 
 ## User flow
 

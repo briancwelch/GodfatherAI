@@ -1,7 +1,9 @@
 # Owner-initiated model scanning and configurable node registration
 
 Status: owner authorized local implementation, 2026-10-23. Publishing,
-packaging and deployment remain on hold.
+packaging and deployment were initially held. The owner separately authorized
+the [0.10.0-rc.3 release](../operations/shared-inference-release-2026-10-24.md)
+on 2026-10-24; coordinator and all three native installers are published.
 
 The desktop worker needs to find models outside Ollama, without silently
 searching an owner's files or granting new execution permissions. Platform

@@ -4,16 +4,14 @@ The Godfather lets you run AI jobs from a browser using your own computers and
 models. The **Command Center** is where you manage workspaces, agents and jobs.
 **Consigliere** is the worker app you install on each computer that will do the work.
 
-The current published coordinator release is **0.9.0-rc.4**; desktop workers remain
-**0.9.0-rc.2**. See the [member registration deployment](docs/operations/member-node-registration-verification-2026-10-23.md),
-[image permission fix verification](docs/operations/image-workspace-verification-2026-10-23.md)
-and [worker release verification](docs/operations/worker-recovery-verification-2026-10-23.md)
-for package hashes and checks performed.
+The Command Center and Windows/Apple Silicon/Intel Mac workers are published as
+**0.10.0-rc.3**. See the [release verification](docs/operations/shared-inference-release-2026-10-24.md)
+for package hashes, native checks, backup and data preservation results.
 
-Invited members can now register their own computers without a role promotion.
-Images shows cloud models that need workspace permission and lets workspace
-owners/administrators allow their selected model directly. No worker update is
-needed for this website correction.
+Consigliere now includes **Scan for Local Models** and a **Shared Inference** tab
+with guided llama.cpp setup and each computer owner's device approval. Platform
+administrators can choose which roles may add new computers. Update workers using
+**File > Check for updates**; existing connections, settings and history remain.
 
 ## Sign in
 
@@ -101,10 +99,12 @@ Use **Images** or **Analytics and Reports** for those workloads after enabling t
 matching image connection or isolated data environment. Images supports local
 AUTOMATIC1111 and explicitly selected OpenAI/Gemini account connections; see
 [cloud image setup](docs/operations/cloud-images.md) for the required worker opt-ins.
-Use **Distributed Tasks**
-for dependent tasks across computers. **Distributed Jobs** runs one model request
-through an owner-configured shared inference engine; that advanced setup is not
-created automatically. See [shared inference and task variables](docs/operations/shared-inference-and-tasks-2026-10-22.md).
+Use **Distributed Tasks** for dependent tasks across computers. **Distributed Jobs**
+runs one model request across GPUs or computers. Start in Consigliere's
+**Shared Inference > Set up Shared Inference** to choose an installed compatible
+model and participants, obtain owner approvals, and configure the engine. See
+[the setup guide](docs/operations/shared-inference-wizard-2026-10-23.md) and
+[task variables](docs/operations/shared-inference-and-tasks-2026-10-22.md).
 
 ## Host your own Command Center with Docker
 

@@ -1,11 +1,8 @@
 # Local model scan, node registration permissions and worker feedback
 
-Status: unreleased local source changes, 2026-10-23. The published coordinator
-and worker installers remain unchanged. Publishing and deployment are on hold.
-
-Update, 2026-10-24: the owner authorized the combined worker/Command Center
-[release](shared-inference-release-2026-10-24.md), superseding that hold.
-The pending work also includes [managed llama.cpp setup in the Shared Inference
+Published in **0.10.0-rc.3**, 2026-10-24, after the owner's separate release
+authorization. See [release verification](shared-inference-release-2026-10-24.md).
+The release also includes [managed llama.cpp setup in the Shared Inference
 tab](shared-inference-wizard-2026-10-23.md), with local device approvals on every
 participating computer.
 

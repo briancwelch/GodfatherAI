@@ -4,11 +4,11 @@ Owner-authorized update, 2026-10-21. The worker desktop app is now **Consigliere
 carrying **The Godfather AI** branding. Worker protocol, authentication, node
 ownership, local project consent and provider permissions are unchanged.
 
-Unreleased source update, 2026-10-23: see [local model scanning, node registration
+Published in **0.10.0-rc.3**, 2026-10-24: see [local model scanning, node registration
 permissions and status feedback](worker-scan-and-node-permissions-2026-10-23.md).
-Publishing and deployment are on hold; existing installers do not include it yet.
-The same pending update now includes the [Shared Inference wizard](shared-inference-wizard-2026-10-23.md)
-with owner-approved managed llama.cpp setup in its own tab.
+The release also includes the [Shared Inference wizard](shared-inference-wizard-2026-10-23.md)
+with owner-approved managed llama.cpp setup in its own tab. Use **File > Check for
+updates** to obtain the worker. See [release verification](shared-inference-release-2026-10-24.md).
 
 ## Native layout revision during Phase 12
 
