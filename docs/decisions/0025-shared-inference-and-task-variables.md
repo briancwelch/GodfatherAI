@@ -14,6 +14,31 @@ No new database tables are necessary: declarations live in the existing versione
 
 ## Scheduling and failure
 
+### Explicit shared-model workspace access (2026-10-25)
+
+Shared-model discovery must remain visible when the selected workspace has not
+allowed the group's exact model identifier. Distributed Jobs lists these groups
+as requiring workspace permission, while keeping every member's ownership,
+contribution, workspace membership and active-group restrictions in force.
+Discovery omits only the model-selection check; execution still checks the full
+model allowlist and all existing scheduling and fencing rules.
+
+A workspace owner or administrator can select **Allow in this workspace** for a
+discovered shared model. `POST /api/v1/shared-inference/workspace-access` derives
+the model identifier from the authorized leader's group declaration and matching
+deployment. It locks the workspace, adds only that identifier to its existing
+model allowlist, preserves tool restrictions, and audits an actual addition.
+Repeated approval is idempotent. A platform administrator without workspace
+administration cannot grant access or override node-owner restrictions.
+
+Managed setups generate a distinct model alias for each setup. Allowing the
+underlying Ollama model does not implicitly authorize every new shared topology;
+recreated setups require explicit workspace approval. The ordinary Models page
+continues to exclude shared deployments. No migration, worker update, model
+download, inference request or automatic policy change is needed for this fix.
+
+### Execution rules
+
 A single scheduler transaction locks all available members under the existing PostgreSQL advisory scheduler lock. A group may claim only when every member is online, consenting, authorized in the workspace, and has no active reservations. The attempt reserves all concurrency slots on every member. Every preferred member retains first refusal for its own owner's compatible queued work. Active peer reservations remain effective even if the leader's row is temporarily locked by another request. One leader receives one ordinary inference assignment; peers contribute through the configured engine.
 
 Every report rechecks group consent, member identities, current sessions, credentials, health, workspace restrictions and discovered leader model. Any member losing authorization, changing session or disconnecting fences late results; scheduler reconciliation fails the attempt. No automatic restart, fallback to a single node or paid cloud, or recovery of unsaved GPU state is promised. Group resource reservations describe Godfather scheduling; they cannot stop independent owner processes or force an external engine to unload GPU memory. Cancellation closes the leader HTTP request through existing worker cancellation; downstream engine cleanup remains runtime-dependent.

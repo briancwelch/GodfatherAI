@@ -102,6 +102,7 @@ export function allowedPath(path: string, method: string): boolean {
     `workflow/jobs/${uuid}/artifacts/${uuid}`,
   ];
   const writes = [
+    "shared-inference/workspace-access",
     "distributed/(jobs|tasks)",
     `distributed/(jobs|tasks)/${uuid}/cancel`,
     "shared-inference/jobs",

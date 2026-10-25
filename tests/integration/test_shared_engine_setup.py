@@ -11,6 +11,7 @@ from godfather_api.models import (
     Node,
     SharedEngineConsent,
     SharedEngineSetup,
+    Workspace,
     WorkspaceMember,
 )
 from godfather_api.provision import provision
@@ -279,6 +280,23 @@ def test_shared_session_does_not_accept_ordinary_jobs_and_revocation_fences_resu
         assert result.status_code == 200, result.text
         h.registrations[i] = registration
     ordinary = h.submit()
+    # Managed engines use a generated alias, separate from the installed model's name.
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = ["installed.gguf"]
+    options = h.client.get(
+        "/api/v1/shared-inference/options",
+        headers=headers(h.admin),
+        params={"workspace_id": str(h.workspace_id)},
+    ).json()["groups"]
+    assert len(options) == 1 and options[0]["workspace_allowed"] is False
+    enabled = h.client.post(
+        "/api/v1/shared-inference/workspace-access",
+        headers=headers(h.admin),
+        json={"workspace_id": str(h.workspace_id), "group_id": str(topology.id)},
+    )
+    assert enabled.status_code == 200, enabled.text
     assert h.tick() == 0 and h.get(ordinary["id"])["status"] == "PENDING"
     from tests.integration.test_inference import inference_result
     from tests.integration.test_shared_inference import submit

@@ -1383,6 +1383,63 @@ test("shared inference exposes all three distinct setups and both task and job n
   );
 });
 
+test("shared group permissions expose an explicit admin action and preserve blocked states", () => {
+  const group = {
+    id: "fixture-group",
+    name: "Shared fixture",
+    model: "shared-fixture",
+    engine: "llama_cpp",
+    parallelism: "pipeline",
+    device_count: 2,
+    computers: [
+      { id: "leader", name: "Leader" },
+      { id: "peer", name: "Peer" },
+    ],
+    workspace_allowed: false,
+    can_enable: true,
+    model_discovered: true,
+    available: false,
+    reason: "Workspace permission required for this shared model",
+  };
+  const render = (changes = {}, state = {}) =>
+    renderToStaticMarkup(
+      React.createElement(sharedInference.SharedGroupReadiness, {
+        group: { ...group, ...changes },
+        busy: false,
+        stale: false,
+        allow: () => {},
+        ...state,
+      }),
+    );
+  const admin = render();
+  assert.match(admin, /Workspace permission required/);
+  assert.match(admin, /Allow in this workspace/);
+  assert.match(admin, /Existing model and tool permissions are preserved/);
+  assert.match(admin, /type="button"/);
+  assert.doesNotMatch(admin, /disabled=""/);
+  const member = render({ can_enable: false });
+  assert.match(member, /Ask a workspace owner or administrator/);
+  assert.doesNotMatch(member, /<button/);
+  assert.match(render({ model_discovered: false }), /disabled=""/);
+  assert.match(render({ model_discovered: false }), /Waiting for the leader/);
+  assert.match(render({}, { stale: true }), /disabled=""/);
+  assert.match(render({}, { busy: true }), /Allowing shared model/);
+  assert.match(render({}, { busy: true }), /disabled=""/);
+  assert.doesNotMatch(render({ workspace_allowed: true }), /<button/);
+  assert.equal(
+    server.allowedPath("shared-inference/workspace-access", "POST"),
+    true,
+  );
+  assert.equal(
+    server.allowedPath("shared-inference/workspace-access", "GET"),
+    false,
+  );
+  assert.equal(
+    server.allowedPath("shared-inference/workspace-access/arbitrary", "POST"),
+    false,
+  );
+});
+
 const taskVariables = require("../apps/dashboard/src/lib/task-variables.ts");
 test("task variables infer result dependencies and reject unknown, malformed or future outputs before posting", () => {
   assert.deepEqual(

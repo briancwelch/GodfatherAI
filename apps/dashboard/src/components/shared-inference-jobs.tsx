@@ -46,15 +46,68 @@ interface InferenceGroup {
   parallelism: string;
   device_count: number;
   available: boolean;
+  workspace_allowed?: boolean;
+  can_enable?: boolean;
+  model_discovered?: boolean;
   reason: string;
   computers: { id: string; name: string }[];
+}
+export function SharedGroupReadiness({
+  group,
+  busy,
+  stale,
+  allow,
+}: {
+  group: InferenceGroup;
+  busy: boolean;
+  stale: boolean;
+  allow: () => void;
+}) {
+  return (
+    <div className="submission-readiness">
+      <strong>{group.model}</strong>
+      <p>
+        {group.engine} - {group.parallelism} parallelism - {group.device_count}{" "}
+        configured devices
+      </p>
+      <p>{group.computers.map((computer) => computer.name).join(", ")}</p>
+      <p>{group.reason}</p>
+      {group.workspace_allowed === false && (
+        <>
+          <p>
+            Allow this shared model in the selected workspace before running a
+            job. Existing model and tool permissions are preserved.
+          </p>
+          {group.can_enable ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary action"
+                disabled={busy || stale || !group.model_discovered}
+                onClick={allow}
+              >
+                {busy ? "Allowing shared model…" : "Allow in this workspace"}
+              </button>
+              {!group.model_discovered && (
+                <p>Waiting for the leader to discover the shared model.</p>
+              )}
+            </>
+          ) : (
+            <p>Ask a workspace owner or administrator to allow this setup.</p>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 export function InferenceSetups({
   mode,
   select,
+  disabled = false,
 }: {
   mode: Mode;
   select: (mode: Mode) => void;
+  disabled?: boolean;
 }) {
   return (
     <fieldset className="inference-setups">
@@ -71,6 +124,7 @@ export function InferenceSetups({
               name="inference-mode"
               value={setup.id}
               checked={mode === setup.id}
+              disabled={disabled}
               onChange={() => select(setup.id)}
             />
             <strong>{setup.name}</strong>
@@ -100,7 +154,11 @@ export default function SharedInferenceJobs({
   const [error, setError] = useState("");
   useFeedback(error);
   const [stale, setStale] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<
+    "permission" | "submission" | null
+  >(null);
+  const busy = busyAction !== null;
+  const [permissionMessage, setPermissionMessage] = useState("");
   const [revision, setRevision] = useState(0);
   const workspaceId =
     workspace || data?.workspace_id || data?.workspaces[0]?.id || "";
@@ -161,6 +219,32 @@ export default function SharedInferenceJobs({
   }, [workspaceId, offset, selected, revision]);
   const matching = groups.filter((group) => group.mode === mode);
   const group = matching.find((entry) => entry.id === groupId);
+  async function allowGroup() {
+    if (!group || busy || stale || !group.can_enable || !group.model_discovered)
+      return;
+    const workspaceName =
+      data?.workspaces.find((entry) => entry.id === workspaceId)?.name ||
+      "this workspace";
+    setBusyAction("permission");
+    setError("");
+    setPermissionMessage("");
+    try {
+      await control("shared-inference/workspace-access", {
+        workspace_id: workspaceId,
+        group_id: group.id,
+      });
+      setPermissionMessage(`${group.name} is allowed in ${workspaceName}.`);
+      setRevision((value) => value + 1);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Shared model permission was not saved",
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -181,7 +265,7 @@ export default function SharedInferenceJobs({
       );
       return;
     }
-    setBusy(true);
+    setBusyAction("submission");
     try {
       const job = await control<JobInfo>(
         "shared-inference/jobs",
@@ -204,7 +288,7 @@ export default function SharedInferenceJobs({
           : "Submission not confirmed. Check history before retrying.",
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
   const pages = (
@@ -271,12 +355,14 @@ export default function SharedInferenceJobs({
               <select
                 className="form-select"
                 value={workspaceId}
+                disabled={busy}
                 onChange={(event) => {
                   setWorkspace(event.target.value);
                   setSelected("");
                   setGroupId("");
                   setDetail(null);
                   setOffset(0);
+                  setPermissionMessage("");
                 }}
               >
                 {data?.workspaces.map((item) => (
@@ -288,9 +374,11 @@ export default function SharedInferenceJobs({
             </label>
             <InferenceSetups
               mode={mode}
+              disabled={busy}
               select={(value) => {
                 setMode(value);
                 setGroupId("");
+                setPermissionMessage("");
               }}
             />
             <label>
@@ -298,13 +386,21 @@ export default function SharedInferenceJobs({
               <select
                 className="form-select"
                 value={groupId}
-                onChange={(event) => setGroupId(event.target.value)}
+                disabled={busy}
+                onChange={(event) => {
+                  setGroupId(event.target.value);
+                  setPermissionMessage("");
+                }}
               >
                 <option value="">Choose an owner-configured group</option>
                 {matching.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {entry.name} - {entry.model} -{" "}
-                    {entry.available ? "Ready" : "Unavailable"}
+                    {entry.workspace_allowed === false
+                      ? "Workspace permission required"
+                      : entry.available
+                        ? "Ready"
+                        : "Unavailable"}
                   </option>
                 ))}
               </select>
@@ -318,18 +414,14 @@ export default function SharedInferenceJobs({
               </p>
             )}
             {group && (
-              <div className="submission-readiness">
-                <strong>{group.model}</strong>
-                <p>
-                  {group.engine} - {group.parallelism} parallelism -{" "}
-                  {group.device_count} configured devices
-                </p>
-                <p>
-                  {group.computers.map((computer) => computer.name).join(", ")}
-                </p>
-                <p>{group.reason}</p>
-              </div>
+              <SharedGroupReadiness
+                group={group}
+                busy={busyAction === "permission"}
+                stale={stale}
+                allow={() => void allowGroup()}
+              />
             )}
+            {permissionMessage && <p role="status">{permissionMessage}</p>}
             <label>
               Job prompt
               <textarea
@@ -356,8 +448,13 @@ export default function SharedInferenceJobs({
               disconnect ends the attempt; GPU state cannot be resumed.
               Performance remains unverified until benchmarked on these devices.
             </p>
-            <button className="btn btn-primary action" disabled={busy || stale}>
-              {busy ? "Submitting..." : "Run distributed job"}
+            <button
+              className="btn btn-primary action"
+              disabled={busy || stale || !group?.available}
+            >
+              {busyAction === "submission"
+                ? "Submitting..."
+                : "Run distributed job"}
             </button>
           </form>
         </details>

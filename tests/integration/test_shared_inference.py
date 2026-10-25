@@ -13,10 +13,11 @@ import pytest
 from fastapi.testclient import TestClient
 from godfather_api.app import create_app
 from godfather_api.config import Settings
-from godfather_api.models import AccessCredential, Attempt, Node, WorkspaceMember
+from godfather_api.models import AccessCredential, Attempt, Event, Node, Workspace, WorkspaceMember
 from godfather_api.provision import provision
 from godfather_contracts import GPU, ModelDeployment, SharedInferenceGroup
 from godfather_contracts.jobs import Assignment
+from godfather_contracts.shared_engine import ACTIVE_PREFIX
 from godfather_model_gateway import ProviderConfig
 from godfather_worker.inference import execute_inference
 from sqlalchemy import select
@@ -249,6 +250,173 @@ def test_private_groups_and_explicit_wide_area_consent(h: Harness) -> None:
         ).json()["groups"]
         == []
     )
+
+
+@pytest.mark.parametrize("existing_models", [[], ["qwen3:8b", "existing-local-model"]])
+def test_restricted_group_is_discoverable_and_explicit_grant_preserves_policy(
+    h: Harness, existing_models: list[str]
+) -> None:
+    group, _ = configure(h)
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = existing_models
+        workspace.allowed_tools = ["plan.describe@1"]
+        for member_id in group.node_ids:
+            member = session.get(Node, member_id)
+            assert member
+            runtimes = member.runtimes.get("runtimes", [])
+            assert isinstance(runtimes, list)
+            member.runtimes = {
+                **member.runtimes,
+                "runtimes": [*runtimes, ACTIVE_PREFIX + str(group.id)],
+            }
+    response = h.client.get(
+        "/api/v1/shared-inference/options",
+        params={"workspace_id": str(h.workspace_id)},
+        headers=headers(h.admin),
+    )
+    assert response.status_code == 200, response.text
+    entry = response.json()["groups"][0]
+    assert entry["id"] == str(group.id)
+    assert entry["workspace_allowed"] is False and entry["available"] is False
+    assert entry["can_enable"] is True and entry["model_discovered"] is True
+    assert "Workspace permission required" in entry["reason"]
+    denied = h.client.post(
+        "/api/v1/shared-inference/jobs",
+        headers=headers(h.admin),
+        json={"workspace_id": str(h.workspace_id), "group_id": str(group.id), "prompt": "Test"},
+    )
+    assert denied.status_code == 409
+    payload = {"workspace_id": str(h.workspace_id), "group_id": str(group.id)}
+    for _ in range(2):
+        enabled = h.client.post(
+            "/api/v1/shared-inference/workspace-access", headers=headers(h.admin), json=payload
+        )
+        assert enabled.status_code == 200 and enabled.json() == {"enabled": True}
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        assert workspace.allowed_models == [*existing_models, group.model]
+        assert workspace.allowed_tools == ["plan.describe@1"]
+        events = list(
+            session.scalars(
+                select(Event).where(
+                    Event.workspace_id == h.workspace_id,
+                    Event.type == "security.workspace_model_enabled",
+                )
+            )
+        )
+        assert len(events) == 1
+        assert events[0].details["shared_inference_group_id"] == str(group.id)
+    refreshed = h.client.get(
+        "/api/v1/shared-inference/options",
+        params={"workspace_id": str(h.workspace_id)},
+        headers=headers(h.admin),
+    ).json()["groups"][0]
+    assert refreshed["workspace_allowed"] is True and refreshed["available"] is True
+    job = submit(h, group)
+    assert h.tick() == 1 and h.get(job["id"])["status"] == "ASSIGNED"
+    # A later administrator revocation is still enforced on the selected group.
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = existing_models
+    assert h.poll() is None
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+def test_shared_model_grant_requires_workspace_administration(h: Harness, role: str) -> None:
+    group, _ = configure(h)
+    other = provision(h.database, "admin", email="shared-model-reviewer@example.invalid")
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = []
+        session.add(
+            WorkspaceMember(workspace_id=h.workspace_id, user_id=UUID(other["owner_id"]), role=role)
+        )
+        for member_id in group.node_ids:
+            member = session.get(Node, member_id)
+            assert member
+            member.scheduling_policy = "shared"
+            member.contribution_policy = {"share_with_workspaces": True}
+    entry = h.client.get(
+        "/api/v1/shared-inference/options",
+        params={"workspace_id": str(h.workspace_id)},
+        headers=headers(other),
+    ).json()["groups"][0]
+    assert entry["can_enable"] is (role == "admin")
+    result = h.client.post(
+        "/api/v1/shared-inference/workspace-access",
+        headers=headers(other),
+        json={"workspace_id": str(h.workspace_id), "group_id": str(group.id)},
+    )
+    assert result.status_code == (200 if role == "admin" else 403), result.text
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        assert workspace.allowed_models == ([group.model] if role == "admin" else [])
+
+
+@pytest.mark.parametrize("blocker", ["unknown_group", "missing_model", "wrong_binding", "limit"])
+def test_shared_model_grant_rejects_stale_identity_and_full_policy(
+    h: Harness, blocker: str
+) -> None:
+    group, _ = configure(h)
+    existing = [f"existing-{i}" for i in range(64)] if blocker == "limit" else []
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = existing
+        if blocker in ("missing_model", "wrong_binding"):
+            leader = session.get(Node, group.leader_node_id)
+            assert leader
+            deployments = leader.runtimes["model_deployments"]
+            assert isinstance(deployments, list)
+            if blocker == "wrong_binding":
+                deployments = [{**deployments[0], "shared_inference_group_id": str(uuid4())}]
+            else:
+                deployments = []
+            leader.runtimes = {**leader.runtimes, "model_deployments": deployments}
+    result = h.client.post(
+        "/api/v1/shared-inference/workspace-access",
+        headers=headers(h.admin),
+        json={
+            "workspace_id": str(h.workspace_id),
+            "group_id": str(uuid4() if blocker == "unknown_group" else group.id),
+        },
+    )
+    assert result.status_code == (404 if blocker == "unknown_group" else 409), result.text
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace and workspace.allowed_models == existing
+
+
+def test_shared_model_grant_cannot_override_node_owner_or_private_workspace(h: Harness) -> None:
+    group, _ = configure(h)
+    outsider = provision(h.database, "admin", email="shared-model-outsider@example.invalid")
+    payload = {"workspace_id": str(h.workspace_id), "group_id": str(group.id)}
+    endpoint = "/api/v1/shared-inference/workspace-access"
+    assert h.client.post(endpoint, json=payload).status_code == 401
+    assert h.client.post(endpoint, json=payload, headers=headers(h.workers[0])).status_code == 401
+    assert h.client.post(endpoint, json=payload, headers=headers(outsider)).status_code == 404
+    with h.database.sessions.begin() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace
+        workspace.allowed_models = []
+        member = session.get(Node, group.node_ids[1])
+        assert member
+        member.owner_id = UUID(outsider["owner_id"])
+        member.contribution_policy = {"allowed_job_owner_ids": [], "allowed_workspace_ids": []}
+        session.add(
+            WorkspaceMember(workspace_id=h.workspace_id, user_id=member.owner_id, role="member")
+        )
+    denied = h.client.post(endpoint, json=payload, headers=headers(h.admin))
+    assert denied.status_code == 404, denied.text
+    with h.database.sessions() as session:
+        workspace = session.get(Workspace, h.workspace_id)
+        assert workspace and workspace.allowed_models == []
 
 
 def test_locked_leader_cannot_release_active_group_peer_reservations(h: Harness) -> None:

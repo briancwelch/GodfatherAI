@@ -18,7 +18,7 @@ from pydantic import Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from godfather_api.models import AccessCredential, Attempt, Job, Node
+from godfather_api.models import AccessCredential, Attempt, Job, Node, Workspace, WorkspaceMember
 from godfather_api.nodes import SessionDep, authenticate, node_view
 
 router = APIRouter(
@@ -31,6 +31,11 @@ class SharedSubmission(Contract):
     group_id: UUID
     prompt: str = Field(min_length=1, max_length=32768)
     wide_area_consent: bool = False
+
+
+class WorkspaceAccess(Contract):
+    workspace_id: UUID
+    group_id: UUID
 
 
 def declared(node: Node) -> list[SharedInferenceGroup]:
@@ -142,14 +147,29 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
     actor = authenticate(request, session, "human")
     if not workspace_access(session, actor.owner_id, workspace_id):
         raise HTTPException(404, "Workspace not found")
+    workspace = session.get(Workspace, workspace_id)
+    assert workspace is not None
+    membership = session.get(WorkspaceMember, (workspace_id, actor.owner_id))
+    can_manage = workspace.owner_id == actor.owner_id or bool(
+        membership and membership.role == "admin"
+    )
     groups = []
     for node in session.scalars(select(Node).order_by(Node.name, Node.id)):
         for group in declared(node):
             if group.leader_node_id != node.id:
                 continue
             probe = probe_job(actor.owner_id, workspace_id, group)
+            # Discovery preserves every member/owner restriction, but a missing
+            # model grant must be visible so a workspace admin can authorize it.
+            visibility_probe = probe_job(actor.owner_id, workspace_id, group)
+            visibility_probe.requirements = {
+                **visibility_probe.requirements,
+                "model_selection": None,
+            }
             members = [session.get(Node, member) for member in group.node_ids]
-            if not all(peer and base_permitted(session, probe, peer) for peer in members):
+            if not all(
+                peer and base_permitted(session, visibility_probe, peer) for peer in members
+            ):
                 continue
             deployment = next(
                 (
@@ -164,13 +184,25 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
                 ),
                 None,
             )
-            ready = group_permitted(session, probe, node) and deployment is not None
+            workspace_allowed = (
+                workspace.allowed_models is None or group.model in workspace.allowed_models
+            )
+            ready = (
+                workspace_allowed
+                and group_permitted(session, probe, node)
+                and deployment is not None
+            )
             groups.append(
                 {
                     **group.model_dump(mode="json"),
                     "available": ready,
+                    "workspace_allowed": workspace_allowed,
+                    "can_enable": can_manage,
+                    "model_discovered": deployment is not None,
                     "reason": "Ready (owner-configured topology; performance unverified)"
                     if ready
+                    else "Workspace permission required for this shared model"
+                    if not workspace_allowed
                     else "Waiting for owner consent, online members, devices and engine discovery",
                     "computers": [
                         {"id": str(peer.id), "name": peer.name} for peer in members if peer
@@ -178,6 +210,41 @@ def options(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
                 }
             )
     return {"groups": groups}
+
+
+@router.post("/workspace-access")
+def enable_workspace_group(
+    payload: WorkspaceAccess, request: Request, session: SessionDep
+) -> dict[str, bool]:
+    from godfather_api.agents import manage_workspace
+    from godfather_api.authentication import audit
+    from godfather_api.scheduler import lock_workspace
+
+    actor = authenticate(request, session, "human")
+    lock_workspace(session, payload.workspace_id)
+    manage_workspace(session, payload.workspace_id, actor.owner_id)
+    entries = cast(list[dict[str, Any]], options(payload.workspace_id, request, session)["groups"])
+    entry = next((group for group in entries if group["id"] == str(payload.group_id)), None)
+    if entry is None:
+        raise HTTPException(404, "Inference group not found in this authorized workspace")
+    if not entry["model_discovered"]:
+        raise HTTPException(409, "Wait for the leader to discover this shared engine model")
+    workspace = session.get(Workspace, payload.workspace_id)
+    assert workspace is not None
+    identifier = str(entry["model"])
+    if workspace.allowed_models is not None and identifier not in workspace.allowed_models:
+        if len(workspace.allowed_models) >= 64:
+            raise HTTPException(409, "Workspace model limit reached; review workspace permissions")
+        workspace.allowed_models = [*workspace.allowed_models, identifier]
+        audit(
+            session,
+            "workspace_model_enabled",
+            actor.owner_id,
+            workspace.id,
+            workspace_id=workspace.id,
+            metadata={"identifier": identifier, "shared_inference_group_id": str(payload.group_id)},
+        )
+    return {"enabled": True}
 
 
 @router.post("/jobs", response_model=JobView, status_code=201)
