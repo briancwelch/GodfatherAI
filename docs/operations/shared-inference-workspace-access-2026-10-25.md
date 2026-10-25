@@ -5,6 +5,9 @@ separately authorized commit, GitHub push and coordinator deployment. Existing
 worker installers are retained. Workspace policy changes still require the
 workspace administrator's explicit action in Distributed Jobs.
 
+Published in coordinator **0.11.0-rc.3**. See the
+[release verification](shared-inference-workspace-access-release-2026-10-25.md).
+
 ## Behavior
 
 A ready managed engine uses a generated `shared-<setup id>` model identifier.
@@ -62,9 +65,11 @@ Database checks used the isolated Compose project
 databases, artifacts, credentials, account keys and workspace policies were not
 changed. No schema migration or installer build was needed.
 
-Real signed-in local browser flows, production deployment/acceptance and physical
-multi-computer inference were not performed. Approval adds a permission; it does
-not submit a job, prove GPU performance or authorize paid inference.
+The implementation checks did not perform real signed-in browser flows or
+physical multi-computer inference. Subsequent coordinator deployment and live
+acceptance are recorded separately in the release verification above. Approval
+adds a permission; it does not submit a job, prove GPU performance or authorize
+paid inference.
 
 ## Changed files
 
