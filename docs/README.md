@@ -1,9 +1,9 @@
 # Documentation
 
 Start with the [user guide](../README.md) for sign-in, worker installation, models
-and your first job. The Command Center and all three desktop installers are
-published as **0.10.0-rc.3**. The [release verification](operations/shared-inference-release-2026-10-24.md)
-records packaging, preservation and public checks. See [cloud image setup](operations/cloud-images.md)
+and your first job. The Command Center is **0.11.0-rc.2**, with desktop installers **0.11.0-rc.1**.
+The [release verification](operations/assessment-capacity-release-2026-10-25.md)
+records capacity, recovery, packaging and live preservation checks. See [cloud image setup](operations/cloud-images.md)
 for OpenAI/Gemini account connections and the required worker opt-ins.
 
 The [local model scan and node permissions update](operations/worker-scan-and-node-permissions-2026-10-23.md)

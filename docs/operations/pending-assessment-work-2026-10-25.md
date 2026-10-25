@@ -5,6 +5,10 @@ deferred the following orders on October 25 while authorizing capacity order #6
 and release of the completed work. These entries are **pending**, not implemented
 or implicitly authorized by that release. Preserve the original finding numbers.
 
+Recorded after deployment of coordinator **0.11.0-rc.2** and worker downloads
+**0.11.0-rc.1**; see the [release report](assessment-capacity-release-2026-10-25.md).
+All entries below remain pending.
+
 | Order         | Status                                                       | Findings                   | Scope and acceptance                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------------- | ------------------------------------------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 5             | Pending; explicitly skipped for now                          | #1, #19, #22               | **Release trust and packaging.** Authenticate manifests using existing cryptography; connect existing Mac signing/notarization support; correct packaged documentation and export dependency notices. Test altered manifests, wrong signing keys, modified packages, semantic downgrade rejection, failed-install rollback and identity/settings preservation. Define signature-enforcement migration for existing workers first. Current signing policy remains unchanged. |
