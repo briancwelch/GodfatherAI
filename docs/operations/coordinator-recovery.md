@@ -126,19 +126,19 @@ done
 "${restore_compose[@]}" up -d --wait --pull never postgres redis
 "${restore_compose[@]}" exec -T postgres pg_restore -U godfather -d godfather \
   --exit-on-error --no-owner < "$backup/database.dump"
-"${restore_compose[@]}" run --rm --no-deps -T --user 0 --entrypoint python api -c '
-import os, pathlib, sys, tarfile
+"${restore_compose[@]}" run --rm --no-deps -T --user 10001:10001 --entrypoint python api -c '
+import pathlib, sys, tarfile
 root = pathlib.Path("/var/lib/godfather/artifacts")
 assert not any(root.iterdir()), "Restore requires an empty artifact volume"
 with tarfile.open(fileobj=sys.stdin.buffer, mode="r|gz") as archive:
     archive.extractall(root.parent, filter="data")
 for item in [root, *root.rglob("*")]:
     assert not item.is_symlink(), "Artifact links require review"
-    os.chown(item, 10001, 10001)
 ' < "$backup/artifacts.tar.gz"
 
 # One-shot check: no migration, scheduler, public listener or provider request.
-"${restore_compose[@]}" run --rm --no-deps -T --user 0 --entrypoint python \
+"${restore_compose[@]}" run --rm --no-deps -T --user 0 \
+  --cap-add DAC_READ_SEARCH --entrypoint python \
   --volume "$backup:/backup:ro" \
   --volume "$private_restore/production.env:/private/production.env:ro" \
   api -m godfather_api.recovery verify --backup /backup \
@@ -150,6 +150,13 @@ a fingerprint, with the captured settings. Shell/Compose overrides missing from 
 recovered environment fail this check. Keep settings in the private environment and
 escrow any explicit overrides; restore the original configuration before making
 separately reviewed changes.
+
+The one-shot verifier needs `DAC_READ_SEARCH` because the private configuration is
+owned by root while artifact directories/files are owned by UID 10001 with private
+permissions. Container root with all capabilities dropped cannot read those files.
+This read/search capability is limited to the verification container; the running
+API remains UID 10001 with all capabilities dropped. Do not relax artifact modes or
+change their ownership to make verification pass.
 
 The verifier uses a read-only database transaction and reports counts/head only.
 It checks referenced artifact hashes/sizes, checkpoint identity/references, latest

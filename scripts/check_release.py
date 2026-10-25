@@ -289,6 +289,73 @@ console.log('Dashboard standalone content passed');
             else:
                 raise AssertionError("Anonymous worker registered")
         assert compose("exec", "-T", "redis", "redis-cli", "ping").strip() == b"PONG"
+        # Verify the operator's root/config + private API artifact permission boundary.
+        # Root with cap_drop=ALL cannot read UID-10001 mode-700 artifact directories.
+        probe_id = uuid4()
+        probe_data = b"private-artifact-permission-probe"
+        probe_hash = hashlib.sha256(probe_data).hexdigest()
+        compose(
+            "exec",
+            "-T",
+            "api",
+            "python",
+            "-c",
+            "from pathlib import Path; from uuid import UUID; "
+            "from godfather_api.artifacts import LocalArtifactStore; "
+            "from godfather_api.config import Settings; "
+            "store=LocalArtifactStore(Settings().artifact_directory); "
+            f"store.write(UUID('{probe_id}'), {probe_data!r})",
+        )
+        probe_prefix = (
+            "from uuid import UUID; "
+            "from godfather_api.artifacts import ArtifactError, LocalArtifactStore; "
+            "from godfather_api.config import Settings; "
+            "store=LocalArtifactStore(Settings().artifact_directory); "
+        )
+        probe_read = f"store.read(UUID('{probe_id}'), '{probe_hash}', {len(probe_data)})"
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "-T",
+            "--user",
+            "0",
+            "--entrypoint",
+            "python",
+            "api",
+            "-c",
+            probe_prefix
+            + "\ntry:\n "
+            + probe_read
+            + "\nexcept ArtifactError:\n pass\nelse:\n"
+            + " raise AssertionError('Private artifact permissions were relaxed')",
+        )
+        root_probe = probe_prefix + f"assert {probe_read} == {probe_data!r}"
+        compose(
+            "run",
+            "--rm",
+            "--no-deps",
+            "-T",
+            "--user",
+            "0",
+            "--cap-add",
+            "DAC_READ_SEARCH",
+            "--entrypoint",
+            "python",
+            "api",
+            "-c",
+            root_probe,
+        )
+        compose(
+            "exec",
+            "-T",
+            "api",
+            "python",
+            "-c",
+            "from uuid import UUID; from godfather_api.artifacts import LocalArtifactStore; "
+            "from godfather_api.config import Settings; "
+            f"LocalArtifactStore(Settings().artifact_directory).path(UUID('{probe_id}')).unlink()",
+        )
         compose(
             "exec",
             "-T",
@@ -366,17 +433,21 @@ console.log('Dashboard standalone content passed');
                 "--network",
                 "none",
                 "--user",
-                "0",
+                "10001:10001",
+                "--cap-drop",
+                "ALL",
+                "--read-only",
                 "-i",
                 "--mount",
-                f"type=volume,src={restore_volume},dst=/restore",
+                f"type=volume,src={restore_volume},dst=/var/lib/godfather/artifacts",
                 api_image,
                 "python",
                 "-c",
-                "import sys,tarfile,pathlib; "
+                "import os,sys,tarfile,pathlib; assert os.geteuid()==10001; "
                 "t=tarfile.open(fileobj=sys.stdin.buffer,mode='r|'); "
-                "t.extractall('/restore',filter='data'); "
-                "assert pathlib.Path('/restore/artifacts/release-probe').read_text()=='durable'",
+                "t.extractall('/var/lib/godfather',filter='data'); "
+                "p=pathlib.Path('/var/lib/godfather/artifacts/release-probe'); "
+                "assert p.read_text()=='durable' and p.stat().st_uid==10001",
                 data=artifact_backup,
             )
         finally:
@@ -426,6 +497,7 @@ console.log('Dashboard standalone content passed');
                         "durable founder singleton and no seeded application identities",
                         "healthy private services",
                         "real HTTP proxy and anonymous denial",
+                        "private artifact permissions and read-only verifier capability",
                         "all published installer downloads through both proxy hostnames",
                         "database and artifact restore",
                         "volume persistence and restart",
