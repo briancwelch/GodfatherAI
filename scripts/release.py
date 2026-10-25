@@ -111,6 +111,7 @@ def assemble(
         ("production-release.md", "INSTALL.md"),
         ("founder-bootstrap.md", "FOUNDER.md"),
         ("first-deployment.md", "DEPLOYMENT.md"),
+        ("coordinator-recovery.md", "RECOVERY.md"),
         ("worker-distribution.md", "WORKERS.md"),
     ):
         shutil.copyfile(ROOT / "docs/operations" / name, folder / target)

@@ -31,6 +31,16 @@ class NativeModel(Contract):
     structured_output: bool = False
 
 
+class ModelMemoryProfile(Contract):
+    """Owner-attested conservative runtime envelope, never a download-size heuristic."""
+
+    estimated_ram_bytes: int = Field(gt=0, le=2**60)
+    estimated_vram_bytes: int = Field(ge=0, le=2**60)
+    context_window: int = Field(ge=1, le=2**40)
+    evidence: str = Field(min_length=10, max_length=500)
+    digest: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class ProviderConfig(Contract):
     id: Label
     provider: Literal["ollama", "openai_compatible", "openai", "anthropic", "gemini"]
@@ -39,6 +49,7 @@ class ProviderConfig(Contract):
     model_catalog: list[NativeModel] = Field(default_factory=list, max_length=128)
     # Optional owner-local selection from an explicit scan; never sent as host paths.
     discovery_models: list[Label] | None = Field(default=None, max_length=128)
+    memory_profiles: dict[Label, ModelMemoryProfile] = Field(default_factory=dict, max_length=128)
     _api_key: SecretStr | None = PrivateAttr(default=None)
     _account_key: bool = PrivateAttr(default=False)
     url: str = Field(default="http://127.0.0.1:11434", max_length=2048, repr=False)
@@ -51,6 +62,8 @@ class ProviderConfig(Contract):
 
     @model_validator(mode="after")
     def secure_endpoint(self) -> "ProviderConfig":
+        if self.memory_profiles and self.provider not in ("ollama", "openai_compatible"):
+            raise ValueError("Memory profiles describe local inference, not remote paid providers")
         if self.provider in ("openai", "anthropic", "gemini"):
             if self.connection_id is None or self.api_key_env:
                 raise ValueError(
@@ -97,6 +110,24 @@ class ProviderConfig(Contract):
         if self.provider == "ollama" and parsed.path not in ("", "/"):
             raise ValueError("Ollama endpoint must be an origin")
         return self
+
+    def memory_profile(self, deployment: ModelDeployment) -> ModelDeployment:
+        profile = self.memory_profiles.get(deployment.identifier)
+        if profile is None:
+            return deployment
+        if profile.digest is not None and profile.digest != deployment.digest:
+            # An exact model replacement invalidates the owner's measured envelope.
+            return deployment.model_copy(update={"available": False})
+        return deployment.model_copy(
+            update={
+                "estimated_ram_bytes": profile.estimated_ram_bytes,
+                "estimated_vram_bytes": profile.estimated_vram_bytes,
+                "context_window": min(deployment.context_window, profile.context_window)
+                if deployment.context_window is not None
+                else profile.context_window,
+                "metadata_source": "configured",
+            }
+        )
 
     def headers(self) -> dict[str, str]:
         if self.provider in ("openai", "anthropic", "gemini"):

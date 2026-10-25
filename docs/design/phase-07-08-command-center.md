@@ -30,6 +30,15 @@ jobs, agents, models and audit data. Node health uses existing platform-admin sc
 
 ## Components and states
 
+Job lists and Job information show the latest durable attempt's worker name and
+owner even after completion, failure or cancellation clears the active assignment.
+After recovery, the latest attempt identifies the worker that resumed the job;
+the existing Attempts disclosure retains earlier execution history. A job with no
+attempt says **Not yet assigned**. Missing historical metadata is shown explicitly.
+These labels are workspace-authorized execution provenance, not host access:
+only viewers who already have node-inspection permission receive a node link.
+Worker/job protocol payloads and execution/consent checks are unchanged.
+
 Shared page header, summary cards, semantic status badge, scrollable data table,
 filter controls, inspection panel, native confirmation dialog, JSON disclosure,
 loading/empty/error/permission-denied/stale status. Poll every three seconds while

@@ -32,6 +32,27 @@ For frontend hot reload, stop the container dashboard before `npm run dev` so
 both servers do not compete for port 3000. Keep the required local API and
 dependencies running.
 
+## Local validation and production review
+
+Develop locally and run relevant checks, builds and automated tests. Use the
+local Compose containers for application builds, API/database checks and migration
+validation as appropriate, following the build/migrate/start sequence above.
+Preserve `.env` and the existing database/artifact volumes; back up local data
+before applying schema migrations. Report actual results and limitations.
+
+Local Google OAuth setup and signed-in browser review at
+**http://127.0.0.1:3000** are optional. Without local OAuth, report real signed-in
+browser flows as unverified locally. Do not require local sign-in setup or
+hands-on browser acceptance before an authorized release. Optional setup details
+remain in [founder setup](operations/founder-bootstrap.md).
+
+When the owner is satisfied and explicitly authorizes release, commit and push
+the approved changes to GitHub, build and verify new worker installers, then
+deploy to the DigitalOcean Droplet/VPS through the documented backup-first
+release procedure. Test the live application after deployment and report results.
+Execute only the release steps included in that authorization. A local container
+refresh or passing checks does not authorize these release actions.
+
 ## Checks
 
 ```text

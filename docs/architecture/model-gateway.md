@@ -49,6 +49,27 @@ Scheduling requires the inference protocol opt-in, an available deployment with 
 
 ## Execution, storage and observability
 
+Owner-local [memory profiles](../operations/capacity-and-admission.md) now populate
+the existing deployment RAM/VRAM estimate fields. Profiles are explicit, bounded by
+context and optionally a model digest; download/storage bytes remain separate.
+Hardware measurements in resource reports are presentation-only and do not enlarge
+the owner-contributed capacity used by scheduling or durable reservations.
+
+The current workspace metrics projection includes direct text inference and model
+or coding workflows. `recent_attempts` retains bounded attempt metadata;
+`recent_measurements` combines completed direct calls and committed workflow model
+or coding steps, newest first, capped at 200 records across both sources. Each
+measurement identifies its job, original attempt/node, optional step, deployment
+and recorded usage. Tool/data steps and logically deleted jobs are excluded.
+Recovered checkpoints keep their original measurement rather than copying it to
+the recovery attempt. No usage is synthesized for uncommitted or missing records.
+
+The Models table matches measurements by node, provider, provider alias, model,
+connection, shared-inference group and digest. It shows the latest matching call,
+not a sum or average across steps or attempts. Input/output counts, duration,
+first-token latency and rate provenance retain their stored values; missing values
+remain unknown. Measurements contain no prompts, response text or provider keys.
+
 The selected deployment, attempt UUID, monotonically increasing fence and deadline are assigned transactionally. Workers acknowledge/start before executing. Renewals, heartbeats and cancellation checks continue while HTTP inference blocks. Output and completion use the existing credential/node/job locks and verify the current session, attempt, fence, permissions, active state, lease and deadline. Results must use the assigned deployment and extend the persisted prefix. Cancellation wins over subsequent completion. A lost worker never commits over a replacement.
 
 Prompt/system limits are 32,768/8,192 characters. Output is at most 32,768 characters (at most 128 KiB UTF-8 before JSON escaping); no unlimited token rows or large artifact blobs are added. Streaming batches append contiguously, with safe duplicate detection. Snapshots are not checkpoints; retries restart inference. API restart preserves queued work, attempts, bounded partials and final results in PostgreSQL. See the [SSE contract](../protocols/inference-v1.md).

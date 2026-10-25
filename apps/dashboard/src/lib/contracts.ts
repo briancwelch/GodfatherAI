@@ -15,6 +15,12 @@ export interface Resource {
     utilization_percent: number | null;
     unified_memory: boolean;
   }[];
+  hardware?: {
+    cpu_count: number;
+    ram_bytes: number | null;
+    available_ram_bytes: number | null;
+    gpus: Resource["gpus"];
+  } | null;
 }
 export interface NodeInfo {
   owner_name?: string | null;
@@ -48,7 +54,11 @@ export interface NodeInfo {
   model_deployments: Deployment[];
 }
 export interface Deployment {
+  disk_bytes?: number | null;
+  metadata_source?: "provider_reported" | "configured";
   connection_id?: string | null;
+  shared_inference_group_id?: string | null;
+  digest?: string | null;
   identifier: string;
   provider: string;
   provider_id: string;
@@ -73,6 +83,15 @@ export interface ModelInfo {
   deployment: Deployment;
 }
 export interface JobInfo {
+  execution?: {
+    attempt_id: string;
+    attempt_number: number;
+    node_id: string;
+    node_name: string | null;
+    owner_id: string | null;
+    owner_name: string | null;
+    can_inspect_node: boolean;
+  } | null;
   owner_name?: string | null;
   owner_picture?: string | null;
   input?: Record<string, Json>;
@@ -176,19 +195,35 @@ export interface Snapshot {
   limit: number;
   offset: number;
   metrics: {
+    recent_measurements?: {
+      measurement_id: string;
+      source: "inference_attempt" | "workflow_step";
+      attempt_id: string;
+      job_id: string;
+      node_id: string;
+      step_id: string | null;
+      measured_at: string;
+      deployment: Deployment | null;
+      usage: InferenceUsage | null;
+    }[];
     recent_attempts: {
       attempt_id: string;
       node_id: string;
       status: string;
-      usage: {
-        duration_seconds?: number;
-        input_tokens?: number;
-        output_tokens?: number;
-        first_token_seconds?: number;
-        tokens_per_second?: number;
-      } | null;
+      deployment?: Deployment | null;
+      usage: InferenceUsage | null;
     }[];
   } | null;
+}
+export interface InferenceUsage {
+  duration_seconds?: number | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  first_token_seconds?: number | null;
+  tokens_per_second?: number | null;
+  token_source?: string;
+  rate_source?: string;
+  timing_source?: string;
 }
 export interface AttemptInfo {
   started_at?: string | null;

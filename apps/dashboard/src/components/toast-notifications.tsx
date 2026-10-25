@@ -5,6 +5,14 @@ import { ProgressBar } from "./progress-bar";
 import { useEffect, useSyncExternalStore } from "react";
 import { CommandIcon } from "./command-icon";
 import {
+  authenticationRequired,
+  control,
+  ControlError,
+  subscribeAuthentication,
+} from "../lib/control-client";
+import { startPolling } from "../lib/polling";
+import type { JobDetail } from "../lib/contracts";
+import {
   dismissToast,
   finishWatchedJob,
   emptyToasts,
@@ -87,40 +95,33 @@ export function ToastCard({
 }
 
 export function ToastNotifications() {
+  const signInRequired = useSyncExternalStore(
+    subscribeAuthentication,
+    authenticationRequired,
+    () => false,
+  );
   const messages = useSyncExternalStore(
     subscribeToasts,
     toastSnapshot,
     () => emptyToasts,
   );
   useEffect(() => {
-    let active = true,
-      loading = false;
-    const refresh = async () => {
-      if (loading) return;
-      loading = true;
-      try {
-        await Promise.all(
+    return startPolling({
+      request: async (signal) => {
+        const results = await Promise.allSettled(
           [...watchedJobs.values()].map(async (job) => {
             try {
-              const response = await fetch(`/api/control/${job.path}`, {
-                cache: "no-store",
-                signal: AbortSignal.timeout(10000),
-              });
-              if (!active) return;
-              if (
-                response.status === 401 ||
-                response.status === 403 ||
-                response.status === 404
-              ) {
-                finishWatchedJob(job.id);
-                dismissToast(`job:${job.id}`);
-                return;
-              }
-              if (!response.ok) throw new Error("Status unavailable");
-              const data = await response.json();
-              if (!active) return;
+              const data = await control<
+                Partial<JobDetail> & {
+                  status?: string;
+                  error?: string;
+                  tasks?: { status: string }[];
+                }
+              >(job.path, undefined, 10000, signal);
+              if (signal.aborted) return;
               if (!watchedJobs.has(job.id)) return;
               const status = data.job?.status || data.status;
+              if (!status) throw new Error("Status unavailable");
               const lastError = data.attempts?.at(-1)?.error?.code;
               const failure =
                 typeof data.error === "string" && data.error
@@ -179,8 +180,17 @@ export function ToastNotifications() {
                 href: job.href,
               });
               if (terminal) finishWatchedJob(job.id);
-            } catch {
-              if (active)
+            } catch (error) {
+              if (signal.aborted) return;
+              if (
+                error instanceof ControlError &&
+                [403, 404].includes(error.status)
+              ) {
+                finishWatchedJob(job.id);
+                dismissToast(`job:${job.id}`);
+                return;
+              }
+              if (!authenticationRequired())
                 notifyToast({
                   id: `job:${job.id}`,
                   kind: "processing",
@@ -188,22 +198,18 @@ export function ToastNotifications() {
                   message: "Connection interrupted - job status is unknown",
                   href: job.href,
                 });
+              throw error;
             }
           }),
         );
-      } finally {
-        loading = false;
-      }
-    };
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 3000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed?.status === "rejected") throw failed.reason;
+      },
+      onData: () => {},
+      onError: () => {},
+    });
   }, []);
-  if (!messages.length) return null;
+  if (signInRequired || !messages.length) return null;
   return (
     <aside
       className="toast-container corner-toasts"

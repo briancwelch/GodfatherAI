@@ -4,7 +4,68 @@ import { useFeedback } from "./toast-notifications";
 
 import { useState } from "react";
 import { control } from "../lib/control-client";
-import type { ModelInfo } from "../lib/contracts";
+import type { ModelInfo, Snapshot } from "../lib/contracts";
+
+export function ObservedInference({
+  model,
+  metrics,
+}: {
+  model: ModelInfo;
+  metrics: Snapshot["metrics"];
+}) {
+  const deployment = model.deployment;
+  const measurement = (
+    metrics?.recent_measurements ??
+    metrics?.recent_attempts ??
+    []
+  ).find(
+    (sample) =>
+      sample.node_id === model.node_id &&
+      sample.usage &&
+      sample.deployment?.provider === deployment.provider &&
+      sample.deployment.provider_id === deployment.provider_id &&
+      sample.deployment.identifier === deployment.identifier &&
+      (sample.deployment.connection_id ?? null) ===
+        (deployment.connection_id ?? null) &&
+      (sample.deployment.shared_inference_group_id ?? null) ===
+        (deployment.shared_inference_group_id ?? null) &&
+      (sample.deployment.digest ?? null) === (deployment.digest ?? null),
+  );
+  const usage = measurement?.usage;
+  if (!usage) return <>No recent measurement</>;
+  return (
+    <>
+      <span
+        title={
+          "source" in measurement
+            ? measurement.source === "workflow_step"
+              ? "Committed workflow model step"
+              : "Completed inference attempt"
+            : "Completed inference attempt"
+        }
+      >
+        {usage.duration_seconds == null
+          ? "Unknown duration"
+          : `${usage.duration_seconds.toFixed(2)}s`}
+      </span>
+      <small>
+        {usage.input_tokens ?? "Unknown"} input /{" "}
+        {usage.output_tokens ?? "Unknown"} output tokens
+      </small>
+      <small>
+        {usage.tokens_per_second?.toFixed(1) ?? "Unknown"} tokens/s
+        {usage.rate_source === "worker_estimate"
+          ? " (estimated)"
+          : usage.rate_source === "provider_reported"
+            ? " (provider)"
+            : ""}
+      </small>
+      {usage.first_token_seconds != null && (
+        <small>First token {usage.first_token_seconds.toFixed(2)}s</small>
+      )}
+    </>
+  );
+}
 
 export function modelAgentUrl(workspace: string, model: ModelInfo) {
   const d = model.deployment;

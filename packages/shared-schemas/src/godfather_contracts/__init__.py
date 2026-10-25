@@ -38,6 +38,15 @@ class GPU(Contract):
     unified_memory: bool = False
 
 
+class HardwareMeasurements(Contract):
+    """Observed hardware only; never an owner grant or scheduling capacity."""
+
+    cpu_count: int = Field(ge=1, le=65536)
+    ram_bytes: Nonnegative | None = None
+    available_ram_bytes: Nonnegative | None = None
+    gpus: list[GPU] = Field(default_factory=list, max_length=32)
+
+
 class Resources(Contract):
     source: Literal["physical", "simulated"]
     cpu_name: str = Field(max_length=200)
@@ -46,6 +55,14 @@ class Resources(Contract):
     available_ram_bytes: Nonnegative | None = None
     cpu_percent: Percent | None = None
     gpus: list[GPU] = Field(default_factory=list, max_length=32)
+    hardware: HardwareMeasurements | None = None
+
+    @model_serializer(mode="wrap")
+    def compatible(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.hardware is None:
+            data.pop("hardware", None)
+        return data
 
 
 class ModelInventory(Contract):

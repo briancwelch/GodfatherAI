@@ -9,6 +9,7 @@ import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { StatusBadge } from "./operational";
 import { ReadableValue } from "./job-result";
 import { control } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 import type {
   AgentInfo,
   Json,
@@ -393,65 +394,71 @@ export default function DistributedJobs({
     }
   }, [submissionErrors, submissionNotice]);
   useEffect(() => {
-    let active = true;
-    void control<Snapshot>(
-      `command-center?section=jobs${workspace ? `&workspace_id=${workspace}` : ""}`,
-    )
-      .then(async (snapshot) => {
+    return startPolling({
+      intervalMs: null,
+      request: async (signal) => {
+        const snapshot = await control<Snapshot>(
+          `command-center?section=jobs${workspace ? `&workspace_id=${workspace}` : ""}`,
+          undefined,
+          15000,
+          signal,
+        );
         const id =
           workspace || snapshot.workspace_id || snapshot.workspaces[0]?.id;
         const catalog = id
           ? await control<Options>(
               `distributed/tasks/options?workspace_id=${id}`,
+              undefined,
+              15000,
+              signal,
             )
           : null;
-        if (active) {
-          setData(snapshot);
-          setOptions(catalog);
-          setError("");
-        }
-      })
-      .catch((e: unknown) => {
-        if (active)
-          setError(e instanceof Error ? e.message : "Catalog unavailable");
-      });
-    return () => {
-      active = false;
-    };
+        return { snapshot, catalog };
+      },
+      onData: ({ snapshot, catalog }) => {
+        setData(snapshot);
+        setOptions(catalog);
+        setError("");
+      },
+      onError: (e) => {
+        setError(e instanceof Error ? e.message : "Catalog unavailable");
+      },
+    });
   }, [workspace, revision]);
   const workspaceId =
     workspace || data?.workspace_id || data?.workspaces[0]?.id || "";
   useEffect(() => {
     if (!workspaceId) return;
-    let active = true;
-    const refresh = async () => {
-      try {
+    return startPolling({
+      intervalMs: 5000,
+      request: async (signal) => {
         const page = await control<Page<Summary>>(
           `distributed/tasks?workspace_id=${workspaceId}&offset=${offset}&limit=25`,
+          undefined,
+          15000,
+          signal,
         );
         const current = selected
-          ? await control<DistributedDetail>(`distributed/tasks/${selected}`)
+          ? await control<DistributedDetail>(
+              `distributed/tasks/${selected}`,
+              undefined,
+              15000,
+              signal,
+            )
           : null;
-        if (active) {
-          setHistory(page);
-          setDetail(current);
-          setStale(false);
-        }
-      } catch (e) {
-        if (active) {
-          setStale(true);
-          setError(e instanceof Error ? e.message : "Status unavailable");
-        }
-      }
-    };
-    void refresh();
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, 5000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+        return { page, current };
+      },
+      onData: ({ page, current }) => {
+        setHistory(page);
+        setDetail(current);
+        setStale(false);
+        setError("");
+      },
+      onError: (e) => {
+        setStale(true);
+        setError(e instanceof Error ? e.message : "Status unavailable");
+      },
+    });
   }, [workspaceId, offset, selected, revision]);
   const finalJob = detail?.tasks.find((task) => task.key === detail.final_task);
   const finalJobId = finalJob?.job_id;

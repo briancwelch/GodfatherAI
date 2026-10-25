@@ -77,6 +77,7 @@ def test_bundle_allowlist_excludes_operator_secrets(
         "production-release.md",
         "founder-bootstrap.md",
         "first-deployment.md",
+        "coordinator-recovery.md",
         "worker-distribution.md",
     ):
         (docs / name).write_text("documentation")
@@ -89,6 +90,7 @@ def test_bundle_allowlist_excludes_operator_secrets(
     assert (output / "scripts/install.sh").read_bytes() == b"template\n"
     assert (output / "FOUNDER.md").read_text() == "documentation"
     assert (output / "DEPLOYMENT.md").read_text() == "documentation"
+    assert (output / "RECOVERY.md").read_text() == "documentation"
     verify_files(output)
     manifest = json.loads((output / "manifest.json").read_text())
     assert manifest["source_dirty"] is False

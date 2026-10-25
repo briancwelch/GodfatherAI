@@ -4,6 +4,7 @@ import os
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock
 from uuid import UUID, uuid4
 
 import pytest
@@ -64,6 +65,14 @@ def registration(name: str = "LV-01") -> dict[str, object]:
     return Registration(**profile(name).model_dump(), session_id=uuid4()).model_dump(mode="json")
 
 
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Mock:
+    clock = Mock(wraps=datetime)
+    clock.now.return_value = datetime.now(UTC)
+    monkeypatch.setattr("godfather_api.nodes.datetime", clock)
+    return clock
+
+
 def test_registration_records_owned_identity_and_normalized_capabilities(
     client: TestClient, database: Database, admin: dict[str, str], worker: dict[str, str]
 ) -> None:
@@ -86,6 +95,135 @@ def test_registration_records_owned_identity_and_normalized_capabilities(
         assert credential is not None and credential.token_hash != worker["token"]
         events = list(session.scalars(select(Event.type).where(Event.node_id == UUID(node_id))))
         assert "node.registered" in events and "node.health_changed" in events
+
+
+@pytest.mark.parametrize("draining", [False, True])
+def test_online_inventory_refresh_updates_advertisement_without_reconnection_events(
+    client: TestClient,
+    database: Database,
+    admin: dict[str, str],
+    worker: dict[str, str],
+    clock: Mock,
+    draining: bool,
+) -> None:
+    payload = Registration.model_validate(registration())
+    response = client.post(
+        "/api/v1/workers/register", json=payload.model_dump(mode="json"), headers=headers(worker)
+    )
+    assert response.status_code == 200
+    node_id = UUID(response.json()["node_id"])
+    if draining:
+        assert (
+            client.post(
+                f"/api/v1/nodes/{node_id}/control", json={"action": "drain"}, headers=headers(admin)
+            ).status_code
+            == 200
+        )
+    with database.sessions() as session:
+        before = sorted(session.scalars(select(Event.type).where(Event.node_id == node_id)))
+
+    payload = payload.model_copy(update={"runtimes": ["python", "ollama"]})
+    for tick in range(1, 10):
+        clock.now.return_value += timedelta(seconds=10)
+        if tick % 3 == 0:
+            response = client.post(
+                "/api/v1/workers/register",
+                json=payload.model_dump(mode="json"),
+                headers=headers(worker),
+            )
+        else:
+            response = client.post(
+                f"/api/v1/workers/{node_id}/heartbeat",
+                json={
+                    "session_id": str(payload.session_id),
+                    "resources": payload.resources.model_dump(mode="json"),
+                },
+                headers=headers(worker),
+            )
+        assert response.status_code == 200
+        assert response.json()["state"] == ("draining" if draining else "online")
+        assert response.json()["heartbeat_interval_seconds"] == 10
+
+    with database.sessions() as session:
+        node = session.get(Node, node_id)
+        assert node is not None
+        assert node.owner_id == UUID(admin["owner_id"]) and node.session_id == payload.session_id
+        assert node.last_heartbeat_at == clock.now.return_value
+        assert node.runtimes["runtimes"] == ["python", "ollama"]
+        assert sorted(session.scalars(select(Event.type).where(Event.node_id == node_id))) == before
+        assert session.scalar(select(func.count()).select_from(Node)) == 1
+
+    # A real consent change still has its own audit event during an inventory refresh.
+    changed = payload.model_copy(update={"share_with_workspaces": True})
+    for _ in range(2):
+        assert (
+            client.post(
+                "/api/v1/workers/register",
+                json=changed.model_dump(mode="json"),
+                headers=headers(worker),
+            ).status_code
+            == 200
+        )
+    with database.sessions() as session:
+        events = list(session.scalars(select(Event.type).where(Event.node_id == node_id)))
+        assert events.count("node.registered") == 1
+        assert events.count("node.reconnected") == 0
+        assert events.count("node.contribution_changed") == 1
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "swept", "new_session"),
+    [
+        (20, False, False),
+        (20, True, False),
+        (30, False, False),
+        (30, True, False),
+        (30, False, True),
+        (30, True, True),
+    ],
+)
+def test_registration_records_one_reconnection_after_health_loss_or_process_replacement(
+    client: TestClient,
+    database: Database,
+    worker: dict[str, str],
+    clock: Mock,
+    elapsed: int,
+    swept: bool,
+    new_session: bool,
+) -> None:
+    payload = registration()
+    response = client.post("/api/v1/workers/register", json=payload, headers=headers(worker))
+    assert response.status_code == 200
+    node_id = UUID(response.json()["node_id"])
+    clock.now.return_value += timedelta(seconds=elapsed)
+    if swept:
+        sweep_health(database, Settings(), clock.now.return_value)
+    restored = {**payload, "session_id": str(uuid4())} if new_session else payload
+    for _ in range(3):
+        response = client.post("/api/v1/workers/register", json=restored, headers=headers(worker))
+        assert response.status_code == 200
+        assert response.json()["node_id"] == str(node_id)
+        assert response.json()["connection_status"] == "online"
+    with database.sessions() as session:
+        events = list(session.scalars(select(Event.type).where(Event.node_id == node_id)))
+        assert events.count("node.registered") == 1
+        assert events.count("node.reconnected") == 1
+        assert events.count("node.health_changed") == (3 if swept else 1)
+    if new_session:
+        assert (
+            client.post(
+                f"/api/v1/workers/{node_id}/heartbeat",
+                json={"session_id": payload["session_id"], "resources": payload["resources"]},
+                headers=headers(worker),
+            ).status_code
+            == 409
+        )
+        assert (
+            client.post(
+                "/api/v1/workers/register", json=payload, headers=headers(worker)
+            ).status_code
+            == 409
+        )
 
 
 @pytest.mark.parametrize("token", [None, "Bearer bad", "Basic " + "a" * 43, "Bearer " + "a" * 43])
@@ -166,6 +304,28 @@ def test_concurrent_first_registration_creates_one_identity(
     assert sorted(results) == [200, 409]
     with database.sessions() as session:
         assert session.scalar(select(func.count()).select_from(Node)) == 1
+
+
+def test_concurrent_same_session_refreshes_do_not_record_reconnections(
+    client: TestClient, database: Database, worker: dict[str, str], clock: Mock
+) -> None:
+    payload = registration()
+    response = client.post("/api/v1/workers/register", json=payload, headers=headers(worker))
+    assert response.status_code == 200
+    node_id = UUID(response.json()["node_id"])
+
+    def send(_: int) -> int:
+        return client.post(
+            "/api/v1/workers/register", json=payload, headers=headers(worker)
+        ).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert list(executor.map(send, range(2))) == [200, 200]
+    with database.sessions() as session:
+        events = list(session.scalars(select(Event.type).where(Event.node_id == node_id)))
+        assert events.count("node.registered") == 1
+        assert events.count("node.reconnected") == 0
+        assert events.count("node.health_changed") == 1
 
 
 def test_independent_expiration_reconnect_and_stale_process_fencing(
@@ -309,7 +469,11 @@ def test_disabled_owner_and_admin_role_enforced(
 
 
 def test_node_identity_telemetry_and_events_survive_application_restart(
-    client: TestClient, database: Database, admin: dict[str, str], worker: dict[str, str]
+    client: TestClient,
+    database: Database,
+    admin: dict[str, str],
+    worker: dict[str, str],
+    clock: Mock,
 ) -> None:
     payload = registration()
     node_id = client.post("/api/v1/workers/register", json=payload, headers=headers(worker)).json()[
@@ -326,12 +490,10 @@ def test_node_identity_telemetry_and_events_survive_application_restart(
             == node_id
         )
     with database.sessions() as session:
-        assert (
-            session.scalar(
-                select(func.count()).select_from(Event).where(Event.node_id == UUID(node_id))
-            )
-            or 0
-        ) >= 3
+        events = list(session.scalars(select(Event.type).where(Event.node_id == UUID(node_id))))
+        assert events.count("node.registered") == 1
+        assert events.count("node.health_changed") == 1
+        assert events.count("node.reconnected") == 0
 
 
 def test_two_equal_administrators_can_inspect_without_mutating_owner_policy(
@@ -402,3 +564,35 @@ def test_failed_commit_returns_error_and_rolls_back_registration(
             )
             == 0
         )
+
+
+def test_failed_commit_rolls_back_reconnection_and_session_replacement(
+    client: TestClient, database: Database, worker: dict[str, str], clock: Mock
+) -> None:
+    payload = registration()
+    response = client.post("/api/v1/workers/register", json=payload, headers=headers(worker))
+    assert response.status_code == 200
+    node_id = UUID(response.json()["node_id"])
+    original_receipt = clock.now.return_value
+    clock.now.return_value += timedelta(seconds=30)
+
+    def fail_commit(session: Session) -> None:
+        raise OperationalError("private SQL", {}, Exception("private database detail"))
+
+    event.listen(Session, "before_commit", fail_commit)
+    try:
+        response = client.post(
+            "/api/v1/workers/register", json=registration(), headers=headers(worker)
+        )
+    finally:
+        event.remove(Session, "before_commit", fail_commit)
+    assert response.status_code == 500 and "private" not in response.text
+    with database.sessions() as session:
+        node = session.get(Node, node_id)
+        assert node is not None
+        assert str(node.session_id) == payload["session_id"]
+        assert node.last_heartbeat_at == original_receipt
+        events = list(session.scalars(select(Event.type).where(Event.node_id == node_id)))
+        assert events.count("node.registered") == 1
+        assert events.count("node.health_changed") == 1
+        assert events.count("node.reconnected") == 0

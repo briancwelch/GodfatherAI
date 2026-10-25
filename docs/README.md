@@ -35,12 +35,16 @@ For shared colors, Bootstrap components, toasts and progress bars, see
 ## Running a Command Center
 
 - [Docker installation, updates and backups](operations/coordinator-installation.md)
+- [Complete recovery inventory and protected configuration restore](operations/coordinator-recovery.md)
 - [First administrator sign-in](operations/founder-bootstrap.md)
 - [Portable worker packages and Linux/source setup](operations/worker-distribution.md)
 - [Latest production/package verification](operations/member-node-registration-verification-2026-10-23.md)
 - [Cleanup and six-release retention](operations/project-cleanup-2026-10-22.md)
 
 ## Development and history
+
+- [Pending assessment orders and acceptance gates](operations/pending-assessment-work-2026-10-25.md)
+- [Capacity truthfulness and model admission profiles](operations/capacity-and-admission.md)
 
 - [Development setup and checks](development.md)
 - [Consolidated phase history and acceptance evidence](history/phases.md)

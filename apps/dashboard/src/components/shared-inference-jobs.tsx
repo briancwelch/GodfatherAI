@@ -6,6 +6,7 @@ import { JobResult } from "./job-result";
 import { StatusBadge } from "./operational";
 import { useFeedback } from "./toast-notifications";
 import { control } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 import {
   localTime,
   type JobInfo,
@@ -104,62 +105,59 @@ export default function SharedInferenceJobs({
   const workspaceId =
     workspace || data?.workspace_id || data?.workspaces[0]?.id || "";
   useEffect(() => {
-    let active = true;
-    void control<Snapshot>(
-      `command-center?section=jobs${workspace ? `&workspace_id=${workspace}` : ""}`,
-    )
-      .then((snapshot) => {
-        if (active) setData(snapshot);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
+    return startPolling({
+      intervalMs: null,
+      request: (signal) =>
+        control<Snapshot>(
+          `command-center?section=jobs${workspace ? `&workspace_id=${workspace}` : ""}`,
+          undefined,
+          15000,
+          signal,
+        ),
+      onData: (snapshot) => setData(snapshot),
+      onError: (error) =>
+        setError(error instanceof Error ? error.message : "Jobs unavailable"),
+    });
   }, [workspace, revision]);
   useEffect(() => {
     if (!workspaceId) return;
-    let active = true,
-      loading = false;
-    const load = async () => {
-      if (loading) return;
-      loading = true;
-      try {
-        const [options, page, current] = await Promise.all([
+    return startPolling({
+      intervalMs: 5000,
+      request: (signal) =>
+        Promise.all([
           control<{ groups: InferenceGroup[] }>(
             `shared-inference/options?workspace_id=${workspaceId}`,
+            undefined,
+            15000,
+            signal,
           ),
           control<Page<JobInfo>>(
             `shared-inference/jobs?workspace_id=${workspaceId}&offset=${offset}&limit=25`,
+            undefined,
+            15000,
+            signal,
           ),
           selected
-            ? control<JobDetail>(`command-center/jobs/${selected}`)
+            ? control<JobDetail>(
+                `command-center/jobs/${selected}`,
+                undefined,
+                15000,
+                signal,
+              )
             : Promise.resolve(null),
-        ]);
-        if (active) {
-          setGroups(options.groups);
-          setHistory(page);
-          setDetail(current);
-          setStale(false);
-        }
-      } catch (e) {
-        if (active) {
-          setStale(true);
-          setError(e instanceof Error ? e.message : "Status unavailable");
-        }
-      } finally {
-        loading = false;
-      }
-    };
-    void load();
-    const timer = window.setInterval(() => {
-      void load();
-    }, 5000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
+        ]),
+      onData: ([options, page, current]) => {
+        setGroups(options.groups);
+        setHistory(page);
+        setDetail(current);
+        setStale(false);
+        setError("");
+      },
+      onError: (e) => {
+        setStale(true);
+        setError(e instanceof Error ? e.message : "Status unavailable");
+      },
+    });
   }, [workspaceId, offset, selected, revision]);
   const matching = groups.filter((group) => group.mode === mode);
   const group = matching.find((entry) => entry.id === groupId);

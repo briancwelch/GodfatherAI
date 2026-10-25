@@ -33,6 +33,8 @@ const workspaces = require("../apps/dashboard/src/components/workspace-directory
 const client = require("../apps/dashboard/src/lib/control-client.ts");
 const imageReadiness = require("../apps/dashboard/src/components/image-readiness.tsx");
 
+require("./dashboard-polling.cjs");
+
 test("node registration settings use the authenticated control bridge only", () => {
   const nodeSettings = require("../apps/dashboard/src/components/node-registration-settings.tsx");
   const html = renderToStaticMarkup(
@@ -898,6 +900,204 @@ test("bulk tables expose scoped eligible selection and workspace archive protect
 });
 
 const identity = require("../apps/dashboard/src/components/node-identity.tsx");
+const capacity = require("../apps/dashboard/src/components/node-capacity.tsx");
+test("capacity separates owner limits from measured totals and unshared GPUs", () => {
+  const resources = {
+    source: "physical",
+    cpu_count: 2,
+    ram_bytes: 6 * 1024 ** 3,
+    gpus: [],
+    hardware: {
+      cpu_count: 32,
+      ram_bytes: 64 * 1024 ** 3,
+      gpus: [{ name: "Detected fixture GPU", memory_bytes: 24 * 1024 ** 3 }],
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(capacity.NodeCapacity, { resources }),
+  );
+  assert.match(html, /Scheduling capacity: 2 CPUs.*6.0 GiB/);
+  assert.match(html, /Measured hardware:.*32 CPUs.*64.0 GiB/);
+  assert.match(html, /Detected fixture GPU/);
+  assert.match(html, /Detected GPUs are not shared for scheduling/);
+  const legacy = renderToStaticMarkup(
+    React.createElement(capacity.NodeCapacity, {
+      resources: { ...resources, hardware: null },
+    }),
+  );
+  assert.match(legacy, /Physical totals not reported separately/);
+  assert.doesNotMatch(legacy, /32 CPUs|64.0 GiB|No GPU hardware/);
+});
+
+test("observed inference matches the exact node, model, provider, connection and digest", () => {
+  const deployment = {
+    provider: "ollama",
+    provider_id: "local",
+    identifier: "model-a",
+    digest: "v1",
+    connection_id: null,
+    shared_inference_group_id: null,
+  };
+  const model = { node_id: "node-a", deployment };
+  const sample = {
+    node_id: "node-a",
+    deployment,
+    source: "workflow_step",
+    usage: {
+      duration_seconds: 2,
+      input_tokens: 11,
+      output_tokens: 5,
+      tokens_per_second: 2.5,
+      rate_source: "worker_estimate",
+    },
+  };
+  const wrongSamples = [
+    { ...sample, node_id: "node-b" },
+    ...[
+      "provider",
+      "provider_id",
+      "identifier",
+      "digest",
+      "connection_id",
+      "shared_inference_group_id",
+    ].map((key) => ({
+      ...sample,
+      deployment: { ...deployment, [key]: "another" },
+    })),
+  ].map((entry) => ({
+    ...entry,
+    usage: { duration_seconds: 999, output_tokens: 999 },
+  }));
+  const html = renderToStaticMarkup(
+    React.createElement(modelUse.ObservedInference, {
+      model,
+      metrics: {
+        recent_attempts: [],
+        recent_measurements: [...wrongSamples, sample],
+      },
+    }),
+  );
+  assert.match(html, /2\.00s/);
+  assert.match(html, /11 input \/ 5 output tokens/);
+  assert.match(html, /2\.5 tokens\/s \(estimated\)/);
+  assert.doesNotMatch(html, /999/);
+});
+
+test("missing usage remains unknown and actual zero counters remain zero", () => {
+  const model = {
+    node_id: "node",
+    deployment: {
+      provider: "ollama",
+      provider_id: "local",
+      identifier: "model",
+    },
+  };
+  const render = (usage) =>
+    renderToStaticMarkup(
+      React.createElement(modelUse.ObservedInference, {
+        model,
+        metrics: {
+          recent_attempts: [],
+          recent_measurements: [
+            { node_id: "node", deployment: model.deployment, usage },
+          ],
+        },
+      }),
+    );
+  assert.match(render({}), /Unknown duration/);
+  assert.match(render({}), /Unknown input \/ Unknown output tokens/);
+  assert.match(render({}), /Unknown tokens\/s/);
+  const zero = render({
+    duration_seconds: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+    tokens_per_second: 0,
+    first_token_seconds: 0,
+  });
+  assert.match(zero, /0\.00s/);
+  assert.match(zero, /0 input \/ 0 output tokens/);
+  assert.match(zero, /0\.0 tokens\/s/);
+  assert.match(zero, /First token 0\.00s/);
+  assert.doesNotMatch(zero, /Unknown|undefined|NaN/);
+});
+
+test("older direct inference metadata remains usable only with matching deployment identity", () => {
+  const model = {
+    node_id: "node",
+    deployment: {
+      provider: "ollama",
+      provider_id: "local",
+      identifier: "model",
+    },
+  };
+  const render = (sample) =>
+    renderToStaticMarkup(
+      React.createElement(modelUse.ObservedInference, {
+        model,
+        metrics: { recent_attempts: [sample] },
+      }),
+    );
+  assert.match(
+    render({
+      node_id: "node",
+      deployment: model.deployment,
+      usage: { duration_seconds: 1 },
+    }),
+    /1\.00s/,
+  );
+  assert.match(
+    render({ node_id: "node", usage: { duration_seconds: 999 } }),
+    /No recent measurement/,
+  );
+});
+
+test("completed execution shows the durable worker and owner after assignment clears", () => {
+  const job = {
+    assigned_node_id: null,
+    attempt_count: 2,
+    execution: {
+      node_id: "worker-id",
+      node_name: "Recovery worker",
+      owner_id: "owner-id",
+      owner_name: "Alex",
+      attempt_number: 2,
+      can_inspect_node: true,
+    },
+  };
+  const html = renderToStaticMarkup(
+    React.createElement(identity.JobExecution, { job }),
+  );
+  assert.match(html, /Recovery worker/);
+  assert.match(html, /Alex/);
+  assert.match(html, /href="\/nodes\/worker-id"/);
+  assert.match(html, /Last attempt 2/);
+  assert.doesNotMatch(html, /Unassigned/);
+  const restricted = renderToStaticMarkup(
+    React.createElement(identity.JobExecution, {
+      job: { ...job, execution: { ...job.execution, can_inspect_node: false } },
+    }),
+  );
+  assert.match(restricted, /Recovery worker/);
+  assert.doesNotMatch(restricted, /<a /);
+});
+
+test("execution distinguishes queued jobs from missing historical metadata", () => {
+  const render = (job) =>
+    renderToStaticMarkup(React.createElement(identity.JobExecution, { job }));
+  assert.match(
+    render({ assigned_node_id: null, attempt_count: 0, execution: null }),
+    /Not yet assigned/,
+  );
+  assert.match(
+    render({ assigned_node_id: null, attempt_count: 1 }),
+    /Execution history unavailable/,
+  );
+  assert.match(
+    render({ assigned_node_id: "worker", attempt_count: 1 }),
+    /href="\/nodes\/worker"/,
+  );
+});
+
 const appearance = require("../apps/dashboard/src/lib/appearance.ts");
 const appearanceUI = require("../apps/dashboard/src/components/appearance-settings.tsx");
 test("worker build comparison uses semantic precedence and platform installers", () => {

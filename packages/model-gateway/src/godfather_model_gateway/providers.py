@@ -138,17 +138,19 @@ class OllamaProvider(HTTPProvider):
                 contexts = [v for k, v in metadata.items() if k.endswith(".context_length")]
                 chat = "completion" in capabilities
                 result.append(
-                    ModelDeployment(
-                        provider_id=self.config.id,
-                        provider="ollama",
-                        identifier=identifier,
-                        verified_capabilities=capabilities,
-                        declared_capabilities=self.config.declared_capabilities,
-                        operations=["chat", "stream"] if chat else [],
-                        context_window=max(contexts) if contexts else None,
-                        digest=model.get("digest"),
-                        disk_bytes=model.get("size"),
-                        # Disk bytes do not certify RAM/VRAM needs; leave those unknown.
+                    self.config.memory_profile(
+                        ModelDeployment(
+                            provider_id=self.config.id,
+                            provider="ollama",
+                            identifier=identifier,
+                            verified_capabilities=capabilities,
+                            declared_capabilities=self.config.declared_capabilities,
+                            operations=["chat", "stream"] if chat else [],
+                            context_window=max(contexts) if contexts else None,
+                            digest=model.get("digest"),
+                            disk_bytes=model.get("size"),
+                            # Disk bytes do not certify RAM/VRAM needs; profiles are independent.
+                        )
                     )
                 )
         except (ValueError, KeyError, TypeError, AttributeError):
@@ -166,6 +168,11 @@ class OllamaProvider(HTTPProvider):
             "top_p": parameters.top_p,
             "num_predict": parameters.max_tokens,
         }
+        profile = self.config.memory_profiles.get(model)
+        if profile is not None:
+            options["num_ctx"] = profile.context_window
+            if profile.estimated_vram_bytes == 0:
+                options["num_gpu"] = 0  # CPU-only evidence must not silently rely on a GPU.
         if parameters.seed is not None:
             options["seed"] = parameters.seed
         payload = {
@@ -218,13 +225,15 @@ class OpenAICompatibleProvider(HTTPProvider):
                 if self.config.stream_enabled:
                     operations.append("stream")
             return [
-                ModelDeployment(
-                    provider_id=self.config.id,
-                    provider="openai_compatible",
-                    identifier=m["id"],
-                    declared_capabilities=self.config.declared_capabilities,
-                    operations=operations,
-                    metadata_source="configured",
+                self.config.memory_profile(
+                    ModelDeployment(
+                        provider_id=self.config.id,
+                        provider="openai_compatible",
+                        identifier=m["id"],
+                        declared_capabilities=self.config.declared_capabilities,
+                        operations=operations,
+                        metadata_source="configured",
+                    )
                 )
                 for m in models
             ]

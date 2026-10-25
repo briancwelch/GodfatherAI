@@ -1,5 +1,9 @@
 # First DigitalOcean deployment: operator runbook
 
+For current disaster recovery inventory, encrypted configuration escrow and
+pre-start restore checks, use [complete coordinator recovery](coordinator-recovery.md)
+(packaged as `RECOVERY.md`). The release-specific commands below remain historical.
+
 Release: **0.1.0-rc.5**, Linux AMD64. These are future operator commands, not
 deployment authorization. This preparation creates a local commit and release
 only. Do not push, transfer, connect to the Droplet or deploy during preparation.

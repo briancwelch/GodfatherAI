@@ -43,12 +43,34 @@ router = APIRouter(
 PAGE_SIZE = 25
 
 
-def human_job_view(session: Session, job: Job) -> dict[str, object]:
+def human_job_view(session: Session, job: Job, actor_id: UUID) -> dict[str, object]:
     owner = session.get(User, job.owner_id)
+    view = jobs.view(session, job)
+    attempt = session.get(Attempt, view.current_attempt_id) if view.current_attempt_id else None
+    node = session.get(Node, attempt.node_id) if attempt else None
+    node_owner = session.get(User, node.owner_id) if node else None
+    can_inspect = bool(
+        node
+        and session.scalar(
+            select(Node.id).where(Node.id == node.id, node_visibility(session, actor_id))
+        )
+    )
     return {
-        **jobs.view(session, job).model_dump(mode="json"),
+        **view.model_dump(mode="json"),
         "owner_name": owner.display_name if owner else None,
         "owner_picture": owner.picture if owner else None,
+        # Job-authorized provenance only; full node inspection remains independently scoped.
+        "execution": {
+            "attempt_id": str(attempt.id),
+            "attempt_number": attempt.number,
+            "node_id": str(attempt.node_id),
+            "node_name": node.name if node else None,
+            "owner_id": str(node.owner_id) if node else None,
+            "owner_name": node_owner.display_name if node_owner else None,
+            "can_inspect_node": can_inspect,
+        }
+        if attempt
+        else None,
     }
 
 
@@ -416,7 +438,7 @@ def overview(
             }
             for n in node_rows
         ],
-        "jobs": [human_job_view(session, j) for j in job_rows],
+        "jobs": [human_job_view(session, j, actor.owner_id) for j in job_rows],
         "agents": agent_views,
         "models": inference.models(
             selected.id,
@@ -506,7 +528,7 @@ def job_detail(job_id: UUID, request: Request, session: SessionDep) -> dict[str,
         else None,
         "can_control": job.owner_id == actor.owner_id
         or manages(session, workspace, actor.owner_id),
-        "job": human_job_view(session, job),
+        "job": human_job_view(session, job, actor.owner_id),
         "attempts": [a.model_dump(mode="json") for a in jobs.attempts(job_id, request, session)],
         "workflow": {
             "status": run.status,
@@ -596,7 +618,7 @@ def node_detail(node_id: UUID, request: Request, session: SessionDep) -> dict[st
     return {
         "can_control": node.owner_id == actor.owner_id,
         "node": human_node_view(session, node, actor.owner_id).model_dump(mode="json"),
-        "jobs": [human_job_view(session, j) for j in assigned],
+        "jobs": [human_job_view(session, j, actor.owner_id) for j in assigned],
         "events": events(request, session, node_id=node_id),
     }
 
@@ -622,7 +644,7 @@ def agent_history(agent_id: UUID, request: Request, session: SessionDep) -> dict
     )
     return {
         "jobs": [
-            human_job_view(session, job)
+            human_job_view(session, job, actor.owner_id)
             for job in session.scalars(
                 select(Job)
                 .join(Agent, Job.agent_id == Agent.id)

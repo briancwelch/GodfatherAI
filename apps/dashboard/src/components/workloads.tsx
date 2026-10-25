@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ApplicationShell, RibbonGroup } from "./application-shell";
 import { notifyError } from "../lib/notifications";
 import { control } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 import type { Snapshot } from "../lib/contracts";
 import { CommandIcon } from "./command-icon";
 import { StatusBadge } from "./operational";
@@ -92,29 +93,36 @@ export default function Workloads({
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
-    let active = true;
-    void control<Snapshot>(
-      "command-center?section=jobs" +
-        (workspace ? `&workspace_id=${workspace}` : ""),
-    )
-      .then(async (snapshot) => {
+    return startPolling({
+      intervalMs: null,
+      request: async (signal) => {
+        const snapshot = await control<Snapshot>(
+          "command-center?section=jobs" +
+            (workspace ? `&workspace_id=${workspace}` : ""),
+          undefined,
+          15000,
+          signal,
+        );
         const selected =
           workspace || snapshot.workspace_id || snapshot.workspaces[0]?.id;
         const available = selected
-          ? await control<Options>(`workloads/options?workspace_id=${selected}`)
+          ? await control<Options>(
+              `workloads/options?workspace_id=${selected}`,
+              undefined,
+              15000,
+              signal,
+            )
           : null;
-        if (active) {
-          setData(snapshot);
-          setOptions(available);
-        }
-      })
-      .catch((e: unknown) => {
-        if (active)
-          setStatus(e instanceof Error ? e.message : "Workloads unavailable");
-      });
-    return () => {
-      active = false;
-    };
+        return { snapshot, available };
+      },
+      onData: ({ snapshot, available }) => {
+        setData(snapshot);
+        setOptions(available);
+      },
+      onError: (e) => {
+        setStatus(e instanceof Error ? e.message : "Workloads unavailable");
+      },
+    });
   }, [workspace, revision]);
   const models = [
     ...new Set(

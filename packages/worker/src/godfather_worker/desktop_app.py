@@ -600,6 +600,13 @@ class Application:
             for p in self.scan_result.providers
             if p.provider == "openai_compatible"
         ]
+        saved = {p.id: p for p in self.settings.local_providers}
+        detected = [
+            p.model_copy(update={"memory_profiles": saved[p.id].memory_profiles})
+            if p.id in saved and saved[p.id].url == p.url
+            else p
+            for p in detected
+        ]
         providers = list({p.id: p for p in [*self.settings.local_providers, *detected]}.values())
         if len(providers) > 7:
             if not messagebox.askyesno(

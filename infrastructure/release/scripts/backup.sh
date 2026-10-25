@@ -29,5 +29,15 @@ compose run --rm --no-deps -T --entrypoint python api -c \
 gzip -t "$backup/artifacts.tar.gz.partial"
 mv -- "$backup/artifacts.tar.gz.partial" "$backup/artifacts.tar.gz"
 cp -- "$RELEASE_DIR/release.env" "$RELEASE_DIR/manifest.json" "$backup/"
-(cd -- "$backup" && sha256sum database.dump artifacts.tar.gz release.env manifest.json > SHA256SUMS)
+# Record the exact private configuration fingerprint while writers remain stopped.
+# Secrets themselves stay OUTSIDE this data backup. Export them separately using
+# the encrypted configuration procedure in RECOVERY.md, with an independent key.
+compose run --rm --no-deps -T --user 0 --entrypoint python \
+  --volume "$backup:/recovery:ro" \
+  --volume "$GODFATHER_ENV_FILE:/run/godfather-production.env:ro" \
+  api -m godfather_api.recovery inventory --backup /recovery \
+  --environment-file /run/godfather-production.env > "$backup/recovery.json.partial"
+mv -- "$backup/recovery.json.partial" "$backup/recovery.json"
+(cd -- "$backup" && sha256sum database.dump artifacts.tar.gz release.env manifest.json recovery.json > SHA256SUMS)
 echo "$backup"
+echo 'Data backup complete. Matching encrypted configuration export is required separately; see RECOVERY.md.' >&2

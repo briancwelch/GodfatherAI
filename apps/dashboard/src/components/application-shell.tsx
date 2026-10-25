@@ -6,6 +6,7 @@ import {
   isValidElement,
   useState,
   useEffect,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { AppearanceProvider, useAppearance } from "./appearance-provider";
@@ -13,6 +14,13 @@ import { WorkerBuildProvider } from "./node-identity";
 import { CommandIcon } from "./command-icon";
 import type { Snapshot } from "../lib/contracts";
 import { Avatar } from "./avatar";
+import { GoogleLogin } from "./google-login";
+import {
+  authenticationRequired,
+  rememberSessionOwner,
+  subscribeAuthentication,
+  verifySession,
+} from "../lib/control-client";
 import {
   clearNotifications,
   resumeJobNotifications,
@@ -91,10 +99,55 @@ export function UnavailableCommand({
 }
 
 export function ApplicationShell(props: Parameters<typeof DesktopShell>[0]) {
+  const signInRequired = useSyncExternalStore(
+    subscribeAuthentication,
+    authenticationRequired,
+    () => false,
+  );
+  const [checking, setChecking] = useState(false);
+  const [failure, setFailure] = useState("");
   return (
-    <AppearanceProvider enabled={!!props.account}>
+    <AppearanceProvider enabled={!!props.account && !signInRequired}>
       <WorkerBuildProvider>
-        <DesktopShell {...props} />
+        <DesktopShell
+          {...props}
+          data={signInRequired ? null : props.data}
+          account={signInRequired ? null : props.account}
+        >
+          {signInRequired ? (
+            <main className="container-fluid" id="main-content">
+              <GoogleLogin error={props.authError} />
+              <section className="card panel">
+                <p>
+                  After signing in in another tab, return here or check your
+                  session.
+                </p>
+                <button
+                  className="btn btn-outline-primary action"
+                  disabled={checking}
+                  onClick={async () => {
+                    setChecking(true);
+                    setFailure("");
+                    try {
+                      await verifySession();
+                    } catch {
+                      setFailure(
+                        "Session not confirmed. Sign in and try again.",
+                      );
+                    } finally {
+                      setChecking(false);
+                    }
+                  }}
+                >
+                  {checking ? "Checking session…" : "Check session"}
+                </button>
+                {failure && <p role="alert">{failure}</p>}
+              </section>
+            </main>
+          ) : (
+            props.children
+          )}
+        </DesktopShell>
       </WorkerBuildProvider>
     </AppearanceProvider>
   );
@@ -112,19 +165,24 @@ function DesktopShell({
   section: keyof typeof navigation;
   data?: Snapshot | null;
   account?: {
+    id?: string;
     display_name: string;
     roles: string[];
     picture?: string | null;
   } | null;
+  authError?: string;
   stale?: boolean;
   refresh: () => void;
   ribbon?: ReactNode;
   children: ReactNode;
 }) {
   const { settings, theme, setTheme } = useAppearance();
-  const actorId = data?.actor_id;
+  const actorId = data?.actor_id || account?.id;
   useEffect(() => {
-    if (actorId) resumeJobNotifications(actorId);
+    if (actorId) {
+      rememberSessionOwner(actorId);
+      resumeJobNotifications(actorId);
+    }
   }, [actorId]);
   const [navigationOverride, setNavigationOverride] = useState<boolean | null>(
     null,

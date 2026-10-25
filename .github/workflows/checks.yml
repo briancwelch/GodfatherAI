@@ -98,6 +98,10 @@ jobs:
         with:
           version: "0.13.1"
       - run: uv sync --locked --all-packages
+      - name: Complete recovery into disposable database and artifact storage
+        env:
+          GODFATHER_RUN_RECOVERY: "1"
+        run: uv run --locked --all-packages python -m pytest -p no:cacheprovider tests/integration/test_recovery.py
       - name: Isolate historical process probes from Google-authenticated application data
         shell: bash
         env:

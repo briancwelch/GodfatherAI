@@ -2,10 +2,17 @@
 
 import { useFeedback } from "./toast-notifications";
 
-import { control, ControlError } from "../lib/control-client";
+import { control, ControlError, verifySession } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 import { CommandIcon } from "./command-icon";
 import { NodeHeartbeat } from "./node-heartbeat";
-import { WorkerVersion, OwnerName, UserName } from "./node-identity";
+import { MeasuredHardware, NodeCapacity } from "./node-capacity";
+import {
+  JobExecution,
+  WorkerVersion,
+  OwnerName,
+  UserName,
+} from "./node-identity";
 import { BulkTable } from "./bulk-table";
 import { CreateWorkspace, WorkspaceList } from "./workspace-directory";
 
@@ -17,7 +24,7 @@ import {
 } from "./application-shell";
 import { AgentManagement, RepositorySelection } from "./agent-management";
 import { ModelInstaller } from "./model-installer";
-import { ModelAvailability, UseModel } from "./model-use";
+import { ModelAvailability, ObservedInference, UseModel } from "./model-use";
 import { GoogleLogin } from "@/components/google-login";
 import { JobResult } from "./job-result";
 import { ConnectComputer } from "./connect-computer";
@@ -55,37 +62,29 @@ function usePoll<T>(path: string | null, revision: number) {
     error === "401" ? "" : error === "403" ? "Workspace access denied" : error,
   );
   useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      if (!path) return;
-      try {
-        if (document.visibilityState === "hidden") return;
-        const data = await api<T>(path);
-        if (active) {
-          setRecord({ path, data });
-          setError("");
-        }
-      } catch (e) {
-        if (active) {
-          const code =
-            e instanceof ControlError
-              ? String(e.status)
-              : e instanceof Error
-                ? e.message
-                : "unavailable";
-          setError(code);
-          if (code === "401" || code === "403") setRecord(null);
-        }
-      } finally {
-        if (active) timer = setTimeout(poll, 3000);
-      }
-    }
-    void poll();
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
+    if (!path) return;
+    return startPolling({
+      intervalMs: path === "auth/me" ? null : 3000,
+      sessionCheck: path === "auth/me",
+      request: (signal) =>
+        path === "auth/me"
+          ? verifySession<T>()
+          : api<T>(path, undefined, 15000, signal),
+      onData: (data) => {
+        setRecord({ path, data });
+        setError("");
+      },
+      onError: (e) => {
+        const code =
+          e instanceof ControlError
+            ? String(e.status)
+            : e instanceof Error
+              ? e.message
+              : "unavailable";
+        setError(code);
+        if (code === "401" || code === "403") setRecord(null);
+      },
+    });
   }, [path, revision]);
   return { data: record?.path === path ? record.data : null, error };
 }
@@ -139,6 +138,7 @@ export default function CommandCenter({
       section={section}
       data={data}
       account={identity.data}
+      authError={authError}
       stale={!!state.error}
       refresh={refresh}
       ribbon={
@@ -535,13 +535,7 @@ function JobTable({
           label: "Execution",
           cell: (j) => (
             <>
-              {j.assigned_node_id ? (
-                <a href={`/nodes/${j.assigned_node_id}`}>
-                  {short(j.assigned_node_id)}
-                </a>
-              ) : (
-                "Unassigned"
-              )}
+              <JobExecution job={j} />
               <small>
                 Attempt {j.attempt_count} · Fence {j.fencing_token}
               </small>
@@ -591,7 +585,7 @@ function NodeTable({
               <small>
                 {n.resources.source === "simulated"
                   ? "SIMULATED"
-                  : "Physical report"}
+                  : "Worker capacity report"}
               </small>
             </>
           ),
@@ -605,9 +599,7 @@ function NodeTable({
           cell: (n) => (
             <>
               {n.os} / {n.architecture}
-              <small>
-                {n.resources.cpu_count} CPUs · {bytes(n.resources.ram_bytes)}
-              </small>
+              <NodeCapacity resources={n.resources} />
             </>
           ),
         },
@@ -964,13 +956,9 @@ function JobInspection({
             />{" "}
             / {j.workspace_id}
           </dd>
-          <dt>Assigned worker</dt>
+          <dt>Execution</dt>
           <dd>
-            {j.assigned_node_id ? (
-              <a href={`/nodes/${j.assigned_node_id}`}>{j.assigned_node_id}</a>
-            ) : (
-              "Unassigned"
-            )}
+            <JobExecution job={j} />
           </dd>
           <dt>Workload / priority</dt>
           <dd>
@@ -1249,7 +1237,7 @@ function NodeInspection({
         <span>
           {n.resources.source === "simulated"
             ? "SIMULATED NODE AND HARDWARE"
-            : "Physical worker report"}
+            : "Worker capacity report"}
         </span>
       </div>
       <dl>
@@ -1269,20 +1257,20 @@ function NodeInspection({
         <dd>
           {n.connection_status} / {localTime(n.last_heartbeat_at)}
         </dd>
-        <dt>CPU</dt>
+        <dt>CPU scheduling capacity</dt>
         <dd>
           {n.resources.cpu_name} · {n.resources.cpu_count} CPUs ·{" "}
           {n.resources.cpu_percent == null
             ? "Unavailable"
             : `${n.resources.cpu_percent}%`}{" "}
-          utilization
+          whole-host utilization
         </dd>
-        <dt>RAM</dt>
+        <dt>RAM scheduling capacity</dt>
         <dd>
-          {bytes(n.resources.ram_bytes)} total ·{" "}
+          {bytes(n.resources.ram_bytes)} limit ·{" "}
           {bytes(n.resources.available_ram_bytes)} available
         </dd>
-        <dt>GPU / VRAM</dt>
+        <dt>GPU / VRAM shared for scheduling</dt>
         <dd>
           {n.resources.gpus.length
             ? n.resources.gpus.map((g) => (
@@ -1296,7 +1284,16 @@ function NodeInspection({
                   utilization
                 </p>
               ))
-            : "No reported GPU"}
+            : "No GPU shared for scheduling"}
+        </dd>
+        <dt>Measured hardware</dt>
+        <dd>
+          <MeasuredHardware resources={n.resources} />
+        </dd>
+        <dt>Capacity policy</dt>
+        <dd>
+          Measured totals do not grant additional CPU, RAM or GPU contribution.
+          Scheduling uses only the worker's advertised limits.
         </dd>
         <dt>Specialties</dt>
         <dd>
@@ -1465,30 +1462,28 @@ function Models({
               <>
                 {m.deployment.context_window ?? "Unknown"} context tokens
                 <small>
-                  RAM {bytes(m.deployment.estimated_ram_bytes)} · VRAM{" "}
+                  Inference RAM {bytes(m.deployment.estimated_ram_bytes)} · VRAM{" "}
                   {bytes(m.deployment.estimated_vram_bytes)}
                 </small>
+                {m.deployment.estimated_ram_bytes != null && (
+                  <small>
+                    {m.deployment.metadata_source === "configured"
+                      ? "Owner-configured runtime profile"
+                      : "Provider-reported memory estimate"}
+                  </small>
+                )}
+                {m.deployment.disk_bytes != null && (
+                  <small>
+                    Model storage {bytes(m.deployment.disk_bytes)}; separate
+                    from inference memory
+                  </small>
+                )}
               </>
             ),
           },
           {
             label: "Observed inference",
-            cell: (m) => {
-              const usage = data.metrics?.recent_attempts.find(
-                (a) => a.node_id === m.node_id && a.usage,
-              )?.usage;
-              return usage ? (
-                <>
-                  {usage.duration_seconds?.toFixed(2)}s
-                  <small>
-                    {usage.output_tokens ?? "Unknown"} output tokens ·{" "}
-                    {usage.tokens_per_second?.toFixed(1) ?? "Unknown"} tokens/s
-                  </small>
-                </>
-              ) : (
-                "No recent measurement"
-              );
-            },
+            cell: (m) => <ObservedInference model={m} metrics={data.metrics} />,
           },
         ]}
       />
@@ -1521,8 +1516,8 @@ function Models({
       )}
       {pagination}
       <p className="muted">
-        Performance is per node, sampled from up to 200 recent inference
-        attempts; it is not a model benchmark.
+        Latest measurement per node and model deployment, from up to 200 recent
+        completed inference attempts and committed workflow model steps.
       </p>
     </>
   );

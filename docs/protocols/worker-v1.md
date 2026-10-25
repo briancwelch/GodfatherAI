@@ -18,6 +18,16 @@ The canonical typed contract is `godfather_contracts` in `packages/shared-schema
 
 Send exactly one `Authorization: Bearer TOKEN` header. Admin and worker credential kinds are deliberately separate. Tokens, request bodies and raw exceptions never enter API request logs or validation responses. Responses include the existing correlation header. Node lifecycle events carry the node, initiating actor when applicable, correlation ID, and safe transition details in PostgreSQL. Unchanged heartbeats update the node row without adding unbounded heartbeat audit rows.
 
+The first successful registration emits `node.registered`. Re-registration emits
+`node.reconnected` only when an allowed process-session replacement occurs or the
+previous connection is suspect/offline, including receipt expiry before the next
+health sweep. Online, same-session inventory refreshes still update the full
+advertisement and heartbeat receipt without emitting reconnection events; this
+also applies while the node is draining. Actual contribution changes retain their
+`node.contribution_changed` audit event. Health transitions, credential-release
+auditing, session fencing, lease timing and protocol v1 are unchanged. Existing
+historical events are retained.
+
 Registration combines the advertisement with `session_id` and `protocol_version`. Required fields are `os` (`windows`, `macos`, `linux`), `os_version`, `architecture` (`x86_64`, `arm64`, `x86`, `unknown`), and resources. Resources include `source` (`physical` or `simulated`), `cpu_name`, and positive `cpu_count`; memory/utilization and GPUs may be unknown. Optional fields declare primary/secondary capabilities, concurrency limit, scheduling policy, runtimes, installed models, toolchains, supported sandbox modes and warnings. Lists, strings and percentages are bounded. Capabilities must be unique across both specialties. No owner, node ID, credential, path, shell or tool grant is accepted in the registration body.
 
 A heartbeat contains protocol version, the same process session UUID and a resource snapshot. Its telemetry source must match registration. Both worker endpoints return `node_id`, effective `state`, independent `connection_status` and the coordinator's heartbeat interval. Unknown fields and invalid resources receive 422. Missing/invalid/revoked credentials receive 401, disabled owners/nodes or wrong node scopes receive 403, duplicate live processes/stale sessions receive 409. Invalid bodies can receive 422 before authentication but never perform a management operation.

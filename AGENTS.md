@@ -25,8 +25,36 @@ Development is led by one developer. Both founding members are platform administ
 15. Keep checkpoints, artifacts, execution requirements, and agent definitions portable. A job may migrate only to a node that satisfies its OS, architecture, runtime, dependency, model, and tool requirements.
 16. For any frontend, dashboard, or UX/UI implementation, read and follow docs/design/UI-UX.md. AGENTS.md remains authoritative for architecture, security, and implementation phases. Do not introduce dashboard features outside the currently authorized phase.
 17. The Godfather must support an extensible number of users, worker nodes, and geographic locations. Never hardcode the initial two administrators, four example nodes, or Las Vegas/Los Angeles locations into application logic. All users and nodes must be dynamically managed through persistent identities, ownership relationships, permissions, and capability-based scheduling. Future contributors must be able to join or leave without requiring application code changes or orchestrator restarts.
-18. After completing a phase and before moving onto the next one, commit and push to Github repo, so each phase is saved.
+18. After completing a phase, run the relevant local checks and report results. Commit and push to GitHub when the owner explicitly authorizes release, saving each approved phase before moving onto the next one. Local Google OAuth setup and signed-in local browser acceptance are not release prerequisites; passing checks alone does not authorize commit, push, worker builds or production deployment.
 
+
+## Development and release workflow
+
+Owner-revised workflow (2026-10-24): develop and validate locally where possible,
+then, when the owner is satisfied and authorizes release, commit/push, build,
+deploy to production and test the live application. Local Google OAuth setup and
+signed-in local browser review are optional, not prerequisites for this workflow.
+
+1. Implement only the authorized change or phase in the local checkout.
+2. Run relevant formatting, lint, typing, builds and automated tests. Use local
+   Compose containers for application builds, API/database checks and migration
+   validation as appropriate. Preserve the existing `.env`, database and artifact
+   volumes; back up local data before schema migrations. Keep local ports bound
+   to loopback.
+3. Report actual results and limitations. Without local OAuth, identify real
+   signed-in browser flows as unverified locally; do not require the owner to
+   configure local Google sign-in or perform local browser acceptance to release.
+4. When the owner explicitly authorizes release, commit and push the approved
+   changes to GitHub, build and verify new worker installers, then deploy the
+   approved coordinator and worker downloads to the DigitalOcean Droplet/VPS
+   using the documented backup-first procedure. Test the live application after
+   deployment and report the results. Perform only the release steps included in
+   that authorization.
+
+Updating local Docker containers does not authorize changes to production,
+GitHub synchronization, new worker builds, or upgrades to Docker Desktop or
+unrelated dependencies. Preserve existing release artifacts until an authorized
+release replaces them.
 
 ## Architecture
 
@@ -223,10 +251,10 @@ Security review, dependency scans, secret handling, version compatibility, upgra
 1. Read this `AGENTS.md`, `README.md`, the current milestone, relevant architecture docs, and existing code.
 2. Summarize the requested scope and propose the smallest implementation plan. State assumptions and security impact.
 3. Implement only the authorized milestone; do not refactor unrelated modules or introduce future features.
-4. Run relevant formatting, lint, type checks, unit tests, and integration tests where possible.
+4. Run relevant formatting, lint, type checks, unit tests, and integration tests where possible. Use affected local Docker containers for validation as appropriate, following the development and release workflow above; signed-in local browser review is optional.
 5. Update docs, tests, and an ADR if the architectural decision changes.
 6. Report: files changed, behavior implemented, tests actually run/results, unresolved issues, security concerns, and next recommended milestone.
-7. **Stop and wait for explicit approval** before proceeding to the next milestone or taking external actions.
+7. **Stop and wait for explicit approval** after local validation and reporting unless the required release steps are already explicitly authorized. Commit, GitHub push, worker installer builds, DigitalOcean Droplet/VPS deployment and other external actions must stay within that authorization. Do not proceed to the next milestone without explicit direction.
 
 ## Scope and deployment safeguards
 - `the-godfather.ai` is a proposed product domain, not evidence of ownership or DNS readiness.

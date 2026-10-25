@@ -344,6 +344,13 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
         raise HTTPException(422, "Workers may consent only to groups containing their own node ID")
     if len({g.id for g in payload.shared_inference_groups}) != len(payload.shared_inference_groups):
         raise HTTPException(422, "Shared inference groups must have distinct IDs")
+    # Same-session inventory refreshes are not reconnects. Check receipt age as well
+    # as persisted health so a late sweep cannot hide an actual connection loss.
+    reconnected = not created and (
+        node.session_id != payload.session_id
+        or node.connection_status != "online"
+        or connection_at(node.last_heartbeat_at, now, settings) != "online"
+    )
     node.os, node.os_version, node.architecture = (
         payload.os,
         payload.os_version,
@@ -419,9 +426,14 @@ def register(payload: Registration, request: Request, session: SessionDep) -> Wo
     node.contribution_policy = policy
     node.last_heartbeat_at = now
     transition(session, node, "online")
-    record(
-        session, node, "node.registered" if created else "node.reconnected", {}, credential.owner_id
-    )
+    if created or reconnected:
+        record(
+            session,
+            node,
+            "node.registered" if created else "node.reconnected",
+            {},
+            credential.owner_id,
+        )
     return ack(node, settings)
 
 

@@ -16,9 +16,16 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from godfather_contracts import Contract, Heartbeat, Registration, Resources
+from godfather_contracts import (
+    Contract,
+    HardwareMeasurements,
+    Heartbeat,
+    Label,
+    Registration,
+    Resources,
+)
 from godfather_contracts.coding import CodingRepository
-from godfather_model_gateway import ProviderConfig
+from godfather_model_gateway import ModelMemoryProfile, ProviderConfig
 from pydantic import Field, field_validator
 
 from godfather_worker import cli
@@ -112,6 +119,9 @@ class Contribution(Contract):
     repositories: list[CodingRepository] = Field(default_factory=list, max_length=8, repr=False)
     workloads: WorkloadConfig | None = None
     local_providers: list[ProviderConfig] = Field(default_factory=list, max_length=7)
+    ollama_memory_profiles: dict[Label, ModelMemoryProfile] = Field(
+        default_factory=dict, max_length=128
+    )
 
     @field_validator("local_providers")
     @classmethod
@@ -142,10 +152,26 @@ class Contribution(Contract):
 
     def resources(self, actual: Resources) -> Resources:
         values = actual.model_dump()
+        values["hardware"] = (
+            actual.hardware.model_dump()
+            if actual.hardware
+            else HardwareMeasurements(
+                cpu_count=actual.cpu_count,
+                ram_bytes=actual.ram_bytes,
+                available_ram_bytes=actual.available_ram_bytes,
+                gpus=actual.gpus,
+            ).model_dump()
+        )
         values["cpu_count"] = min(self.cpu_cores, actual.cpu_count)
         budget = self.ram_gib * 1024**3
-        values["ram_bytes"] = min(actual.ram_bytes or 0, budget)
-        values["available_ram_bytes"] = min(actual.available_ram_bytes or 0, budget)
+        values["ram_bytes"] = (
+            min(actual.ram_bytes, budget) if actual.ram_bytes is not None else None
+        )
+        values["available_ram_bytes"] = (
+            min(actual.available_ram_bytes, budget, actual.ram_bytes)
+            if actual.available_ram_bytes is not None and actual.ram_bytes is not None
+            else None
+        )
         # GPU memory is not an independently enforceable budget. Do not advertise it
         # as a scheduling resource in this conservative desktop distribution.
         values["gpus"] = []
@@ -316,6 +342,10 @@ class Controller:
                         {
                             "id": "local-ollama",
                             "provider": "ollama",
+                            "memory_profiles": {
+                                name: profile.model_dump(mode="json")
+                                for name, profile in settings.ollama_memory_profiles.items()
+                            },
                         },
                         *(p.model_dump(mode="json") for p in settings.local_providers),
                     ]

@@ -9,6 +9,7 @@ import {
 } from "react";
 import { appearanceStyle, defaults, type Appearance } from "../lib/appearance";
 import { control } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 
 const Context = createContext<{
   settings: Appearance;
@@ -46,25 +47,20 @@ export function AppearanceProvider({
       return () => {
         active = false;
       };
-    const refresh = () => {
-      if (document.visibilityState !== "hidden")
-        void control<Appearance>("appearance")
-          .then((data) => {
-            if (active) setSettings({ ...defaults, ...data });
-          })
-          .catch(() => {});
-    };
+    const stop = startPolling({
+      intervalMs: 30000,
+      request: (signal) =>
+        control<Appearance>("appearance", undefined, 15000, signal),
+      onData: (data) => setSettings({ ...defaults, ...data }),
+      onError: () => {},
+    });
     const update = (event: Event) =>
       setSettings((event as CustomEvent<Appearance>).detail);
-    refresh();
-    const timer = setInterval(refresh, 30000);
     window.addEventListener("godfather-appearance", update);
-    window.addEventListener("focus", refresh);
     return () => {
       active = false;
-      clearInterval(timer);
+      stop();
       window.removeEventListener("godfather-appearance", update);
-      window.removeEventListener("focus", refresh);
     };
   }, [enabled]);
   useEffect(() => {

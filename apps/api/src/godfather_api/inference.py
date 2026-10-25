@@ -23,16 +23,18 @@ from godfather_contracts.model_management import (
     ModelInstallRequest,
 )
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from godfather_api.jobs import authorized_job, current_attempt, submit
 from godfather_api.models import (
     AccessCredential,
+    Agent,
     Attempt,
     Job,
     Node,
     User,
+    WorkflowStepRecord,
     Workspace,
     WorkspaceMember,
 )
@@ -446,13 +448,25 @@ def stream(job_id: UUID, request: Request, session: SessionDep) -> StreamingResp
 def metrics(workspace_id: UUID, request: Request, session: SessionDep) -> dict[str, object]:
     actor = authenticate(request, session, "human")
     workspace_permission(session, workspace_id, actor.owner_id)
+    model_agents = select(Agent.id).where(
+        or_(
+            Agent.definition["workflow"]["steps"].contains([{"kind": "model"}]),
+            Agent.definition["workflow"]["steps"].contains([{"kind": "coding"}]),
+        )
+    )
+    scope = (
+        Job.workspace_id == workspace_id,
+        Job.deleted_at.is_(None),
+        or_(
+            Job.type == "inference.text",
+            (Job.type == "agent.workflow") & Job.agent_id.in_(model_agents),
+        ),
+    )
     states: Counter[str] = Counter(
         {
             state: count
             for state, count in session.execute(
-                select(Job.status, func.count())
-                .where(Job.workspace_id == workspace_id, Job.type == "inference.text")
-                .group_by(Job.status)
+                select(Job.status, func.count()).where(*scope).group_by(Job.status)
             ).all()
         }
     )
@@ -460,10 +474,74 @@ def metrics(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
     attempts = session.scalars(
         select(Attempt)
         .join(Job)
-        .where(Job.workspace_id == workspace_id, Job.type == "inference.text")
-        .order_by(Attempt.created_at.desc())
+        .where(*scope)
+        .order_by(Attempt.created_at.desc(), Attempt.id.desc())
         .limit(200)
     ).all()
+    # Keep attempt metadata separate from per-call measurements. A recovered
+    # workflow retains each committed model step on its original attempt/node.
+    measurements: list[tuple[datetime, str, dict[str, object]]] = []
+    for attempt in session.scalars(
+        select(Attempt)
+        .join(Job)
+        .where(*scope, Job.type == "inference.text", Attempt.status == "COMPLETED")
+        .order_by(Attempt.finished_at.desc(), Attempt.id.desc())
+        .limit(200)
+    ):
+        if not isinstance(attempt.result.get("usage"), dict):
+            continue
+        measured_at = attempt.finished_at or attempt.created_at
+        measurements.append(
+            (
+                measured_at,
+                str(attempt.id),
+                {
+                    "measurement_id": str(attempt.id),
+                    "source": "inference_attempt",
+                    "attempt_id": str(attempt.id),
+                    "job_id": str(attempt.job_id),
+                    "node_id": str(attempt.node_id),
+                    "step_id": None,
+                    "measured_at": measured_at.isoformat(),
+                    "deployment": attempt.result.get("deployment"),
+                    "usage": attempt.result["usage"],
+                },
+            )
+        )
+    for record, attempt in session.execute(
+        select(WorkflowStepRecord, Attempt)
+        .select_from(WorkflowStepRecord)
+        .join(Attempt, WorkflowStepRecord.attempt_id == Attempt.id)
+        .join(Job, WorkflowStepRecord.job_id == Job.id)
+        .where(
+            *scope,
+            Job.type == "agent.workflow",
+            WorkflowStepRecord.status == "COMPLETED",
+            WorkflowStepRecord.metadata_refs["kind"].astext.in_(("model", "coding")),
+        )
+        .order_by(WorkflowStepRecord.finished_at.desc(), WorkflowStepRecord.id.desc())
+        .limit(200)
+    ):
+        if not isinstance(record.metadata_refs.get("usage"), dict):
+            continue
+        measured_at = record.finished_at or record.created_at
+        measurements.append(
+            (
+                measured_at,
+                str(record.id),
+                {
+                    "measurement_id": str(record.id),
+                    "source": "workflow_step",
+                    "attempt_id": str(attempt.id),
+                    "job_id": str(record.job_id),
+                    "node_id": str(attempt.node_id),
+                    "step_id": record.step_id,
+                    "measured_at": measured_at.isoformat(),
+                    "deployment": record.metadata_refs.get("model"),
+                    "usage": record.metadata_refs["usage"],
+                },
+            )
+        )
     return {
         "job_counts": dict(states),
         "terminal_jobs": terminal,
@@ -471,6 +549,11 @@ def metrics(workspace_id: UUID, request: Request, session: SessionDep) -> dict[s
         "cancellation_rate": states["CANCELLED"] / terminal if terminal else None,
         "rates_denominator": "terminal_jobs",
         "recent_attempt_limit": 200,
+        "recent_measurement_limit": 200,
+        "recent_measurements": [
+            row[2]
+            for row in sorted(measurements, key=lambda row: (row[0], row[1]), reverse=True)[:200]
+        ],
         "recent_attempts": [
             {
                 "attempt_id": str(a.id),

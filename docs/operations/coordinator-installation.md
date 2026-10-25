@@ -88,6 +88,12 @@ the existing private environment, database, artifact storage, worker identities 
 provider vault key. Keep a protected separate copy of the environment/vault key;
 a database backup alone cannot recover encrypted account connections.
 
+Follow [complete coordinator recovery](coordinator-recovery.md) (packaged as
+`RECOVERY.md`) to capture the matching encrypted configuration separately, escrow
+its independent recovery key, and verify a restore before reopening traffic. New
+data backups include `recovery.json`; a complete recovery set also needs that
+separate configuration export and the matching trusted release.
+
 Retain the current release and five predecessors, and keep backups under their
 own reviewed retention policy. An older image is not automatically compatible
 with newer database records. Inspect the release's packaged `DEPLOYMENT.md` recovery

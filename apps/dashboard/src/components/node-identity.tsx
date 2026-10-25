@@ -8,7 +8,46 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { NodeInfo } from "../lib/contracts";
+import { short, type JobInfo, type NodeInfo } from "../lib/contracts";
+
+export function JobExecution({ job }: { job: JobInfo }) {
+  const execution = job.execution;
+  if (!execution)
+    return job.assigned_node_id ? (
+      <a href={`/nodes/${job.assigned_node_id}`}>
+        {short(job.assigned_node_id)}
+      </a>
+    ) : (
+      <>
+        {job.attempt_count
+          ? "Execution history unavailable"
+          : "Not yet assigned"}
+      </>
+    );
+  const name = execution.node_name || short(execution.node_id);
+  return (
+    <>
+      {execution.can_inspect_node ? (
+        <a href={`/nodes/${execution.node_id}`} title={execution.node_id}>
+          {name}
+        </a>
+      ) : (
+        <span title={execution.node_id}>{name}</span>
+      )}
+      <small>
+        Owner{" "}
+        {execution.owner_id ? (
+          <UserName id={execution.owner_id} name={execution.owner_name} />
+        ) : (
+          "Unavailable"
+        )}
+      </small>
+      {!job.assigned_node_id && (
+        <small>Last attempt {execution.attempt_number}</small>
+      )}
+    </>
+  );
+}
 
 const Builds = createContext<Record<string, string>>({});
 const versionPattern =

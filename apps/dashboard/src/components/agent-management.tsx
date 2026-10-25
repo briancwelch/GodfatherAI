@@ -13,6 +13,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { control } from "../lib/control-client";
+import { startPolling } from "../lib/polling";
 import type {
   AgentInfo,
   EventPage,
@@ -87,50 +88,46 @@ export function AgentManagement({
     (w) => w.id === data.workspace_id,
   )?.can_manage;
   useEffect(() => {
-    let active = true;
-    if (data.workspace_id)
-      void control<Options>(`agent-options?workspace_id=${data.workspace_id}`)
-        .then((result) => {
-          if (active) {
-            setOptions(result);
-            setError("");
-          }
-        })
-        .catch((e) => {
-          if (active) {
-            setOptions(null);
-            setError(e.message);
-          }
-        });
-    return () => {
-      active = false;
-    };
-  }, [data.workspace_id, data.generated_at]);
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      if (!selected) return;
-      try {
-        const result = await control<NonNullable<typeof history>>(
-          `command-center/agents/${selected.id}`,
+    if (!data.workspace_id) return;
+    return startPolling({
+      request: (signal) =>
+        control<Options>(
+          `agent-options?workspace_id=${data.workspace_id}`,
+          undefined,
+          15000,
+          signal,
+        ),
+      onData: (result) => {
+        setOptions(result);
+        setError("");
+      },
+      onError: (error) => {
+        setOptions(null);
+        setError(
+          error instanceof Error ? error.message : "Agent options unavailable",
         );
-        if (active) {
-          setHistory(result);
-          setError("");
-        }
-      } catch (e) {
-        if (active) {
-          setHistory(null);
-          setError(e instanceof Error ? e.message : "History unavailable");
-        }
-      }
-    }
-    void load();
-    const timer = setInterval(load, 3000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
+      },
+    });
+  }, [data.workspace_id]);
+  useEffect(() => {
+    if (!selected) return;
+    return startPolling({
+      request: (signal) =>
+        control<NonNullable<typeof history>>(
+          `command-center/agents/${selected.id}`,
+          undefined,
+          15000,
+          signal,
+        ),
+      onData: (result) => {
+        setHistory(result);
+        setError("");
+      },
+      onError: (e) => {
+        setHistory(null);
+        setError(e instanceof Error ? e.message : "History unavailable");
+      },
+    });
   }, [selected, data.workspace_id]);
   const editReason = !manage
     ? "Workspace administration required"
