@@ -441,6 +441,7 @@ def panel_fixture(tmp_path: Path) -> tuple[Any, LocalEngineConsent, EngineGroup]
     panel.progress = Mock()
     panel.cancel = threading.Event()
     panel.node_id = consent.node_id
+    panel.endpoint_group_id = None
     panel.local_models = {group.proposal.id: consent.model_path}
     panel.failed_run = panel.pending = None
     panel.activate = Mock()
@@ -483,6 +484,79 @@ def test_approval_acknowledges_pending_then_committed_result_without_waiting_for
     assert not panel.busy
     assert "This computer is approved" in panel.message.set.call_args.args[0]
     assert panel.groups[str(group.proposal.id)].members[0].approved
+
+
+def test_selected_lan_endpoint_is_saved_and_sent_in_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _, group, work = action_panel(tmp_path)
+    from godfather_worker.shared_inference_ui import consent_path
+
+    panel.host.get.return_value = "10.0.0.129"
+    panel.port.get.return_value = "50100"
+    confirm = Mock(return_value=True)
+    monkeypatch.setattr("godfather_worker.shared_inference_ui.messagebox.askyesno", confirm)
+    panel.client().post_document.return_value = group.model_dump(mode="json")
+    panel.approve()
+    assert "10.0.0.129, port 50100" in confirm.call_args.args[1]
+    work.pop()()
+    payload = panel.client().post_document.call_args.args[1]
+    saved = LocalEngineConsent.model_validate_json(
+        consent_path(tmp_path, group.proposal.id).read_text()
+    )
+    assert (payload.host, payload.port) == (saved.host, saved.port) == ("10.0.0.129", 50100)
+
+
+@pytest.mark.parametrize(
+    "host,port", [("10.0.0.129", "50053"), ("127.0.0.1", "50100"), ("bad", "x")]
+)
+def test_changed_endpoint_requires_new_local_approval_before_start(
+    tmp_path: Path, host: str, port: str
+) -> None:
+    panel, _, _, work = action_panel(tmp_path)
+    panel.host.get.return_value, panel.port.get.return_value = host, port
+    panel.control("start")
+    assert "Approve this computer to save" in panel.message.set.call_args.args[0]
+    assert not work
+    panel.client().post_document.assert_not_called()
+
+
+def test_lan_addresses_precede_tailscale_without_discarding_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("tkinter", exc_type=ImportError)
+    from godfather_worker.shared_inference_ui import local_addresses
+
+    monkeypatch.setattr(
+        "godfather_worker.shared_inference_ui.psutil.net_if_addrs",
+        lambda: {
+            "example": [
+                Mock(address=a) for a in ("100.69.1.2", "10.0.0.129", "127.0.0.1", "8.8.8.8")
+            ]
+        },
+    )
+    assert local_addresses() == ["10.0.0.129", "100.69.1.2"]
+
+
+@pytest.mark.parametrize("preserve_error", [False, True])
+def test_last_owner_approval_refreshes_waiting_feedback_without_erasing_errors(
+    tmp_path: Path, preserve_error: bool
+) -> None:
+    panel, consent, ready, _ = action_panel(tmp_path)
+    from godfather_worker.shared_inference_ui import approval_message
+
+    waiting = ready.model_copy(deep=True)
+    waiting.group = None
+    waiting.members[1].approved = False
+    panel.groups = {str(waiting.proposal.id): waiting}
+    panel.message.get.return_value = (
+        "Connection unavailable" if preserve_error else approval_message(waiting)
+    )
+    panel.received(consent.node_id, [ready])
+    if preserve_error:
+        panel.message.set.assert_not_called()
+    else:
+        assert "All owners have approved" in panel.message.set.call_args.args[0]
 
 
 def test_missing_devices_and_cancelled_approval_explain_why_nothing_was_granted(
@@ -584,6 +658,52 @@ def test_old_poll_cannot_restore_a_deleted_or_unapproved_row_after_mutation(tmp_
     work.pop()()
     assert len(queued) == 1
     panel.revision += 1  # A mutation started after this poll's snapshot.
+    panel.groups.clear()
+    queued.pop()()
+    assert not panel.groups
+    panel.table.insert.assert_not_called()
+
+
+def test_setup_selection_shows_saved_endpoint_and_refresh_preserves_unsaved_edits(
+    tmp_path: Path,
+) -> None:
+    panel, consent, _, _ = action_panel(tmp_path)
+    from godfather_worker.shared_inference_ui import SharedInference
+
+    for name in (
+        "approve_button",
+        "start_button",
+        "withdraw_button",
+        "delete_button",
+        "setup_button",
+        "refresh_button",
+        "detect_button",
+        "menu",
+        "detail",
+    ):
+        setattr(panel, name, Mock())
+    SharedInference.selection(panel)
+    panel.host.set.assert_called_once_with(consent.host)
+    panel.port.set.assert_called_once_with(str(consent.port))
+    assert "saved address: 10.0.0.2" in panel.detail.set.call_args.args[0]
+    panel.host.set.reset_mock()
+    panel.port.set.reset_mock()
+    SharedInference.selection(panel)
+    panel.host.set.assert_not_called()
+    panel.port.set.assert_not_called()
+
+
+def test_refresh_from_a_previous_connection_cannot_enter_current_account(tmp_path: Path) -> None:
+    panel, consent, group, work = action_panel(tmp_path)
+    panel.client().post_document.return_value = {
+        "node_id": str(consent.node_id),
+        "groups": [group.model_dump(mode="json")],
+    }
+    queued: list[Any] = []
+    panel.deliver = queued.append
+    panel.refresh()
+    work.pop()()
+    panel.app.identity = {"credential_id": str(uuid4())}
     panel.groups.clear()
     queued.pop()()
     assert not panel.groups

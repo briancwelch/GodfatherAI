@@ -57,7 +57,25 @@ def local_addresses() -> list[str]:
                     addresses.append(value)
             except ValueError:
                 pass
-    return sorted(set(addresses), key=lambda value: (not value.startswith("100."), value))
+    return sorted(
+        set(addresses),
+        key=lambda value: (
+            ipaddress.ip_address(value) in ipaddress.ip_network("100.64.0.0/10"),
+            value,
+        ),
+    )
+
+
+def approval_message(group: EngineGroup) -> str:
+    return (
+        f'This computer is approved for "{group.proposal.name}" '
+        f"({str(group.proposal.id)[:8]}). "
+        + (
+            "All owners have approved; select Configure and Start on the initiating computer."
+            if group.group
+            else "Waiting for the other computer owners to approve."
+        )
+    )
 
 
 def consent_path(folder: Path, group_id: UUID) -> Path:
@@ -127,6 +145,7 @@ class SharedInference:
         self.allow_download = tk.BooleanVar(value=False)
         self.host = tk.StringVar(value=next(iter(local_addresses()), "127.0.0.1"))
         self.port = tk.StringVar(value="50053")
+        self.endpoint_group_id: UUID | None = None
         controls = ttk.Frame(parent, padding=(16, 10))
         controls.pack(fill="x")
         self.setup_button = ttk.Button(
@@ -197,7 +216,10 @@ class SharedInference:
         self.device_list.pack(fill="x")
         network = ttk.Frame(right)
         network.pack(fill="x", pady=6)
-        ttk.Label(right, text="This computer's private address and port").pack(anchor="w")
+        ttk.Label(
+            right,
+            text="This computer's private address and port (saved by Approve this computer)",
+        ).pack(anchor="w")
         ttk.Combobox(network, textvariable=self.host, values=local_addresses(), width=18).pack(
             side="left", padx=6
         )
@@ -271,6 +293,12 @@ class SharedInference:
         for button in (self.setup_button, self.refresh_button, self.detect_button):
             button.configure(state="disabled" if self.busy else "normal")
         if group:
+            if self.endpoint_group_id != group.proposal.id:
+                self.endpoint_group_id = group.proposal.id
+                own = next((m for m in group.members if m.node_id == self.node_id), None)
+                if own and own.approved and own.host and own.port:
+                    self.host.set(own.host)
+                    self.port.set(str(own.port))
             states = "; ".join(
                 f"{m.name} ({m.owner}): "
                 + (
@@ -282,6 +310,7 @@ class SharedInference:
                     if m.phase == "stopped"
                     else "Owner approval needed"
                 )
+                + (f" (saved address: {m.host}, port {m.port})" if m.host and m.port else "")
                 for m in group.members
             )
             self.detail.set(
@@ -289,6 +318,7 @@ class SharedInference:
                 f"{group.proposal.model_name}\n{states}"
             )
         else:
+            self.endpoint_group_id = None
             self.detail.set("Choose a setup to review participation.")
 
     def client(self) -> WorkerClient:
@@ -390,11 +420,12 @@ class SharedInference:
             self.message.set("Refreshing shared inference setups...")
             self.progress.start(12)
         revision = self.revision
+        account = dict(self.app.identity)
         client = self.client()
 
         def apply(node_id: UUID | None = None, groups: list[EngineGroup] | None = None) -> None:
             self.polling = False
-            if revision != self.revision or self.busy:
+            if revision != self.revision or self.busy or self.app.identity != account:
                 return
             if manual and not self.activating and not self.stopping:
                 self.progress.stop()
@@ -438,6 +469,7 @@ class SharedInference:
             return
         self.last_seen = monotonic()
         self.node_id = node_id
+        previous = self.selected()
         selected = self.table.selection()
         self.groups = {str(g.proposal.id): g for g in groups}
         self.table.delete(*self.table.get_children())
@@ -462,6 +494,18 @@ class SharedInference:
         elif groups:
             self.table.selection_set(str(groups[0].proposal.id))
         self.selection()
+        current = self.selected()
+        if hasattr(self.app, "activity"):
+            self.app.activity.shared_groups(node_id, groups)
+        if (
+            previous
+            and current
+            and previous.proposal.id == current.proposal.id
+            and not current.desired_running
+            and any(m.node_id == node_id and m.approved for m in current.members)
+            and self.message.get() == approval_message(previous)
+        ):
+            self.message.set(approval_message(current))
         if self.message.get() == "Connect this computer, then set up a shared local model.":
             self.message.set(
                 "Select a setup to approve participation. Right-click a setup to delete it."
@@ -745,6 +789,20 @@ class SharedInference:
             if not consent:
                 self.message.set("Approve this computer locally before starting this group.")
                 return
+            try:
+                endpoint_matches = (
+                    private_address(self.host.get()) == consent.host
+                    and int(self.port.get()) == consent.port
+                )
+            except ValueError:
+                endpoint_matches = False
+            if not endpoint_matches:
+                self.message.set(
+                    "The address or port has changed. Click Approve this computer to save "
+                    "your selection before starting. "
+                    f"Saved address: {consent.host}, port {consent.port}."
+                )
+                return
         if action == "withdraw":
             self.revoke_local(group)
 
@@ -857,7 +915,8 @@ class SharedInference:
             "The initiating computer can start this exact group until you withdraw. "
             "Model data and inference travel between the approved computers over "
             "authenticated TLS. Only the leader reads the selected local model file. "
-            "No host files or shell access are granted.",
+            "No host files or shell access are granted.\n\n"
+            f"Save this computer's address: {consent.host}, port {consent.port}.",
             parent=self.app.root,
         ):
             self.message.set("Approval cancelled. This computer has not granted new permission.")
@@ -880,17 +939,7 @@ class SharedInference:
         def approved(raw: Any) -> None:
             self.revoked.discard(group.proposal.id)
             result = EngineGroup.model_validate(raw)
-            self.updated(
-                result,
-                f'This computer is approved for "{group.proposal.name}" '
-                f"({str(group.proposal.id)[:8]}). "
-                + (
-                    "All owners have approved; select Configure and Start "
-                    "on the initiating computer."
-                    if result.group
-                    else "Waiting for the other computer owners to approve."
-                ),
-            )
+            self.updated(result, approval_message(result))
 
         self.task(approve, approved, pending="Saving this computer's participation approval...")
 

@@ -5,14 +5,106 @@ import json
 import tempfile
 import threading
 import tkinter as tk
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from godfather_contracts.coding import CodingSetupOptions, CodingWorkspace
+from godfather_contracts.shared_engine import EngineGroup, EngineMember, EngineProposal
+from godfather_contracts.worker_activity import (
+    ActivityCursor,
+    ActivityRequest,
+    ActivityResponse,
+    JobNotice,
+    NodeJob,
+)
 from godfather_worker.coding_projects import Projects
 from godfather_worker.desktop_app import Application
 from godfather_worker.simulated import profile
+
+
+def check_activity(app: Application) -> None:
+    """Exercise real widgets with confirmed synthetic data; never contact a coordinator."""
+    assert app.identity
+    panel = app.activity
+    assert panel.scope()
+    own, leader, job, attempt, group_id = (uuid4() for _ in range(5))
+    now = datetime.now(UTC)
+    completed = JobNotice(
+        id=uuid4(), job_id=job, attempt_id=attempt, type="job.completed", created_at=now
+    )
+    panel.received(
+        dict(app.identity),
+        ActivityRequest(),
+        ActivityResponse(
+            node_id=own,
+            jobs=[
+                NodeJob(
+                    job_id=job,
+                    attempt_id=attempt,
+                    type="inference.text",
+                    workspace="Fixture",
+                    status="COMPLETED",
+                    job_status="COMPLETED",
+                    number=1,
+                    shared=True,
+                    created_at=now,
+                    started_at=now,
+                    finished_at=now,
+                )
+            ],
+            has_more=False,
+            events=[completed],
+            cursor=ActivityCursor(at=now, id=completed.id),
+        ),
+        "",
+    )
+    assert len(panel.table.get_children()) == 1
+    assert str(app.notifications_button["text"]) == "Notifications (1)"
+    panel.notices.selection_set(panel.notices.get_children()[0])
+    panel.open_selected()
+    assert app.notebook.select() == str(app.jobs_tab)  # type: ignore[no-untyped-call]
+    assert panel.job_id == job
+    group = EngineGroup(
+        proposal=EngineProposal(
+            id=group_id,
+            workspace_id=uuid4(),
+            name="LAN fixture",
+            model_name="fixture.gguf",
+            mode="local_network",
+            leader_node_id=leader,
+            node_ids=[leader, own],
+        ),
+        members=[
+            EngineMember(node_id=leader, name="Leader", owner="Fixture", approved=True),
+            EngineMember(node_id=own, name="This computer", owner="Fixture", approved=False),
+        ],
+        desired_running=False,
+        generation=0,
+    )
+    app.shared_inference.received(own, [group])
+    assert "approve and join" in app.notification_summary.get()
+    panel.notices.selection_set(panel.notices.get_children()[0])
+    panel.open_selected()
+    assert app.notebook.select() == str(app.shared_tab)  # type: ignore[no-untyped-call]
+    assert app.shared_inference.selected() == group
+    assert not group.members[1].approved and not group.desired_running
+    for width, height in ((1120, 760), (760, 600)):
+        app.root.geometry(f"{width}x{height}")
+        for tab, widget in (
+            (app.jobs_tab, panel.table),
+            (app.notifications_tab, panel.notices),
+            (app.shared_tab, app.shared_inference.approve_button),
+        ):
+            app.notebook.select(tab)  # type: ignore[no-untyped-call]
+            app.root.update()
+            assert widget.winfo_viewable()
+            assert widget.winfo_rooty() + widget.winfo_height() <= (
+                app.root.winfo_rooty() + app.root.winfo_height()
+            )
+    panel.mark_all()
+    assert str(app.notifications_button["text"]) == "Notifications"
 
 
 def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
@@ -22,6 +114,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         "origin": "https://example.invalid",
         "owner": "test@example.invalid",
         "owner_id": "00000000-0000-0000-0000-000000000001",
+        "credential_id": "00000000-0000-0000-0000-000000000002",
         "name": "Test computer",
     }
     store = Mock()
@@ -63,6 +156,7 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
         patch("godfather_worker.desktop_app.CredentialStore", return_value=store),
         patch("godfather_worker.desktop_app.discover", return_value=profile("LV-01")),
         patch("godfather_worker.shared_inference_ui.SharedInference.refresh", new=Mock()),
+        patch("godfather_worker.activity_ui.Activity.refresh", new=Mock()),
         patch("godfather_worker.desktop_app.Controller", side_effect=controller),
         patch("godfather_worker.desktop_app.await_approval", side_effect=approve),
         patch("godfather_worker.desktop_app.webbrowser.open") as browser,
@@ -295,10 +389,12 @@ def check(screenshot: Path | None = None, *, saved: bool = False) -> None:
                 assert app.settings_restart_pending
                 assert not app.settings.allowed_owner_ids
                 assert not app.settings.allowed_workspace_ids
+                check_activity(app)
                 result.append(
                     "pairing, tray restore, expanded resizing, embedded Projects, "
                     "tabbed Settings, theme persistence, project permissions, "
-                    "model-download consent, ID-free contribution and idle-safe updates"
+                    "model-download consent, ID-free contribution, idle-safe updates, "
+                    "node Jobs and actionable notifications at desktop/compact sizes"
                 )
                 deadline.set()
                 app.quit()

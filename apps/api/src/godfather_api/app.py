@@ -34,6 +34,7 @@ from godfather_api.nodes import sweep_health
 from godfather_api.provider_connections import router as provider_connections_router
 from godfather_api.scheduler import scheduler_tick
 from godfather_api.shared_engine_setup import router as shared_engine_setup_router
+from godfather_api.worker_activity import router as worker_activity_router
 
 logger = logging.getLogger("godfather.api")
 CORRELATION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -95,6 +96,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(appearance_router)
     app.include_router(node_registration_router)
     app.include_router(shared_engine_setup_router)
+    app.include_router(worker_activity_router)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError) -> JSONResponse:

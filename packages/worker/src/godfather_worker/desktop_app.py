@@ -254,6 +254,16 @@ class Application:
         self.update_progress = ttk.Progressbar(connection_status, mode="indeterminate", length=90)
         body = ttk.Frame(root)
         body.pack(fill="both", expand=True)
+        notice_bar = ttk.Frame(body, padding=(12, 4))
+        notice_bar.pack(fill="x")
+        self.notification_summary = tk.StringVar(value="No new notifications.")
+        self.notifications_button = ttk.Button(
+            notice_bar, text="Notifications", command=self.open_notifications
+        )
+        self.notifications_button.pack(side="right")
+        ttk.Label(notice_bar, textvariable=self.notification_summary, wraplength=650).pack(
+            side="left", fill="x", expand=True
+        )
         self.notebook = ttk.Notebook(body)
         self.notebook.pack(fill="both", expand=True)
         connection = ttk.Frame(self.notebook, padding=20)
@@ -269,6 +279,13 @@ class Application:
         from godfather_worker.shared_inference_ui import SharedInference
 
         self.shared_inference = SharedInference(self, self.shared_tab)
+        self.jobs_tab = ttk.Frame(self.notebook)
+        self.notifications_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.jobs_tab, text="Jobs")
+        self.notebook.add(self.notifications_tab, text="Notifications")
+        from godfather_worker.activity_ui import Activity
+
+        self.activity = Activity(self, self.jobs_tab, self.notifications_tab)
         self.projects_placeholder = ttk.Label(
             self.projects_tab,
             text="Connect this computer, then open Projects to configure your workspace.",
@@ -932,6 +949,10 @@ class Application:
         if self.notebook.select() == str(self.projects_tab):  # type: ignore[no-untyped-call]
             self.projects()
 
+    def open_notifications(self) -> None:
+        self.show()
+        self.notebook.select(self.notifications_tab)  # type: ignore[no-untyped-call]
+
     def projects(self) -> None:
         self.notebook.select(self.projects_tab)  # type: ignore[no-untyped-call]
         if not self.identity:
@@ -996,6 +1017,7 @@ class Application:
         try:
             self.store.delete()
             self.identity = None
+            self.activity.scope()
             self.owner.set("")
             self.address_entry.configure(state="normal")
             self.connect_button.configure(state="normal")
@@ -1020,6 +1042,8 @@ class Application:
     def quit(self) -> None:
         self.scan_cancel.set()
         self.shared_inference.cancel.set()
+        self.root.after_cancel(self.shared_inference.timer)
+        self.activity.close()
         self.show_update_progress(False)
         if self.update_timer:
             self.root.after_cancel(self.update_timer)
@@ -1050,11 +1074,15 @@ class Application:
             if self.timer is not None:
                 self.root.after_cancel(self.timer)
                 self.timer = None
+            # Delayed UI work must not outlive its Tcl commands when this root closes.
+            for pending_timer in self.root.tk.splitlist(self.root.tk.call("after", "info")):
+                self.root.after_cancel(pending_timer)
             self.destroyed = True
             self.root.destroy()
 
     def show_identity(self, identity: dict[str, str]) -> None:
         self.identity = identity
+        self.activity.scope()
         # Older private Mac enrollments keep their transport until explicitly paired again.
         self.address.set(identity.get("origin", WEB_ORIGIN))
         self.address_entry.configure(state="disabled")
@@ -1309,7 +1337,9 @@ class Application:
                     self.root.after(100, self.restart_after_settings)
             elif name == "error":
                 self.status.set(values["message"])
-            elif name == "shared_update" or name == "project_update" and not self.closing:
+            elif name == "shared_update" or (
+                name in ("project_update", "activity_update") and not self.closing
+            ):
                 values["apply"]()
             elif name in ("show", "open", "resume", "pause", "quit"):
                 {
