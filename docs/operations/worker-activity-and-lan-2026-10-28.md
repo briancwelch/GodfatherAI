@@ -2,7 +2,7 @@
 
 Owner-authorized scope, 2026-10-28: correct Shared Inference address/approval
 feedback, add node job history and notifications, then build new workers,
-push and deploy after validation. Candidate: **0.12.0-rc.1**. Release evidence
+push and deploy after validation. Candidate: **0.12.0-rc.2**. Release evidence
 will be recorded separately after packaging and production checks.
 
 ## Jobs and notifications
@@ -83,6 +83,8 @@ acceptance after updating both workers.
 - Native Windows smoke passed for fresh and saved identities, Jobs history,
   opening/read-marking notifications, invitation routing without automatic
   approval, compact/desktop geometry, tray lifecycle and clean shutdown.
+  Job details and notification guidance reserve their own space; native checks
+  verify that each label's full required height remains visible at both sizes.
 - Ruff formatting/lint, strict mypy, documentation formatting, dashboard ESLint,
   strict TypeScript and **68 dashboard tests** passed.
 - Existing group `aa1d2c19` was read in an explicitly read-only production

@@ -16,7 +16,7 @@ administrators can choose which roles may add new computers. Update workers usin
 Shared Inference now supports right-click **Delete setup** and shows explicit
 progress and results for approval, withdrawal and other setup actions.
 
-The next **0.12.0-rc.1** worker adds **Jobs** history, actionable **Notifications**,
+The next **0.12.0-rc.2** worker adds **Jobs** history, actionable **Notifications**,
 saved network-address visibility and clearer Shared Inference approval/start
 feedback. See [worker activity and LAN setup](docs/operations/worker-activity-and-lan-2026-10-28.md).
 

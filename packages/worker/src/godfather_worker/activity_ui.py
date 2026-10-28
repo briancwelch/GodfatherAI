@@ -35,14 +35,16 @@ class Activity:
         self.detail = tk.StringVar(value="Select a job to view its execution details.")
         self.notice_detail = tk.StringVar(value="Select a notification, then Open to review it.")
         controls = ttk.Frame(jobs, padding=12)
-        controls.pack(fill="x")
+        controls.grid(row=0, column=0, sticky="ew")
         ttk.Button(controls, text="Refresh", command=self.refresh).pack(side="left")
         ttk.Button(controls, text="Show all jobs", command=self.all_jobs).pack(side="left", padx=6)
         self.previous = ttk.Button(controls, text="Previous 25", command=lambda: self.page(-25))
         self.previous.pack(side="left", padx=6)
         self.next = ttk.Button(controls, text="Next 25", command=lambda: self.page(25))
         self.next.pack(side="left")
-        ttk.Label(jobs, textvariable=self.status, wraplength=700, padding=(12, 0)).pack(anchor="w")
+        ttk.Label(jobs, textvariable=self.status, wraplength=700, padding=(12, 0)).grid(
+            row=1, column=0, sticky="ew"
+        )
         self.table = self.table_widget(
             jobs,
             [
@@ -54,10 +56,14 @@ class Activity:
                 ("started", "Started (local time)", 160),
                 ("finished", "Finished (local time)", 160),
             ],
+            row=2,
         )
         self.table.bind("<<TreeviewSelect>>", self.selection)
-        ttk.Label(jobs, textvariable=self.detail, wraplength=850, padding=12).pack(fill="x")
-        ttk.Label(
+        self.job_detail_label = ttk.Label(
+            jobs, textvariable=self.detail, wraplength=850, padding=12
+        )
+        self.job_detail_label.grid(row=3, column=0, sticky="ew")
+        self.job_help = ttk.Label(
             jobs,
             text="History comes from Command Center. Includes shared jobs this computer "
             "contributed to. Each retry is a separate attempt. "
@@ -65,9 +71,10 @@ class Activity:
             wraplength=850,
             padding=(12, 0, 12, 8),
             style="Muted.TLabel",
-        ).pack(fill="x")
+        )
+        self.job_help.grid(row=4, column=0, sticky="ew")
         commands = ttk.Frame(notifications, padding=12)
-        commands.pack(fill="x")
+        commands.grid(row=0, column=0, sticky="ew")
         ttk.Button(commands, text="Open selected", command=self.open_selected).pack(side="left")
         ttk.Button(commands, text="Mark selected read", command=self.mark_selected).pack(
             side="left", padx=6
@@ -80,26 +87,43 @@ class Activity:
                 ("time", "Time (local)", 160),
                 ("title", "Notification", 480),
             ],
+            row=1,
         )
         self.notices.bind("<<TreeviewSelect>>", self.notice_selection)
         self.notices.bind("<Double-1>", lambda _: self.open_selected())
-        ttk.Label(notifications, textvariable=self.notice_detail, wraplength=850, padding=12).pack(
-            fill="x"
+        self.notice_detail_label = ttk.Label(
+            notifications, textvariable=self.notice_detail, wraplength=850, padding=12
         )
-        ttk.Label(
+        self.notice_detail_label.grid(row=2, column=0, sticky="ew")
+        self.notice_help = ttk.Label(
             notifications,
             text="The latest 200 notifications are saved on this computer. "
             "Opening a notice does not approve participation or start a job.",
             wraplength=850,
             padding=12,
             style="Muted.TLabel",
-        ).pack(fill="x")
+        )
+        self.notice_help.grid(row=3, column=0, sticky="ew")
+        for label in (
+            self.job_detail_label,
+            self.job_help,
+            self.notice_detail_label,
+            self.notice_help,
+        ):
+            label.bind(
+                "<Configure>",
+                lambda event: event.widget.configure(wraplength=max(100, event.width - 24)),
+            )
         self.timer = app.root.after(1000, self.tick)
         self.render_notices()
 
-    def table_widget(self, parent: ttk.Frame, columns: list[tuple[str, str, int]]) -> ttk.Treeview:
+    def table_widget(
+        self, parent: ttk.Frame, columns: list[tuple[str, str, int]], *, row: int
+    ) -> ttk.Treeview:
         frame = ttk.Frame(parent, padding=12)
-        frame.pack(fill="both", expand=True)
+        frame.grid(row=row, column=0, sticky="nsew")
+        parent.rowconfigure(row, weight=1)
+        parent.columnconfigure(0, weight=1)
         table = ttk.Treeview(frame, columns=[c[0] for c in columns], show="headings", height=8)
         for name, title, width in columns:
             table.heading(name, text=title)

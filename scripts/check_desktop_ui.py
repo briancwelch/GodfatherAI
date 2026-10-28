@@ -90,19 +90,25 @@ def check_activity(app: Application) -> None:
     assert app.notebook.select() == str(app.shared_tab)  # type: ignore[no-untyped-call]
     assert app.shared_inference.selected() == group
     assert not group.members[1].approved and not group.desired_running
+    panel.table.selection_set(str(attempt))
+    panel.selection()
+    assert str(job) in panel.detail.get()
     for width, height in ((1120, 760), (760, 600)):
         app.root.geometry(f"{width}x{height}")
-        for tab, widget in (
-            (app.jobs_tab, panel.table),
-            (app.notifications_tab, panel.notices),
-            (app.shared_tab, app.shared_inference.approve_button),
+        for tab, widgets in (
+            (app.jobs_tab, (panel.table, panel.job_detail_label, panel.job_help)),
+            (app.notifications_tab, (panel.notices, panel.notice_detail_label, panel.notice_help)),
+            (app.shared_tab, (app.shared_inference.approve_button,)),
         ):
             app.notebook.select(tab)  # type: ignore[no-untyped-call]
             app.root.update()
-            assert widget.winfo_viewable()
-            assert widget.winfo_rooty() + widget.winfo_height() <= (
-                app.root.winfo_rooty() + app.root.winfo_height()
-            )
+            for widget in widgets:
+                assert widget.winfo_viewable()
+                assert widget.winfo_rooty() + widget.winfo_height() <= (
+                    app.root.winfo_rooty() + app.root.winfo_height()
+                )
+                if isinstance(widget, tk.ttk.Label):
+                    assert widget.winfo_height() >= widget.winfo_reqheight()
     panel.mark_all()
     assert str(app.notifications_button["text"]) == "Notifications"
 
