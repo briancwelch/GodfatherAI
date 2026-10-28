@@ -4,10 +4,10 @@ The Godfather lets you run AI jobs from a browser using your own computers and
 models. The **Command Center** is where you manage workspaces, agents and jobs.
 **Consigliere** is the worker app you install on each computer that will do the work.
 
-The Command Center is published as **0.11.0-rc.2**; Windows/Apple Silicon/Intel Mac
-worker installers are **0.11.0-rc.1**. See the
-[release verification](docs/operations/assessment-capacity-release-2026-10-25.md)
-for capacity/admission safeguards, native checks, backups and preserved data.
+The Command Center and Windows/Apple Silicon/Intel Mac worker installers are
+published as **0.12.0-rc.2**. See the
+[release verification](docs/operations/worker-activity-release-2026-10-28.md)
+for native checks, backups, live verification and preserved data.
 
 Consigliere now includes **Scan for Local Models** and a **Shared Inference** tab
 with guided llama.cpp setup and each computer owner's device approval. Platform
@@ -16,7 +16,7 @@ administrators can choose which roles may add new computers. Update workers usin
 Shared Inference now supports right-click **Delete setup** and shows explicit
 progress and results for approval, withdrawal and other setup actions.
 
-The next **0.12.0-rc.2** worker adds **Jobs** history, actionable **Notifications**,
+Consigliere includes **Jobs** history, actionable **Notifications**,
 saved network-address visibility and clearer Shared Inference approval/start
 feedback. See [worker activity and LAN setup](docs/operations/worker-activity-and-lan-2026-10-28.md).
 

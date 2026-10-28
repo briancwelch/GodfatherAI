@@ -2,8 +2,9 @@
 
 Owner-authorized scope, 2026-10-28: correct Shared Inference address/approval
 feedback, add node job history and notifications, then build new workers,
-push and deploy after validation. Candidate: **0.12.0-rc.2**. Release evidence
-will be recorded separately after packaging and production checks.
+push and deploy after validation. Published as **0.12.0-rc.2**. See the
+[release verification](worker-activity-release-2026-10-28.md) for packaging,
+production checks and preserved data.
 
 ## Jobs and notifications
 
