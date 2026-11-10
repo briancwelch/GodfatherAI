@@ -1,9 +1,11 @@
 # Documentation
 
 Start with the [user guide](../README.md) for sign-in, worker installation, models
-and your first job. The Command Center is **0.11.0-rc.2**, with desktop installers **0.11.0-rc.1**.
-The [release verification](operations/assessment-capacity-release-2026-10-25.md)
-records capacity, recovery, packaging and live preservation checks. See [cloud image setup](operations/cloud-images.md)
+and your first job. **The project is inactive as of November 10, 2026.** These
+guides are preserved for existing and self-hosted installations. The last recorded
+release was **0.12.0-rc.2**; hosted access and downloads are not guaranteed.
+The [release verification](operations/worker-activity-release-2026-10-28.md)
+records that release's checks. See [cloud image setup](operations/cloud-images.md)
 for OpenAI/Gemini account connections and the required worker opt-ins.
 
 The [local model scan and node permissions update](operations/worker-scan-and-node-permissions-2026-10-23.md)
@@ -43,6 +45,7 @@ For shared colors, Bootstrap components, toasts and progress bars, see
 
 ## Development and history
 
+- [Source preservation and local retirement](operations/source-retirement-2026-11-10.md)
 - [Pending assessment orders and acceptance gates](operations/pending-assessment-work-2026-10-25.md)
 - [Capacity truthfulness and model admission profiles](operations/capacity-and-admission.md)
 

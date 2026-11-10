@@ -1,7 +1,10 @@
 # Local credentials and machine state
 .env
 .env.*
+*.env
+*.env.*
 !.env.example
+!*.env.example
 production.env
 *.pem
 *.key
@@ -10,8 +13,18 @@ production.env
 *.ppk
 client_secret*.json
 credentials.json
+credentials*.json
+*-credentials.json
 oauth-credentials*.json
 token.json
+tokens.json
+worker.json
+admin.json
+storage-state*.json
+storageState*.json
+auth-state*.json
+*.tfstate
+*.tfstate.*
 .tools/
 .cache/
 .venv/
